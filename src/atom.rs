@@ -3,7 +3,8 @@ pub struct Atom {
     pub color: [u8; 4],
     pub state: State,
     pub updated_at: f32,
-    pub fall_velocity: u8,
+    pub sim_velocity: u8,
+    pub density: f32,
 }
 
 impl Atom {
@@ -12,7 +13,8 @@ impl Atom {
             color: [55, 55, 55, 255],
             state: State::Void,
             updated_at: 0.,
-            fall_velocity: 0,
+            sim_velocity: 0,
+            density: 0.,
         }
     }
 }

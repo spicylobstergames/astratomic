@@ -218,164 +218,180 @@ pub fn update_chunks(chunks: UpdateChunksType, dt: f32) {
 }
 
 fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
-    let fvel = get_fvel(chunks, pos);
-    let fvel = cmp::min(
-        fvel + (GRAVITY as f32 * rand::thread_rng().gen_range(0.5..=1.)) as u8,
-        (TERM_VEL as f32 * rand::thread_rng().gen_range(0.5..=1.)) as u8,
+    let svel = get_svel(chunks, pos);
+    let svel = cmp::min(
+        (svel as f32
+            + (GRAVITY as f32 * rand::thread_rng().gen_range(1.0..=1.5))
+                * (get_density(chunks, pos) * DENSITY_ACC_CONST)) as u8,
+        ((TERM_VEL as f32 * rand::thread_rng().gen_range(0.5..=1.))
+            / (get_density(chunks, pos) * DENSITY_TERM_SPEED_CONST)) as u8,
     );
 
-    for i in 1..=fvel {
-        let down = get_state(chunks, pos + IVec2::Y * i as i32) == Some(State::Void);
+    let mut cur_pos = pos;
+    for i in 1..=svel {
+        let dpos = IVec2::Y;
+        let dxpos = IVec2::Y + IVec2::X;
+        let dnxpos = IVec2::Y + IVec2::NEG_X;
 
-        if !down && i == 1 {
-            break;
-        }
+        let state = get_state(chunks, cur_pos + dpos);
+        let down = state == Some(State::Void) || (state == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65);
+
+        let state1 = get_state(chunks, cur_pos + dnxpos);
+        let state2 = get_state(chunks, cur_pos + IVec2::NEG_X);
+        let state3 = get_state(chunks, cur_pos + dxpos);
+        let state4 = get_state(chunks, cur_pos + IVec2::X);
+        let mut downsides = vec![
+            (
+                (state1 == Some(State::Void) || (state1 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65))
+                    && (state2 == Some(State::Void) || (state2 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65)),
+                IVec2::Y + IVec2::NEG_X,
+            ),
+            (
+                (state3 == Some(State::Void) || (state3 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65))
+                    && (state4 == Some(State::Void) || (state4 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65)),
+                IVec2::Y + IVec2::X,
+            ),
+        ];
+        downsides.shuffle(&mut thread_rng());
 
         if down {
-            swap_global(
-                chunks,
-                pos + IVec2::Y * (i as i32 - 1),
-                pos + IVec2::Y * i as i32,
-                dt,
-            );
+            swap(chunks, cur_pos, cur_pos + dpos, dt);
+            cur_pos += dpos;
 
-            if i == fvel {
-                let local = global_to_local(pos + IVec2::Y * i as i32);
-                chunks[local.1 as usize]
-                    .clone()
-                    .unwrap()
-                    .0
-                    .write()
-                    .unwrap()
-                    .atoms[local.0.d1()]
-                .fall_velocity = fvel;
-                return;
+            if i == svel {
+                set_svel(chunks, cur_pos, svel);
             }
+        } else if downsides[0].0 || downsides[1].0 {
+            for downside in downsides {
+                if downside.0 {
+                    swap(chunks, cur_pos, cur_pos + downside.1, dt);
+                    cur_pos += downside.1;
+
+                    if i == svel {
+                        set_svel(chunks, cur_pos, svel);
+                    }
+                    break;
+                }
+            }
+        } else if get_svel(chunks, cur_pos + dpos) == 0
+            && get_svel(chunks, cur_pos + dxpos) == 0
+            && get_svel(chunks, cur_pos + dnxpos) == 0
+        {
+            set_svel(chunks, cur_pos, 0);
+            return;
         } else {
-            if get_fvel(chunks, pos + IVec2::Y * i as i32) == 0 {
-                let local = global_to_local(pos + IVec2::Y * (i as i32 - 1));
-                chunks[local.1 as usize]
-                    .clone()
-                    .unwrap()
-                    .0
-                    .write()
-                    .unwrap()
-                    .atoms[local.0.d1()]
-                .fall_velocity = 0;
-                return;
-            } else {
-                let local = global_to_local(pos + IVec2::Y * i as i32);
-                chunks[local.1 as usize]
-                    .clone()
-                    .unwrap()
-                    .0
-                    .write()
-                    .unwrap()
-                    .atoms[local.0.d1()]
-                .fall_velocity = fvel;
+            set_svel(chunks, cur_pos, svel);
 
-                let local = global_to_local(pos + IVec2::Y * (i as i32 - 1));
-                chunks[local.1 as usize]
-                    .clone()
-                    .unwrap()
-                    .0
-                    .write()
-                    .unwrap()
-                    .atoms[local.0.d1()]
-                .fall_velocity = fvel;
+            if get_svel(chunks, cur_pos + dpos) != 0 {
+                set_svel(
+                    chunks,
+                    cur_pos + dpos,
+                    cmp::min(svel + get_svel(chunks, cur_pos + dpos), TERM_VEL),
+                );
             }
             return;
         }
     }
 
-    let mut downsides = vec![
-        (
-            get_state(chunks, pos + IVec2::Y + IVec2::NEG_X) == Some(State::Void)
-                && get_state(chunks, pos + IVec2::NEG_X) == Some(State::Void),
-            IVec2::Y + IVec2::NEG_X,
-        ),
-        (
-            get_state(chunks, pos + IVec2::Y + IVec2::X) == Some(State::Void)
-                && get_state(chunks, pos + IVec2::X) == Some(State::Void),
-            IVec2::Y + IVec2::X,
-        ),
-    ];
-    downsides.shuffle(&mut thread_rng());
-
-    for downside in downsides {
-        if downside.0 {
-            swap_global(chunks, pos, pos + downside.1, dt);
-            return;
-        }
-    }
-
-    let local_pos = global_to_local(pos);
-    chunks[local_pos.1 as usize]
-        .clone()
-        .unwrap()
-        .0
-        .write()
-        .unwrap()
-        .atoms[local_pos.0.d1()]
-    .updated_at = dt;
+    set_dt(chunks, pos, dt)
 }
 
 fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
-    let down = get_state(chunks, pos + IVec2::Y) == Some(State::Void);
-    if down {
-        swap_global(chunks, pos, pos + IVec2::Y, dt);
-        return;
-    }
+    let svel = get_svel(chunks, pos);
+    let svel = cmp::min(
+        svel + cmp::max(
+            ((GRAVITY as f32 * rand::thread_rng().gen_range(1.0..=1.5))
+                * (get_density(chunks, pos) * DENSITY_ACC_CONST)) as u8,
+            1,
+        ),
+        ((TERM_VEL as f32 * rand::thread_rng().gen_range(0.5..=1.))
+            / (get_density(chunks, pos) * DENSITY_TERM_SPEED_CONST)) as u8,
+    );
 
+    let mut cur_pos = pos;
+    for i in 1..=svel {
+        let dpos = IVec2::Y;
+        let dxpos = IVec2::Y + IVec2::X;
+        let dnxpos = IVec2::Y + IVec2::NEG_X;
+
+        let down = get_state(chunks, cur_pos + dpos) == Some(State::Void);
+        let mut downsides = vec![
+            (
+                get_state(chunks, cur_pos + dnxpos) == Some(State::Void)
+                    && get_state(chunks, cur_pos + IVec2::NEG_X) == Some(State::Void),
+                IVec2::Y + IVec2::NEG_X,
+            ),
+            (
+                get_state(chunks, cur_pos + dxpos) == Some(State::Void)
+                    && get_state(chunks, cur_pos + IVec2::X) == Some(State::Void),
+                IVec2::Y + IVec2::X,
+            ),
+        ];
+        downsides.shuffle(&mut thread_rng());
+
+        if down {
+            swap(chunks, cur_pos, cur_pos + dpos, dt);
+            cur_pos += dpos;
+
+            if i == svel {
+                set_svel(chunks, cur_pos, svel);
+            }
+        } else if downsides[0].0 || downsides[1].0 {
+            for downside in downsides {
+                if downside.0 {
+                    swap(chunks, cur_pos, cur_pos + downside.1, dt);
+                    cur_pos += downside.1;
+
+                    if i == svel {
+                        set_svel(chunks, cur_pos, svel);
+                    }
+                    break;
+                }
+            }
+        } else if get_svel(chunks, cur_pos + dpos) == 0
+            && get_svel(chunks, cur_pos + dxpos) == 0
+            && get_svel(chunks, cur_pos + dnxpos) == 0
+        {
+            set_svel(chunks, cur_pos, 0);
+            break;
+        } else {
+            set_svel(chunks, cur_pos, svel);
+
+            if get_svel(chunks, cur_pos + dpos) != 0 {
+                set_svel(
+                    chunks,
+                    cur_pos + dpos,
+                    cmp::min(svel + get_svel(chunks, cur_pos + dpos), TERM_VEL),
+                );
+            }
+            break;
+        }
+    }
     let mut sides = vec![
         (
-            get_state(chunks, pos + IVec2::NEG_X) == Some(State::Void),
+            get_state(chunks, cur_pos + IVec2::NEG_X) == Some(State::Void),
             IVec2::NEG_X,
         ),
         (
-            get_state(chunks, pos + IVec2::X) == Some(State::Void),
+            get_state(chunks, cur_pos + IVec2::X) == Some(State::Void),
             IVec2::X,
         ),
     ];
-
-    let mut downsides = vec![
-        (
-            get_state(chunks, pos + IVec2::Y + IVec2::NEG_X) == Some(State::Void),
-            IVec2::Y + IVec2::NEG_X,
-            sides[0].0,
-        ),
-        (
-            get_state(chunks, pos + IVec2::Y + IVec2::X) == Some(State::Void),
-            IVec2::Y + IVec2::X,
-            sides[1].0,
-        ),
-    ];
-
-    downsides.shuffle(&mut thread_rng());
-    for downside in downsides {
-        if downside.0 && downside.2 {
-            swap_global(chunks, pos, pos + downside.1, dt);
-            return;
-        }
-    }
-
     sides.shuffle(&mut thread_rng());
     for side in sides {
         if side.0 {
-            swap_global(chunks, pos, pos + side.1, dt);
+            for i in 1..=5 {
+                if get_state(chunks, cur_pos + side.1 * i) == Some(State::Void) {
+                    swap(chunks, cur_pos + side.1 * (i - 1), cur_pos + side.1 * i, dt);
+                } else {
+                    return;
+                }
+            }
             return;
         }
     }
 
-    let local_pos = global_to_local(pos);
-    chunks[local_pos.1 as usize]
-        .clone()
-        .unwrap()
-        .0
-        .write()
-        .unwrap()
-        .atoms[local_pos.0.d1()]
-    .updated_at = dt;
+    set_dt(chunks, cur_pos, dt)
 }
 
 pub struct GridPlugin;

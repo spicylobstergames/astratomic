@@ -24,11 +24,12 @@ fn brush(
     buttons: Res<Input<MouseButton>>,
     keys: Res<Input<KeyCode>>,
 ) {
-    let (state, color);
+    let (state, color, density);
 
     if keys.pressed(KeyCode::F) {
         state = State::Gas;
         color = [255, 255, 255, 255];
+        density = 1.;
     } else if buttons.pressed(MouseButton::Left) {
         state = State::Powder;
         color = [
@@ -37,6 +38,7 @@ fn brush(
             (92 + rand::thread_rng().gen_range(-20..20)) as u8,
             255,
         ];
+        density = 16.;
     } else if keys.pressed(KeyCode::LControl) {
         state = State::Liquid;
         color = [
@@ -45,9 +47,11 @@ fn brush(
             (204 + rand::thread_rng().gen_range(-20..20)) as u8,
             255,
         ];
+        density = 10.;
     } else if buttons.pressed(MouseButton::Middle) {
         state = State::Solid;
         color = [127, 131, 134, 255];
+        density = 20.;
     } else {
         return;
     }
@@ -95,6 +99,7 @@ fn brush(
             let atom = Atom {
                 color,
                 state,
+                density,
                 ..Default::default()
             };
             let mut chunk = grid.chunks[chunk_y * grid.grid_width + chunk_x]
