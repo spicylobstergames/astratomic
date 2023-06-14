@@ -1,9 +1,10 @@
+use std::ops::Range;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::{thread, vec};
 
 use rand::seq::SliceRandom;
-use rand::thread_rng;
+use rand::{thread_rng, Rng};
 
 use bevy::math::ivec2;
 use bevy::prelude::*;
@@ -12,8 +13,9 @@ use bevy::sprite;
 use crate::atom::State;
 use crate::chunk::*;
 use crate::consts::*;
-
 use crate::grid_api::*;
+
+use std::cmp;
 
 #[derive(Component)]
 pub struct Grid {
@@ -94,7 +96,8 @@ pub fn grid_update(mut grid: Query<&mut Grid>, mut images: ResMut<Assets<Image>>
 
     let row_range = 0..grid.grid_width as i32;
     let column_range = 0..grid.grid_height as i32;
-    // Get all images to update them, filtering only active ones
+
+    // Get images
     let images_removed: Vec<(Handle<Image>, Arc<Mutex<Image>>)> = grid
         .chunks
         .iter()
@@ -109,19 +112,30 @@ pub fn grid_update(mut grid: Query<&mut Grid>, mut images: ResMut<Assets<Image>>
             )
         })
         .collect();
-    // Filter only active chunks
-    let grid_chunks: Vec<&Arc<RwLock<Chunk>>> = grid.chunks.iter().collect();
+
+    let update_vec: Vec<bool> = grid
+        .chunks
+        .iter()
+        .map(|chunk| chunk.read().unwrap().active)
+        .collect();
+
+    for chunk in &grid.chunks {
+        chunk.write().unwrap().active = false;
+    }
 
     // Run the 4 update steps in checker like pattern
-    for y_thread_off in 0..=1 {
-        for x_thread_off in 0..=1 {
+    for y_thread_off in rand_range(0..2) {
+        for x_thread_off in rand_range(0..2) {
             let mut handles = vec![];
 
             //Acess chunks
-            for y in (y_thread_off..grid.grid_height).step_by(2).rev() {
+            for y in (y_thread_off..grid.grid_height).step_by(2) {
                 for x in (x_thread_off..grid.grid_width).step_by(2) {
-                    let mut chunks = vec![];
+                    if !update_vec[y * grid.grid_width + x] {
+                        continue;
+                    }
 
+                    let mut chunks = vec![];
                     // Get all 3x3 chunks for each chunk updating
                     for y_off in -1..=1 {
                         for x_off in -1..=1 {
@@ -131,12 +145,13 @@ pub fn grid_update(mut grid: Query<&mut Grid>, mut images: ResMut<Assets<Image>>
                                 chunks.push(None);
                                 continue;
                             }
+
                             let index = ((y as i32 + y_off) * grid.grid_width as i32
                                 + x as i32
                                 + x_off) as usize;
 
                             chunks.push(Some((
-                                Arc::clone(grid_chunks[index]),
+                                Arc::clone(&grid.chunks[index]),
                                 Arc::clone(&images_removed[index].1),
                             )));
                         }
@@ -165,9 +180,15 @@ pub fn grid_update(mut grid: Query<&mut Grid>, mut images: ResMut<Assets<Image>>
     grid.dt -= UPDATE_TIME;
 }
 
+fn rand_range(vec: Range<usize>) -> Vec<usize> {
+    let mut vec: Vec<usize> = vec.collect();
+    vec.shuffle(&mut rand::thread_rng());
+    vec
+}
+
 pub fn update_chunks(chunks: UpdateChunksType, dt: f32) {
-    for y in (CHUNK_SIZE..CHUNK_SIZE * 2).rev() {
-        for x in CHUNK_SIZE..CHUNK_SIZE * 2 {
+    for y in rand_range(CHUNK_SIZE - 1..CHUNK_SIZE * 2 + 1) {
+        for x in rand_range(CHUNK_SIZE - 1..CHUNK_SIZE * 2 + 1) {
             let pos = ivec2(x as i32, y as i32);
 
             if !dt_upable(&chunks, pos, dt) {
@@ -197,10 +218,74 @@ pub fn update_chunks(chunks: UpdateChunksType, dt: f32) {
 }
 
 fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
-    let down = get_state(chunks, pos + IVec2::Y) == Some(State::Void);
-    if down {
-        swap_global(chunks, pos, pos + IVec2::Y, dt);
-        return;
+    let fvel = get_fvel(chunks, pos);
+    let fvel = cmp::min(
+        fvel + (GRAVITY as f32 * rand::thread_rng().gen_range(0.5..=1.)) as u8,
+        (TERM_VEL as f32 * rand::thread_rng().gen_range(0.5..=1.)) as u8,
+    );
+
+    for i in 1..=fvel {
+        let down = get_state(chunks, pos + IVec2::Y * i as i32) == Some(State::Void);
+
+        if !down && i == 1 {
+            break;
+        }
+
+        if down {
+            swap_global(
+                chunks,
+                pos + IVec2::Y * (i as i32 - 1),
+                pos + IVec2::Y * i as i32,
+                dt,
+            );
+
+            if i == fvel {
+                let local = global_to_local(pos + IVec2::Y * i as i32);
+                chunks[local.1 as usize]
+                    .clone()
+                    .unwrap()
+                    .0
+                    .write()
+                    .unwrap()
+                    .atoms[local.0.d1()]
+                .fall_velocity = fvel;
+                return;
+            }
+        } else {
+            if get_fvel(chunks, pos + IVec2::Y * i as i32) == 0 {
+                let local = global_to_local(pos + IVec2::Y * (i as i32 - 1));
+                chunks[local.1 as usize]
+                    .clone()
+                    .unwrap()
+                    .0
+                    .write()
+                    .unwrap()
+                    .atoms[local.0.d1()]
+                .fall_velocity = 0;
+                return;
+            } else {
+                let local = global_to_local(pos + IVec2::Y * i as i32);
+                chunks[local.1 as usize]
+                    .clone()
+                    .unwrap()
+                    .0
+                    .write()
+                    .unwrap()
+                    .atoms[local.0.d1()]
+                .fall_velocity = fvel;
+
+                let local = global_to_local(pos + IVec2::Y * (i as i32 - 1));
+                chunks[local.1 as usize]
+                    .clone()
+                    .unwrap()
+                    .0
+                    .write()
+                    .unwrap()
+                    .atoms[local.0.d1()]
+                .fall_velocity = fvel;
+            }
+            return;
+        }
     }
 
     let mut downsides = vec![

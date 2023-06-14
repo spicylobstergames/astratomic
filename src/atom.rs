@@ -3,7 +3,7 @@ pub struct Atom {
     pub color: [u8; 4],
     pub state: State,
     pub updated_at: f32,
-    pub free_falling: bool,
+    pub fall_velocity: u8,
 }
 
 impl Atom {
@@ -12,7 +12,7 @@ impl Atom {
             color: [55, 55, 55, 255],
             state: State::Void,
             updated_at: 0.,
-            free_falling: false,
+            fall_velocity: 0,
         }
     }
 }

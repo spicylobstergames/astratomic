@@ -1,12 +1,11 @@
+use bevy::prelude::*;
+use line_drawing::Bresenham;
+use rand::Rng;
+
 use crate::atom::State;
 use crate::atom::*;
 use crate::consts::*;
 use crate::grid::Grid;
-
-use line_drawing::Bresenham;
-
-use bevy::prelude::*;
-use rand::Rng;
 
 fn camera(keys: Res<Input<KeyCode>>, mut camera_q: Query<&mut Transform, With<Camera>>) {
     let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
@@ -38,7 +37,7 @@ fn brush(
             (92 + rand::thread_rng().gen_range(-20..20)) as u8,
             255,
         ];
-    } else if buttons.pressed(MouseButton::Right) {
+    } else if keys.pressed(KeyCode::LControl) {
         state = State::Liquid;
         color = [
             (20 + rand::thread_rng().gen_range(-20..20)) as u8,
@@ -106,6 +105,7 @@ fn brush(
                 images.get_mut(&chunk.texture).unwrap(),
                 &vec![IVec2::new(atom_x as i32, atom_y as i32)],
             );
+            chunk.active = true;
         }
     }
 }

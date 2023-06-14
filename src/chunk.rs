@@ -1,21 +1,22 @@
-use crate::consts::*;
 use bevy::prelude::*;
 use bevy::render::render_resource::*;
 
 use crate::atom::*;
+use crate::consts::*;
+use crate::grid_api::*;
 
 pub struct Chunk {
     pub atoms: Vec<Atom>,
-    pub chunk_size: usize,
     pub texture: Handle<Image>,
+    pub active: bool,
 }
 
 impl Chunk {
     pub fn new(texture: Handle<Image>) -> Chunk {
         Chunk {
             atoms: vec![Atom::new(); CHUNK_SIZE * CHUNK_SIZE],
-            chunk_size: CHUNK_SIZE,
             texture,
+            active: false,
         }
     }
 
@@ -49,28 +50,10 @@ impl Chunk {
     }
 
     pub fn update_all(&self, image: &mut Image) {
-        let positions: Vec<IVec2> = (0..self.chunk_size)
-            .flat_map(|y| (0..self.chunk_size).map(move |x| IVec2::new(x as i32, y as i32)))
+        let positions: Vec<IVec2> = (0..CHUNK_SIZE)
+            .flat_map(|y| (0..CHUNK_SIZE).map(move |x| IVec2::new(x as i32, y as i32)))
             .collect();
 
         self.update_image_positions(image, &positions)
-    }
-}
-
-pub trait D1 {
-    fn d1(&self) -> usize;
-}
-
-impl D1 for IVec2 {
-    /// Transforms a IVec2 to a index for a chunk atoms vec
-    fn d1(&self) -> usize {
-        (self.y * CHUNK_SIZE as i32 + self.x) as usize
-    }
-}
-
-impl D1 for UVec2 {
-    /// Transforms a UVec2 to a index for a chunk atoms vec
-    fn d1(&self) -> usize {
-        (self.y * CHUNK_SIZE as u32 + self.x) as usize
     }
 }

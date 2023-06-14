@@ -20,6 +20,7 @@ fn swap_same_chunk(chunk: UpdateChunkType, pos1: IVec2, pos2: IVec2, dt: f32) {
         chunk.atoms.swap(pos1.d1(), pos2.d1());
         chunk.atoms[pos1.d1()].updated_at = dt;
         chunk.atoms[pos2.d1()].updated_at = dt;
+        chunk.active = true;
     }
     let positions = vec![pos1, pos2];
     chunk
@@ -38,12 +39,15 @@ fn swap_diff_chunk(
     dt: f32,
 ) {
     {
-        let atom1 = &mut chunk1.0.write().unwrap().atoms[pos1.d1()];
-        let atom2 = &mut chunk2.0.write().unwrap().atoms[pos2.d1()];
+        let mut chunk1 = chunk1.0.write().unwrap();
+        let mut chunk2 = chunk2.0.write().unwrap();
+        chunk1.active = true;
+        chunk2.active = true;
 
+        let atom1 = &mut chunk1.atoms[pos1.d1()];
+        let atom2 = &mut chunk2.atoms[pos2.d1()];
         atom1.updated_at = dt;
         atom2.updated_at = dt;
-
         mem::swap(atom1, atom2);
     }
 
@@ -146,17 +150,23 @@ pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> Option<State> {
     }
 }
 
-/// Gets atom free falling from a global pos
-pub fn get_free_falling(chunks: &UpdateChunksType, pos: IVec2) -> Option<bool> {
+/// Gets atom fall velocity from a global pos
+pub fn get_fvel(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
     let local = global_to_local(pos);
 
-    if let Some(chunk) = &chunks[local.1 as usize] {
-        return Some(
+    let mut value = None;
+
+    if let Some(chunk) = chunks[local.1 as usize].clone() {
+        value = Some(
             chunk.0.read().unwrap().atoms[(local.0.y * CHUNK_SIZE as i32 + local.0.x) as usize]
-                .free_falling,
+                .fall_velocity,
         );
+    }
+
+    if let Some(value) = value {
+        value
     } else {
-        None
+        0
     }
 }
 
@@ -170,5 +180,23 @@ pub fn dt_upable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
         atom.updated_at != dt || atom.state == State::Void
     } else {
         false
+    }
+}
+
+pub trait D1 {
+    fn d1(&self) -> usize;
+}
+
+impl D1 for IVec2 {
+    /// Transforms a IVec2 to a index for a chunk atoms vec
+    fn d1(&self) -> usize {
+        (self.y * CHUNK_SIZE as i32 + self.x) as usize
+    }
+}
+
+impl D1 for UVec2 {
+    /// Transforms a UVec2 to a index for a chunk atoms vec
+    fn d1(&self) -> usize {
+        (self.y * CHUNK_SIZE as u32 + self.x) as usize
     }
 }
