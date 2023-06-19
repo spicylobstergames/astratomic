@@ -219,6 +219,7 @@ pub fn update_chunks(chunks: UpdateChunksType, dt: f32) {
 
 fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     let svel = get_svel(chunks, pos);
+    // Add density stuff for falling and some randomness for gravity
     let svel = cmp::min(
         (svel as f32
             + (GRAVITY as f32 * rand::thread_rng().gen_range(1.0..=1.5))
@@ -234,7 +235,9 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
         let dnxpos = IVec2::Y + IVec2::NEG_X;
 
         let state = get_state(chunks, cur_pos + dpos);
-        let down = state == Some(State::Void) || (state == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65);
+        let down = state == Some(State::Void)
+            || (state == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65)
+                && dt_upable(chunks, cur_pos + dpos, dt);
 
         let state1 = get_state(chunks, cur_pos + dnxpos);
         let state2 = get_state(chunks, cur_pos + IVec2::NEG_X);
@@ -242,13 +245,19 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
         let state4 = get_state(chunks, cur_pos + IVec2::X);
         let mut downsides = vec![
             (
-                (state1 == Some(State::Void) || (state1 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65))
-                    && (state2 == Some(State::Void) || (state2 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65)),
+                (state1 == Some(State::Void)
+                    || (state1 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65))
+                    && (state2 == Some(State::Void)
+                        || (state2 == Some(State::Liquid)
+                            && thread_rng().gen_range(0.0..1.0) > 0.65)),
                 IVec2::Y + IVec2::NEG_X,
             ),
             (
-                (state3 == Some(State::Void) || (state3 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65))
-                    && (state4 == Some(State::Void) || (state4 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65)),
+                (state3 == Some(State::Void)
+                    || (state3 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65))
+                    && (state4 == Some(State::Void)
+                        || (state4 == Some(State::Liquid)
+                            && thread_rng().gen_range(0.0..1.0) > 0.65)),
                 IVec2::Y + IVec2::X,
             ),
         ];
@@ -263,7 +272,7 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
             }
         } else if downsides[0].0 || downsides[1].0 {
             for downside in downsides {
-                if downside.0 {
+                if downside.0 && dt_upable(chunks, cur_pos + downside.1, dt) {
                     swap(chunks, cur_pos, cur_pos + downside.1, dt);
                     cur_pos += downside.1;
 
@@ -329,7 +338,19 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
         ];
         downsides.shuffle(&mut thread_rng());
 
-        if down {
+        let mut sides = vec![
+            (
+                get_state(chunks, cur_pos + IVec2::NEG_X) == Some(State::Void),
+                IVec2::NEG_X,
+            ),
+            (
+                get_state(chunks, cur_pos + IVec2::X) == Some(State::Void),
+                IVec2::X,
+            ),
+        ];
+        sides.shuffle(&mut thread_rng());
+
+        if down && dt_upable(chunks, cur_pos + dpos, dt) {
             swap(chunks, cur_pos, cur_pos + dpos, dt);
             cur_pos += dpos;
 
@@ -338,12 +359,33 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
             }
         } else if downsides[0].0 || downsides[1].0 {
             for downside in downsides {
-                if downside.0 {
+                if downside.0 && dt_upable(chunks, cur_pos + downside.1, dt) {
                     swap(chunks, cur_pos, cur_pos + downside.1, dt);
                     cur_pos += downside.1;
 
                     if i == svel {
                         set_svel(chunks, cur_pos, svel);
+                    }
+                    break;
+                }
+            }
+        } else if sides[0].0 || sides[1].0 {
+            for side in sides {
+                if side.0 {
+                    for _ in 1..=5 {
+                        if get_state(chunks, cur_pos + side.1) == Some(State::Void)
+                            && dt_upable(chunks, cur_pos + side.1, dt)
+                        {
+                            swap(chunks, cur_pos, cur_pos + side.1, dt);
+                            cur_pos += side.1;
+
+                            if i == svel {
+                                set_svel(chunks, cur_pos, svel);
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
                     }
                     break;
                 }
@@ -365,29 +407,6 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
                 );
             }
             break;
-        }
-    }
-    let mut sides = vec![
-        (
-            get_state(chunks, cur_pos + IVec2::NEG_X) == Some(State::Void),
-            IVec2::NEG_X,
-        ),
-        (
-            get_state(chunks, cur_pos + IVec2::X) == Some(State::Void),
-            IVec2::X,
-        ),
-    ];
-    sides.shuffle(&mut thread_rng());
-    for side in sides {
-        if side.0 {
-            for i in 1..=5 {
-                if get_state(chunks, cur_pos + side.1 * i) == Some(State::Void) {
-                    swap(chunks, cur_pos + side.1 * (i - 1), cur_pos + side.1 * i, dt);
-                } else {
-                    return;
-                }
-            }
-            return;
         }
     }
 
