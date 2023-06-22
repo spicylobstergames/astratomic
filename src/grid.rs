@@ -221,13 +221,8 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     let svel = get_svel(chunks, pos);
     // Add density stuff for falling and some randomness for gravity
     let svel = cmp::min(
-        svel + cmp::max(
-            1,
-            ((GRAVITY as f32 * rand::thread_rng().gen_range(1.0..=1.5))
-                * (get_density(chunks, pos) * DENSITY_ACC_CONST)) as u8,
-        ),
-        ((TERM_VEL as f32 * rand::thread_rng().gen_range(0.5..=1.))
-            / (get_density(chunks, pos) * DENSITY_TERM_SPEED_CONST)) as u8,
+        (svel as f32 + GRAVITY as f32 * rand::thread_rng().gen_range(1.0..=1.5)) as u8,
+        TERM_VEL,
     );
 
     let dpos = IVec2::Y;
@@ -311,13 +306,8 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     let svel = get_svel(chunks, pos);
     // Add density stuff for falling and some randomness for gravity
     let svel = cmp::min(
-        svel + cmp::max(
-            1,
-            ((GRAVITY as f32 * rand::thread_rng().gen_range(1.0..=1.5))
-                * (get_density(chunks, pos) * DENSITY_ACC_CONST)) as u8,
-        ),
-        ((TERM_VEL as f32 * rand::thread_rng().gen_range(0.5..=1.))
-            / (get_density(chunks, pos) * DENSITY_TERM_SPEED_CONST)) as u8,
+        (svel as f32 + GRAVITY as f32 * rand::thread_rng().gen_range(1.0..=1.5)) as u8,
+        TERM_VEL,
     );
 
     let dpos = IVec2::Y;
@@ -326,7 +316,8 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
 
     let mut cur_pos = pos;
     for i in 1..=svel {
-        let down = swapable(chunks, cur_pos + dpos, vec![], dt);
+        let down = swapable(chunks, cur_pos + dpos, vec![], dt)
+            || get_state(chunks, cur_pos + dpos) == Some(State::Void);
         let mut downsides = vec![
             (
                 swapable(chunks, cur_pos + dnxpos, vec![], dt)
@@ -339,15 +330,6 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
             ),
         ];
         downsides.shuffle(&mut thread_rng());
-
-        let mut sides = vec![
-            (
-                swapable(chunks, cur_pos + IVec2::NEG_X, vec![], dt),
-                IVec2::NEG_X,
-            ),
-            (swapable(chunks, cur_pos + IVec2::X, vec![], dt), IVec2::X),
-        ];
-        sides.shuffle(&mut thread_rng());
 
         if down {
             swap(chunks, cur_pos, cur_pos + dpos, dt);
@@ -368,19 +350,6 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
                     break;
                 }
             }
-        } else if sides[0].0 || sides[1].0 {
-            for side in sides {
-                if side.0 {
-                    swap(chunks, cur_pos, cur_pos + side.1, dt);
-                    cur_pos += side.1;
-                    
-                    if i == svel {
-                        set_svel(chunks, cur_pos, svel);
-                    }
-
-                    break;
-                }
-            }
         } else if get_svel(chunks, cur_pos + dpos) == 0
             && get_svel(chunks, cur_pos + dxpos) == 0
             && get_svel(chunks, cur_pos + dnxpos) == 0
@@ -398,6 +367,29 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
                 );
             }
             break;
+        }
+    }
+
+    let mut sides = vec![
+        (
+            swapable(chunks, cur_pos + IVec2::NEG_X, vec![], dt),
+            IVec2::NEG_X,
+        ),
+        (swapable(chunks, cur_pos + IVec2::X, vec![], dt), IVec2::X),
+    ];
+    sides.shuffle(&mut thread_rng());
+
+    if sides[0].0 || sides[1].0 {
+        for side in sides {
+            if side.0 {
+                for _ in 0..5 {
+                    if swapable(chunks, cur_pos + side.1, vec![], dt) {
+                        swap(chunks, cur_pos, cur_pos + side.1, dt);
+                        cur_pos += side.1;
+                    }
+                }
+                break;
+            }
         }
     }
 
