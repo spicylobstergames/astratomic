@@ -1,1 +1,4 @@
-pub struct ECollider;
+use bevy::prelude::*;
+
+#[derive(Component)]
+pub struct Actor;

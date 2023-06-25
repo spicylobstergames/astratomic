@@ -44,6 +44,7 @@ fn grid_setup(mut commands: Commands, windows: Query<&Window>, mut images: ResMu
 
     println!("{} {}", grid_width, grid_height);
 
+    let mut images_vec = vec![];
     let mut chunks = vec![];
     for y in 0..grid_height {
         for x in 0..grid_width {
@@ -54,15 +55,19 @@ fn grid_setup(mut commands: Commands, windows: Query<&Window>, mut images: ResMu
 
             //Get and spawn texture/chunk image
             let texture = images.add(Chunk::new_image());
-            commands.spawn(SpriteBundle {
-                texture: texture.clone(),
-                sprite: Sprite {
-                    anchor: sprite::Anchor::TopLeft,
-                    ..Default::default()
-                },
-                transform: Transform::from_xyz(pos.x, pos.y, 0.),
-                ..Default::default()
-            });
+            images_vec.push(
+                commands
+                    .spawn(SpriteBundle {
+                        texture: texture.clone(),
+                        sprite: Sprite {
+                            anchor: sprite::Anchor::TopLeft,
+                            ..Default::default()
+                        },
+                        transform: Transform::from_xyz(pos.x, pos.y, 0.),
+                        ..Default::default()
+                    })
+                    .id(),
+            );
 
             //Create chunk
             let chunk = Chunk::new(texture);
@@ -74,6 +79,14 @@ fn grid_setup(mut commands: Commands, windows: Query<&Window>, mut images: ResMu
             chunks.push(Arc::new(RwLock::new(chunk)));
         }
     }
+
+    commands
+        .spawn((
+            Name::new("Chunks textures"),
+            VisibilityBundle::default(),
+            TransformBundle::default(),
+        ))
+        .push_children(&images_vec);
 
     let grid = Grid {
         chunks,
@@ -229,32 +242,20 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     let dxpos = IVec2::Y + IVec2::X;
     let dnxpos = IVec2::Y + IVec2::NEG_X;
 
+    let donwneageing = 0.2;
+
     let mut cur_pos = pos;
     for i in 1..=svel {
-        let state = get_state(chunks, cur_pos + dpos);
-        let down = state == Some(State::Void)
-            || (state == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65)
-                && dt_upable(chunks, cur_pos + dpos, dt);
-
-        let state1 = get_state(chunks, cur_pos + dnxpos);
-        let state2 = get_state(chunks, cur_pos + IVec2::NEG_X);
-        let state3 = get_state(chunks, cur_pos + dxpos);
-        let state4 = get_state(chunks, cur_pos + IVec2::X);
+        let down = swapable(chunks, cur_pos + dpos, vec![(State::Liquid, donwneageing)], dt);
         let mut downsides = vec![
             (
-                (state1 == Some(State::Void)
-                    || (state1 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65))
-                    && (state2 == Some(State::Void)
-                        || (state2 == Some(State::Liquid)
-                            && thread_rng().gen_range(0.0..1.0) > 0.65)),
+                swapable(chunks, cur_pos + dnxpos, vec![(State::Liquid, donwneageing)], dt)
+                    && swapable(chunks, cur_pos + IVec2::NEG_X, vec![(State::Liquid, 1.)], dt),
                 IVec2::Y + IVec2::NEG_X,
             ),
             (
-                (state3 == Some(State::Void)
-                    || (state3 == Some(State::Liquid) && thread_rng().gen_range(0.0..1.0) > 0.65))
-                    && (state4 == Some(State::Void)
-                        || (state4 == Some(State::Liquid)
-                            && thread_rng().gen_range(0.0..1.0) > 0.65)),
+                swapable(chunks, cur_pos + dxpos, vec![(State::Liquid, donwneageing)], dt)
+                    && swapable(chunks, cur_pos + IVec2::X, vec![(State::Liquid, 1.)], dt),
                 IVec2::Y + IVec2::X,
             ),
         ];
@@ -269,7 +270,7 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
             }
         } else if downsides[0].0 || downsides[1].0 {
             for downside in downsides {
-                if downside.0 && dt_upable(chunks, cur_pos + downside.1, dt) {
+                if downside.0 {
                     swap(chunks, cur_pos, cur_pos + downside.1, dt);
                     cur_pos += downside.1;
 
@@ -284,7 +285,7 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
             && get_svel(chunks, cur_pos + dnxpos) == 0
         {
             set_svel(chunks, cur_pos, 0);
-            return;
+            break;
         } else {
             set_svel(chunks, cur_pos, svel);
 
@@ -295,7 +296,7 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
                     cmp::min(svel + get_svel(chunks, cur_pos + dpos), TERM_VEL),
                 );
             }
-            return;
+            break;
         }
     }
 
@@ -316,8 +317,7 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
 
     let mut cur_pos = pos;
     for i in 1..=svel {
-        let down = swapable(chunks, cur_pos + dpos, vec![], dt)
-            || get_state(chunks, cur_pos + dpos) == Some(State::Void);
+        let down = swapable(chunks, cur_pos + dpos, vec![], dt);
         let mut downsides = vec![
             (
                 swapable(chunks, cur_pos + dnxpos, vec![], dt)

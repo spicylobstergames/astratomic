@@ -11,6 +11,7 @@ mod consts;
 mod grid;
 mod grid_api;
 mod input;
+mod player;
 
 fn main() {
     App::new()

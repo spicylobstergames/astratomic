@@ -4,6 +4,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 
 use bevy::prelude::*;
+use rand::Rng;
 
 use crate::atom::State;
 use crate::chunk::*;
@@ -149,14 +150,16 @@ pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> Option<State> {
 
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
-pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: Vec<State>, dt: f32) -> bool {
+pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: Vec<(State, f32)>, dt: f32) -> bool {
     let local = global_to_local(pos);
 
     if let Some(chunk) = &chunks[local.1 as usize] {
         let atom = chunk.0.read().unwrap().atoms[local.0.d1()];
-        let state = atom.state;
 
-        state == State::Void || (states.contains(&state) && atom.updated_at != dt)
+        atom.state == State::Void
+            || (states.iter().any(|&(state, prob)| {
+                state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
+            }) && atom.updated_at != dt)
     } else {
         false
     }
