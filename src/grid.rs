@@ -14,6 +14,7 @@ use crate::atom::State;
 use crate::chunk::*;
 use crate::consts::*;
 use crate::grid_api::*;
+use crate::player::Actor;
 
 use std::cmp;
 
@@ -97,7 +98,17 @@ fn grid_setup(mut commands: Commands, windows: Query<&Window>, mut images: ResMu
     commands.spawn(grid);
 }
 
-pub fn grid_update(mut grid: Query<&mut Grid>, mut images: ResMut<Assets<Image>>, time: Res<Time>) {
+pub fn grid_update(
+    mut grid: Query<&mut Grid>,
+    mut images: ResMut<Assets<Image>>,
+    time: Res<Time>,
+    actors: Query<(&Actor, &Transform)>,
+) {
+    let mut actors_vec = vec![];
+    for (actor, transform) in actors.iter() {
+        actors_vec.push((*actor, *transform))
+    }
+
     let mut grid = grid.single_mut();
 
     grid.dt += time.delta_seconds();
@@ -170,7 +181,8 @@ pub fn grid_update(mut grid: Query<&mut Grid>, mut images: ResMut<Assets<Image>>
                         }
                     }
 
-                    let handle = thread::spawn(move || update_chunks(chunks, dt));
+                    let actors = actors_vec.clone();
+                    let handle = thread::spawn(move || update_chunks(chunks, dt, actors));
                     handles.push(handle);
                 }
             }
@@ -199,7 +211,7 @@ fn rand_range(vec: Range<usize>) -> Vec<usize> {
     vec
 }
 
-pub fn update_chunks(chunks: UpdateChunksType, dt: f32) {
+pub fn update_chunks(chunks: UpdateChunksType, dt: f32, actors: Vec<(Actor, Transform)>) {
     for y in rand_range(CHUNK_SIZE - 1..CHUNK_SIZE * 2 + 1) {
         for x in rand_range(CHUNK_SIZE - 1..CHUNK_SIZE * 2 + 1) {
             let pos = ivec2(x as i32, y as i32);
@@ -222,15 +234,15 @@ pub fn update_chunks(chunks: UpdateChunksType, dt: f32) {
             }
 
             match state {
-                State::Powder => update_powder(&chunks, pos, dt),
-                State::Liquid => update_liquid(&chunks, pos, dt),
+                State::Powder => update_powder(&chunks, pos, dt, &actors),
+                State::Liquid => update_liquid(&chunks, pos, dt, &actors),
                 _ => (),
             }
         }
     }
 }
 
-fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
+fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32, actors: &Vec<(Actor, Transform)>) {
     let svel = get_svel(chunks, pos);
     // Add density stuff for falling and some randomness for gravity
     let svel = cmp::min(
@@ -246,16 +258,34 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
 
     let mut cur_pos = pos;
     for i in 1..=svel {
-        let down = swapable(chunks, cur_pos + dpos, vec![(State::Liquid, donwneageing)], dt);
+        let down = swapable(
+            chunks,
+            cur_pos + dpos,
+            vec![(State::Liquid, donwneageing)],
+            dt,
+        );
         let mut downsides = vec![
             (
-                swapable(chunks, cur_pos + dnxpos, vec![(State::Liquid, donwneageing)], dt)
-                    && swapable(chunks, cur_pos + IVec2::NEG_X, vec![(State::Liquid, 1.)], dt),
+                swapable(
+                    chunks,
+                    cur_pos + dnxpos,
+                    vec![(State::Liquid, donwneageing)],
+                    dt,
+                ) && swapable(
+                    chunks,
+                    cur_pos + IVec2::NEG_X,
+                    vec![(State::Liquid, 1.)],
+                    dt,
+                ),
                 IVec2::Y + IVec2::NEG_X,
             ),
             (
-                swapable(chunks, cur_pos + dxpos, vec![(State::Liquid, donwneageing)], dt)
-                    && swapable(chunks, cur_pos + IVec2::X, vec![(State::Liquid, 1.)], dt),
+                swapable(
+                    chunks,
+                    cur_pos + dxpos,
+                    vec![(State::Liquid, donwneageing)],
+                    dt,
+                ) && swapable(chunks, cur_pos + IVec2::X, vec![(State::Liquid, 1.)], dt),
                 IVec2::Y + IVec2::X,
             ),
         ];
@@ -303,7 +333,7 @@ fn update_powder(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     set_dt(chunks, pos, dt)
 }
 
-fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
+fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32, actors: &Vec<(Actor, Transform)>) {
     let svel = get_svel(chunks, pos);
     // Add density stuff for falling and some randomness for gravity
     let svel = cmp::min(
@@ -314,6 +344,8 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     let dpos = IVec2::Y;
     let dxpos = IVec2::Y + IVec2::X;
     let dnxpos = IVec2::Y + IVec2::NEG_X;
+
+    let mut moved = false;
 
     let mut cur_pos = pos;
     for i in 1..=svel {
@@ -334,6 +366,7 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
         if down {
             swap(chunks, cur_pos, cur_pos + dpos, dt);
             cur_pos += dpos;
+            moved = true;
 
             if i == svel {
                 set_svel(chunks, cur_pos, svel);
@@ -343,6 +376,7 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
                 if downside.0 {
                     swap(chunks, cur_pos, cur_pos + downside.1, dt);
                     cur_pos += downside.1;
+                    moved = true;
 
                     if i == svel {
                         set_svel(chunks, cur_pos, svel);
@@ -379,7 +413,7 @@ fn update_liquid(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     ];
     sides.shuffle(&mut thread_rng());
 
-    if sides[0].0 || sides[1].0 {
+    if (sides[0].0 || sides[1].0) && !moved {
         for side in sides {
             if side.0 {
                 for _ in 0..5 {
