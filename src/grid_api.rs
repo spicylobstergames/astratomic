@@ -21,7 +21,6 @@ fn swap_same_chunk(chunk: UpdateChunkType, pos1: IVec2, pos2: IVec2, dt: f32) {
         chunk.atoms.swap(pos1.d1(), pos2.d1());
         chunk.atoms[pos1.d1()].updated_at = dt;
         chunk.atoms[pos2.d1()].updated_at = dt;
-        chunk.active = true;
     }
     let positions = vec![pos1, pos2];
     chunk
@@ -42,8 +41,6 @@ fn swap_diff_chunk(
     {
         let mut chunk1 = chunk1.0.write().unwrap();
         let mut chunk2 = chunk2.0.write().unwrap();
-        chunk1.active = true;
-        chunk2.active = true;
 
         let atom1 = &mut chunk1.atoms[pos1.d1()];
         let atom2 = &mut chunk2.atoms[pos2.d1()];
@@ -150,7 +147,7 @@ pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> Option<State> {
 
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
-pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: Vec<(State, f32)>, dt: f32) -> bool {
+pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: f32) -> bool {
     let local = global_to_local(pos);
 
     if let Some(chunk) = &chunks[local.1 as usize] {
@@ -165,65 +162,150 @@ pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: Vec<(State, f32)>
     }
 }
 
-pub fn void(chunks: &UpdateChunksType, pos: IVec2) -> bool {
-    let local = global_to_local(pos);
+/// Gets neighbours from a global pos
+pub fn get_neigh(
+    chunks: &UpdateChunksType,
+    pos: IVec2,
+    state: State,
+) -> [(bool, IVec2); 8] {
+    let mut neigh = [(false, IVec2::ZERO); 8];
 
-    if let Some(chunk) = &chunks[local.1 as usize] {
-        chunk.0.read().unwrap().atoms[local.0.d1()].state == State::Void
-    } else {
-        false
+    for x in 0..=2 {
+        for y in 0..=2 {
+            if x == 1 && y == 1 {
+                continue;
+            }
+
+            let mut offset = 0;
+            if y >= 1 && !(y == 1 && x == 0) {
+                offset = -1;
+            }
+
+            neigh[(y * 3 + x + offset) as usize].0 =
+                get_state(chunks, pos + IVec2::new(x - 1, y - 1)) == Some(state);
+            neigh[(y * 3 + x + offset) as usize].1 = IVec2::new(x - 1, y - 1);
+        }
     }
+
+    if rand::thread_rng().gen() {
+        neigh.swap(1, 2)
+    }
+
+    neigh
 }
 
-/// Gets atom density from a global pos
-pub fn get_density(chunks: &UpdateChunksType, pos: IVec2) -> f32 {
+/// Gets down neighbours from a global pos
+pub fn down_neigh(
+    chunks: &UpdateChunksType,
+    pos: IVec2,
+    states: &[(State, f32)],
+    dt: f32,
+) -> [(bool, IVec2); 3] {
+    let mut neigh = [(false, IVec2::ZERO); 3];
+
+    for (neigh, x) in neigh.iter_mut().zip([0, -1, 1]) {
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), states, dt);
+        neigh.1 = IVec2::new(x, 1);
+    }
+
+    if rand::thread_rng().gen() {
+        neigh.swap(1, 2)
+    }
+
+    neigh
+}
+
+/// Gets side neighbours from a global pos
+pub fn side_neigh(
+    chunks: &UpdateChunksType,
+    pos: IVec2,
+    states: &[(State, f32)],
+    dt: f32,
+) -> [(bool, IVec2); 2] {
+    let mut neigh = [(false, IVec2::ZERO); 2];
+
+    for (neigh, x) in neigh.iter_mut().zip([-1, 1]) {
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), states, dt);
+        neigh.1 = IVec2::new(x, 0);
+    }
+
+    if rand::thread_rng().gen() {
+        neigh.swap(0, 1)
+    }
+
+    neigh
+}
+
+/// Gets velocity from a global pos
+pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> Option<IVec2> {
     let local = global_to_local(pos);
 
     let mut value = None;
 
     if let Some(chunk) = chunks[local.1 as usize].clone() {
-        value = Some(chunk.0.read().unwrap().atoms[local.0.d1()].density);
+        value = Some(chunk.0.read().unwrap().atoms[local.0.d1()].velocity);
     }
 
-    if let Some(value) = value {
-        value
-    } else {
-        0.
+    value.unwrap_or(None)
+}
+
+/// Sets velocity from a global pos
+pub fn set_vel(chunks: &UpdateChunksType, pos: IVec2, velocity: IVec2) {
+    let local = global_to_local(pos);
+
+    if let Some(chunk) = chunks[local.1 as usize].clone() {
+        chunk.0.write().unwrap().atoms[local.0.d1()].velocity = if velocity == IVec2::ZERO {
+            None
+        } else {
+            Some(velocity)
+        }
     }
 }
 
-/// Gets atom sand simulation velocity from a global pos
-pub fn get_svel(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
+/// Sets velocity from a global pos
+pub fn add_vel(chunks: &UpdateChunksType, pos: IVec2, velocity: IVec2) {
+    let local = global_to_local(pos);
+
+    if let Some(chunk) = chunks[local.1 as usize].clone() {
+        let atom_vel = &mut chunk.0.write().unwrap().atoms[local.0.d1()].velocity;
+        if let Some(atom_vel) = atom_vel {
+            *atom_vel += velocity;
+        }
+
+        if *atom_vel == Some(IVec2::ZERO) {
+            *atom_vel = None
+        }
+    }
+}
+
+/// Gets fall speed from a global pos
+pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
     let local = global_to_local(pos);
 
     let mut value = None;
 
     if let Some(chunk) = chunks[local.1 as usize].clone() {
-        value = Some(chunk.0.read().unwrap().atoms[local.0.d1()].sim_velocity);
+        value = Some(chunk.0.read().unwrap().atoms[local.0.d1()].fall_speed);
     }
 
-    if let Some(value) = value {
-        value
-    } else {
-        0
-    }
+    value.unwrap_or(0)
 }
 
-/// Sets atom sand simulation velocity from a global pos
-pub fn set_svel(chunks: &UpdateChunksType, pos: IVec2, svel: u8) {
+/// Sets fall speed from a global pos
+pub fn set_fspeed(chunks: &UpdateChunksType, pos: IVec2, fall_speed: u8) {
     let local = global_to_local(pos);
 
     if let Some(chunk) = chunks[local.1 as usize].clone() {
-        chunk.0.write().unwrap().atoms[local.0.d1()].sim_velocity = svel
+        chunk.0.write().unwrap().atoms[local.0.d1()].fall_speed = fall_speed
     }
 }
 
 /// Sets atom dt from a global pos
-pub fn set_dt(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
+pub fn _set_dt(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     let local = global_to_local(pos);
 
     if let Some(chunk) = chunks[local.1 as usize].clone() {
-        chunk.0.write().unwrap().atoms[local.0.d1()].density = dt
+        chunk.0.write().unwrap().atoms[local.0.d1()].updated_at = dt
     }
 }
 
@@ -236,6 +318,20 @@ pub fn dt_upable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
         atom.updated_at != dt || atom.state == State::Void
     } else {
         false
+    }
+}
+
+pub fn extend_rect_if_needed(rect: &mut Rect, pos: &Vec2) {
+    if pos.x < rect.min.x {
+        rect.min.x = pos.x
+    } else if pos.x > rect.max.x {
+        rect.max.x = pos.x
+    }
+
+    if pos.y < rect.min.y {
+        rect.min.y = pos.y
+    } else if pos.y > rect.max.y {
+        rect.max.y = pos.y
     }
 }
 

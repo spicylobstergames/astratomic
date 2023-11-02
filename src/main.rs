@@ -8,6 +8,7 @@ use input::*;
 mod atom;
 mod chunk;
 mod consts;
+mod geom_tools;
 mod grid;
 mod grid_api;
 mod input;

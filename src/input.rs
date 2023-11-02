@@ -1,11 +1,12 @@
+use crate::geom_tools::Line;
 use bevy::prelude::*;
-use line_drawing::Bresenham;
 use rand::Rng;
 
 use crate::atom::State;
 use crate::atom::*;
 use crate::consts::*;
 use crate::grid::Grid;
+use crate::grid_api::*;
 
 fn camera(keys: Res<Input<KeyCode>>, mut camera_q: Query<&mut Transform, With<Camera>>) {
     let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
@@ -24,12 +25,11 @@ fn brush(
     buttons: Res<Input<MouseButton>>,
     keys: Res<Input<KeyCode>>,
 ) {
-    let (state, color, density);
+    let (state, color);
 
     if keys.pressed(KeyCode::F) {
         state = State::Gas;
         color = [255, 255, 255, 255];
-        density = 1.;
     } else if buttons.pressed(MouseButton::Left) {
         state = State::Powder;
         color = [
@@ -38,7 +38,6 @@ fn brush(
             (92 + rand::thread_rng().gen_range(-20..20)) as u8,
             255,
         ];
-        density = 16.;
     } else if keys.pressed(KeyCode::LControl) {
         state = State::Liquid;
         color = [
@@ -47,11 +46,9 @@ fn brush(
             (204 + rand::thread_rng().gen_range(-20..20)) as u8,
             255,
         ];
-        density = 10.;
     } else if buttons.pressed(MouseButton::Middle) {
         state = State::Solid;
         color = [127, 131, 134, 255];
-        density = 20.;
     } else {
         return;
     }
@@ -66,17 +63,18 @@ fn brush(
     {
         let grid = grid.single_mut();
 
-        world_position.x += (grid.grid_width * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
-        world_position.y -= (grid.grid_height * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
+        world_position.x += (grid.width * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
+        world_position.y -= (grid.height * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
         world_position.y *= -1.;
         let prev_mpos = prev_mpos.single().0.unwrap();
 
-        for (x, y) in Bresenham::new(
-            (prev_mpos.x as i32, prev_mpos.y as i32),
-            (world_position.x as i32, world_position.y as i32),
+        for v in Line::new(
+            IVec2::new(prev_mpos.x as i32, prev_mpos.y as i32),
+            IVec2::new(world_position.x as i32, world_position.y as i32)
+                - IVec2::new(prev_mpos.x as i32, prev_mpos.y as i32),
         ) {
-            let x = x as f32;
-            let y = y as f32;
+            let x = v.x as f32;
+            let y = v.y as f32;
 
             if x < 0. || y < 0. {
                 continue;
@@ -92,25 +90,32 @@ fn brush(
                 ((y / ATOM_SIZE as f32) % CHUNK_SIZE as f32) as usize,
             );
 
-            if chunk_x >= grid.grid_width || chunk_y >= grid.grid_height {
+            if chunk_x >= grid.width || chunk_y >= grid.height {
                 continue;
             }
 
             let atom = Atom {
                 color,
                 state,
-                density,
                 ..Default::default()
             };
-            let mut chunk = grid.chunks[chunk_y * grid.grid_width + chunk_x]
-                .write()
-                .unwrap();
+            let mut chunk = grid.chunks[chunk_y * grid.width + chunk_x].write().unwrap();
             chunk.atoms[atom_y * CHUNK_SIZE + atom_x] = atom;
             chunk.update_image_positions(
                 images.get_mut(&chunk.texture).unwrap(),
                 &vec![IVec2::new(atom_x as i32, atom_y as i32)],
             );
-            chunk.active = true;
+
+            if let Some(dirty_rect) = chunk.dirty_rect.as_mut() {
+                extend_rect_if_needed(dirty_rect, &Vec2::new(atom_x as f32, atom_y as f32))
+            } else {
+                chunk.dirty_rect = Some(Rect::new(
+                    atom_x as f32,
+                    atom_y as f32,
+                    atom_x as f32,
+                    atom_y as f32,
+                ))
+            }
         }
     }
 }
@@ -134,8 +139,8 @@ fn prev_mpos(
     {
         let grid = grid.single_mut();
 
-        world_position.x += (grid.grid_width * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
-        world_position.y -= (grid.grid_height * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
+        world_position.x += (grid.width * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
+        world_position.y -= (grid.height * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
         world_position.y *= -1.;
 
         prev_mpos.single_mut().0 = Some(world_position);
