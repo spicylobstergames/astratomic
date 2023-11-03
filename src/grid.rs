@@ -1,10 +1,8 @@
 use std::f32::consts::PI;
-use std::ops::Range;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::{thread, vec};
 
-use rand::seq::SliceRandom;
 use rand::Rng;
 
 use bevy::math::ivec2;
@@ -15,7 +13,7 @@ use bevy::sprite::{self, Anchor};
 use crate::atom::State;
 use crate::chunk::*;
 use crate::consts::*;
-use crate::geom_tools::{circle_points, Line};
+use crate::geom_tools::Line;
 use crate::grid_api::*;
 use crate::player::Actor;
 
@@ -28,33 +26,15 @@ pub struct Grid {
     pub dt: f32,
 }
 
-fn grid_setup(mut commands: Commands, windows: Query<&Window>, mut images: ResMut<Assets<Image>>) {
-    let window = windows.single();
+fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let side_length = (CHUNK_SIZE * ATOM_SIZE) as f32;
-
-    let (mut width, mut height) = (
-        (window.width() / side_length).ceil() as usize,
-        (window.height() / side_length).ceil() as usize,
-    );
-
-    //If chunks aren't even, make them
-    if width % 2 != 0 {
-        width += 1
-    }
-    if height % 2 != 0 {
-        height += 1
-    }
-
-    println!("{} {}", width, height);
+    let (width, height) = (8, 4);
 
     let mut images_vec = vec![];
     let mut chunks = vec![];
     for y in 0..height {
         for x in 0..width {
-            // Get image position
-            let mut pos = Vec2::new(x as f32 * side_length, -(y as f32) * side_length);
-            pos.x -= width as f32 / 2. * side_length;
-            pos.y += height as f32 / 2. * side_length;
+            let pos = Vec2::new(x as f32 * side_length, -(y as f32) * side_length);
 
             //Get and spawn texture/chunk image
             let texture = images.add(Chunk::new_image());
@@ -98,8 +78,6 @@ fn grid_setup(mut commands: Commands, windows: Query<&Window>, mut images: ResMu
         dt: 0.,
     };
 
-    println!("{}", std::mem::size_of::<Grid>());
-
     commands.spawn(grid);
 }
 
@@ -115,9 +93,6 @@ pub fn grid_update(
 
     grid.dt += time.delta_seconds();
     let dt = grid.dt;
-    if dt < UPDATE_TIME {
-        return;
-    }
 
     // Get actors
     let mut actors_vec = vec![];
@@ -164,6 +139,7 @@ pub fn grid_update(
                         // Get all 3x3 chunks for each chunk updating
                         for y_off in -1..=1 {
                             for x_off in -1..=1 {
+                                // Checks if chunk pos is within range
                                 if !column_range.contains(&(y as i32 + y_off))
                                     || !row_range.contains(&(x as i32 + x_off))
                                 {
@@ -209,10 +185,9 @@ pub fn grid_update(
         commands.entity(rect).despawn();
     }
 
-    let (width, height) = (grid.width, grid.height);
+    let width = grid.width;
     for (i, chunk) in grid.chunks.iter_mut().enumerate() {
-        let mut rect = chunk.read().unwrap().dirty_rect;
-        rect = None;
+        let rect = chunk.read().unwrap().dirty_rect;
 
         if let Some(rect) = rect {
             let chunk_x = i % width;
@@ -231,11 +206,9 @@ pub fn grid_update(
                         ..default()
                     },
                     transform: Transform::from_translation(Vec3::new(
-                        (chunk_x * CHUNK_SIZE * ATOM_SIZE) as f32 + (rect.min.x * ATOM_SIZE as f32)
-                            - width as f32 / 2. * (CHUNK_SIZE * ATOM_SIZE) as f32,
+                        (chunk_x * CHUNK_SIZE * ATOM_SIZE) as f32 + (rect.min.x * ATOM_SIZE as f32),
                         -((chunk_y * CHUNK_SIZE * ATOM_SIZE) as f32)
-                            - (rect.min.y * ATOM_SIZE as f32)
-                            + height as f32 / 2. * (CHUNK_SIZE * ATOM_SIZE) as f32,
+                            - (rect.min.y * ATOM_SIZE as f32),
                         1.,
                     )),
                     ..default()
@@ -243,14 +216,6 @@ pub fn grid_update(
                 .insert(DirtyRect);
         }
     }
-
-    grid.dt -= UPDATE_TIME;
-}
-
-fn rand_range(vec: Range<usize>) -> Vec<usize> {
-    let mut vec: Vec<usize> = vec.collect();
-    vec.shuffle(&mut rand::thread_rng());
-    vec
 }
 
 pub fn update_chunks(
@@ -261,44 +226,24 @@ pub fn update_chunks(
 ) {
     for y in rand_range(dirty_rect.min.y as usize..dirty_rect.max.y as usize + 1) {
         for x in rand_range(dirty_rect.min.x as usize..dirty_rect.max.x as usize + 1) {
-            let pos = ivec2(x as i32, y as i32);
-            let pos = local_to_global((pos, 4));
+            let local_pos = (ivec2(x as i32, y as i32), 4);
+            let pos = local_to_global(local_pos);
 
-            if !dt_upable(&chunks, pos, dt) {
+
+            if !dt_updatable(&chunks, pos, dt) {
                 continue;
             }
 
-            let state;
             let mut awake_self = false;
+            let state;
             let vel;
             {
-                let local_pos = global_to_local(pos);
-                state = chunks[local_pos.1 as usize]
-                    .clone()
-                    .unwrap()
-                    .0
-                    .read()
-                    .unwrap()
-                    .atoms[local_pos.0.d1()]
-                .state;
-
-                vel = chunks[local_pos.1 as usize]
-                    .clone()
-                    .unwrap()
-                    .0
-                    .read()
-                    .unwrap()
-                    .atoms[local_pos.0.d1()]
-                .velocity
-                .is_some();
-            }
-            {
-                let local_pos = global_to_local(pos);
                 let chunk = chunks[local_pos.1 as usize].clone().unwrap().0;
                 let mut chunk = chunk.write().unwrap();
 
                 let atom = &mut chunk.atoms[local_pos.0.d1()];
-                let state = atom.state;
+                state = atom.state;
+                vel = atom.velocity.is_some();
 
                 if atom.f_idle < FRAMES_SLEEP && state != State::Void && state != State::Solid {
                     atom.f_idle += 1;
@@ -316,26 +261,23 @@ pub fn update_chunks(
                 }
             };
 
-            if awakened.contains(&pos.as_vec2()) {
-                let local_pos = global_to_local(pos);
+            if awakened.contains(&pos) {
                 let chunk = chunks[local_pos.1 as usize].clone().unwrap().0;
                 let mut chunk = chunk.write().unwrap();
 
                 let atom = &mut chunk.atoms[local_pos.0.d1()];
                 atom.f_idle = 0;
-            }
-
-            if awake_self {
-                awakened.push(pos.as_vec2())
+            } else if awake_self {
+                awakened.push(pos)
             }
 
             //TODO more efficient solution
             for awoke in awakened {
                 for x_off in -1..=1 {
                     for y_off in -1..=1 {
-                        let awoke = awoke + vec2(x_off as f32, y_off as f32);
+                        let awoke = awoke + ivec2(x_off, y_off);
 
-                        let local_pos = global_to_local(awoke.as_ivec2());
+                        let local_pos = global_to_local(awoke);
                         if let Some(chunk) = &mut chunks[local_pos.1 as usize].clone() {
                             let mut chunk = chunk.0.write().unwrap();
 
@@ -362,13 +304,13 @@ pub fn update_chunks(
     }
 }
 
-/// Updates powder and returns if it's moving or not
+/// Updates powder and returns atoms awakened
 fn update_powder(
     chunks: &UpdateChunksType,
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
-) -> Vec<Vec2> {
+) -> Vec<IVec2> {
     let mut awakened = vec![];
 
     let mut cur_pos = pos;
@@ -386,9 +328,9 @@ fn update_powder(
         for neigh in neigh {
             if neigh.0 {
                 swap(chunks, cur_pos, cur_pos + neigh.1, dt);
-                awakened.push(cur_pos.as_vec2());
+                awakened.push(cur_pos);
                 cur_pos += neigh.1;
-                awakened.push(cur_pos.as_vec2());
+                awakened.push(cur_pos);
                 swapped = true;
 
                 break;
@@ -415,15 +357,14 @@ fn update_powder(
     awakened
 }
 
-/// Updates liquid and returns if it's moving or not
+/// Updates liquid and returns atoms awakened
 fn update_liquid(
     chunks: &UpdateChunksType,
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
-) -> Vec<Vec2> {
+) -> Vec<IVec2> {
     let mut awakened = vec![];
-
     let mut cur_pos = pos;
 
     // Get fall speed
@@ -439,9 +380,9 @@ fn update_liquid(
         for neigh in neigh {
             if neigh.0 {
                 swap(chunks, cur_pos, cur_pos + neigh.1, dt);
-                awakened.push(cur_pos.as_vec2());
+                awakened.push(cur_pos);
                 cur_pos += neigh.1;
-                awakened.push(cur_pos.as_vec2());
+                awakened.push(cur_pos);
                 swapped = true;
 
                 break;
@@ -468,47 +409,23 @@ fn update_liquid(
                 }
 
                 swap(chunks, cur_pos, cur_pos + IVec2::new(side, 0), dt);
-                awakened.push(cur_pos.as_vec2());
+                awakened.push(cur_pos);
                 cur_pos += IVec2::new(side, 0);
-                awakened.push(cur_pos.as_vec2());
+                awakened.push(cur_pos);
             }
         }
     }
 
-    //Fluid force
-    const RADIUS: i32 = 10;
-
-    let mut force = Vec2::ZERO;
-    for point in circle_points(cur_pos, RADIUS) {
-        if point == cur_pos {
-            continue;
-        }
-
-        let state = get_state(chunks, point).unwrap_or(State::Solid);
-        let sign = if state == State::Liquid {
-            -1.
-        } else if state == State::Void {
-            1.
-        } else {
-            continue;
-        };
-
-        let rel_vec = (point - cur_pos).as_vec2();
-        force += (rel_vec / (rel_vec.length())) * 3. * sign;
-    }
-
-    set_vel(chunks, cur_pos, force.as_ivec2());
-
     awakened
 }
 
-/// Updates particle and returns if it's moving or not
+/// Updates particle and returns atoms awakened
 fn update_particle(
     chunks: &UpdateChunksType,
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
-) -> Vec<Vec2> {
+) -> Vec<IVec2> {
     let mut awakened = vec![];
     let mut cur_pos = pos;
 
@@ -519,41 +436,15 @@ fn update_particle(
         set_vel(chunks, cur_pos, vel);
     }
 
-    let liquid = get_state(chunks, cur_pos).unwrap_or(State::Solid) == State::Liquid;
-    let neigh = get_neigh(chunks, cur_pos, State::Liquid);
-    let npos = Line::new(cur_pos, vel).next();
-    if let Some(npos) = npos {
-        if get_state(chunks, npos) == Some(State::Void) {
-            let mut n = vec![];
-            for neigh in neigh {
-                if neigh.0 {
-                    n.push(neigh.1);
-                }
-            }
-            let len = n.len() as f32;
-
-            for pos in n {
-                add_vel(chunks, cur_pos + pos, (vel.as_vec2() / 3. / len).as_ivec2());
-            }
-
-            vel = (vel.as_vec2() * 0.66).as_ivec2();
-        }
-    }
-
     // Move
     for pos in Line::new(cur_pos, vel) {
-        awakened.push(cur_pos.as_vec2());
+        awakened.push(cur_pos);
         if swapable(chunks, pos, &[], dt) {
             swap(chunks, cur_pos, pos, dt);
             cur_pos = pos;
-            awakened.push(cur_pos.as_vec2());
-        } else if liquid && swapable(chunks, pos, &[(State::Liquid, 1.0)], dt) {
-            add_vel(chunks, pos, get_vel(chunks, cur_pos).unwrap_or(IVec2::ZERO));
-            awakened.push(pos.as_vec2());
-            set_vel(chunks, cur_pos, IVec2::ZERO);
-            break;
+            awakened.push(cur_pos);
         } else {
-            if vel.abs().x > 5 && vel.abs().y > 5 {
+            if vel.abs().x > 4 && vel.abs().y > 4 {
                 set_vel(
                     chunks,
                     cur_pos,
@@ -565,6 +456,7 @@ fn update_particle(
             break;
         }
     }
+
     awakened
 }
 

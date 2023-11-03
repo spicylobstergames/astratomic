@@ -1,9 +1,12 @@
 use std::mem;
+use std::ops::Range;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::thread;
 
 use bevy::prelude::*;
+
+use rand::seq::SliceRandom;
 use rand::Rng;
 
 use crate::atom::State;
@@ -135,7 +138,7 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
 }
 
 /// Gets atom state from a global pos
-pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> Option<State> {
+pub fn _get_state(chunks: &UpdateChunksType, pos: IVec2) -> Option<State> {
     let local = global_to_local(pos);
 
     if let Some(chunk) = &chunks[local.1 as usize] {
@@ -160,38 +163,6 @@ pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], 
     } else {
         false
     }
-}
-
-/// Gets neighbours from a global pos
-pub fn get_neigh(
-    chunks: &UpdateChunksType,
-    pos: IVec2,
-    state: State,
-) -> [(bool, IVec2); 8] {
-    let mut neigh = [(false, IVec2::ZERO); 8];
-
-    for x in 0..=2 {
-        for y in 0..=2 {
-            if x == 1 && y == 1 {
-                continue;
-            }
-
-            let mut offset = 0;
-            if y >= 1 && !(y == 1 && x == 0) {
-                offset = -1;
-            }
-
-            neigh[(y * 3 + x + offset) as usize].0 =
-                get_state(chunks, pos + IVec2::new(x - 1, y - 1)) == Some(state);
-            neigh[(y * 3 + x + offset) as usize].1 = IVec2::new(x - 1, y - 1);
-        }
-    }
-
-    if rand::thread_rng().gen() {
-        neigh.swap(1, 2)
-    }
-
-    neigh
 }
 
 /// Gets down neighbours from a global pos
@@ -262,14 +233,16 @@ pub fn set_vel(chunks: &UpdateChunksType, pos: IVec2, velocity: IVec2) {
     }
 }
 
-/// Sets velocity from a global pos
-pub fn add_vel(chunks: &UpdateChunksType, pos: IVec2, velocity: IVec2) {
+/// Adds velocity from a global pos
+pub fn _add_vel(chunks: &UpdateChunksType, pos: IVec2, velocity: IVec2) {
     let local = global_to_local(pos);
 
     if let Some(chunk) = chunks[local.1 as usize].clone() {
         let atom_vel = &mut chunk.0.write().unwrap().atoms[local.0.d1()].velocity;
         if let Some(atom_vel) = atom_vel {
             *atom_vel += velocity;
+        } else {
+            *atom_vel = Some(velocity)
         }
 
         if *atom_vel == Some(IVec2::ZERO) {
@@ -310,7 +283,7 @@ pub fn _set_dt(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
 }
 
 /// Checks if atom is able to update this frame from a global pos
-pub fn dt_upable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
+pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
     let local = global_to_local(pos);
 
     if let Some(chunk) = &chunks[local.1 as usize] {
@@ -333,6 +306,13 @@ pub fn extend_rect_if_needed(rect: &mut Rect, pos: &Vec2) {
     } else if pos.y > rect.max.y {
         rect.max.y = pos.y
     }
+}
+
+// Shuflles range
+pub fn rand_range(vec: Range<usize>) -> Vec<usize> {
+    let mut vec: Vec<usize> = vec.collect();
+    vec.shuffle(&mut rand::thread_rng());
+    vec
 }
 
 pub trait D1 {

@@ -38,12 +38,13 @@ impl Chunk {
             let atom_color = &self.atoms[pos.d1()].color;
 
             for y in 0..ATOM_SIZE {
-                for x in 0..ATOM_SIZE {
-                    let pixel_index = ((pos.y as usize * ATOM_SIZE + y) * CHUNK_SIZE * ATOM_SIZE
-                        + (pos.x as usize * ATOM_SIZE + x))
-                        * 4;
+                let pixel_index = ((pos.y as usize * ATOM_SIZE + y) * CHUNK_SIZE * ATOM_SIZE
+                    + (pos.x as usize * ATOM_SIZE))
+                    * 4;
 
-                    image.data[pixel_index..pixel_index + 4].copy_from_slice(atom_color);
+                for x in 0..ATOM_SIZE {
+                    image.data[pixel_index + (4 * x)..pixel_index + (4 * (x + 1))]
+                        .copy_from_slice(atom_color);
                 }
             }
         }

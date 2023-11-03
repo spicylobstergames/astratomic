@@ -62,9 +62,6 @@ fn brush(
         .map(|ray| ray.origin.truncate())
     {
         let grid = grid.single_mut();
-
-        world_position.x += (grid.width * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
-        world_position.y -= (grid.height * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
         world_position.y *= -1.;
         let prev_mpos = prev_mpos.single().0.unwrap();
 
@@ -126,7 +123,6 @@ pub struct PreviousMousePos(pub Option<Vec2>);
 fn prev_mpos(
     window: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
-    mut grid: Query<&mut Grid>,
     mut prev_mpos: Query<&mut PreviousMousePos>,
 ) {
     let (camera, camera_transform) = camera_q.single();
@@ -137,10 +133,6 @@ fn prev_mpos(
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
         .map(|ray| ray.origin.truncate())
     {
-        let grid = grid.single_mut();
-
-        world_position.x += (grid.width * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
-        world_position.y -= (grid.height * CHUNK_SIZE * ATOM_SIZE) as f32 * 0.5;
         world_position.y *= -1.;
 
         prev_mpos.single_mut().0 = Some(world_position);

@@ -1,6 +1,6 @@
 use bevy::prelude::IVec2;
 
-// Clean code
+// TODO Clean code
 pub struct Line {
     start: IVec2,
     current: IVec2,
@@ -81,7 +81,8 @@ impl Iterator for Line {
     }
 }
 
-pub fn circle_points(center: IVec2, radius: i32) -> Vec<IVec2> {
+// Gonna be used for fluid sim in the future
+pub fn _circle_points(center: IVec2, radius: i32) -> Vec<IVec2> {
     let mut points = vec![];
 
     let mut x = center.x - radius;

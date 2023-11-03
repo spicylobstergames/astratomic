@@ -17,5 +17,20 @@
 				"isDefault": true
 			}
 		},
+		{
+			"type": "cargo",
+			"command": "run",
+			"problemMatcher": [
+				"$rustc"
+			],
+			"label": "rust: cargo run release",
+			"args": [
+                "--release",
+            ],
+			"group": {
+				"kind": "build",
+				"isDefault": false
+			}
+		},
 	]
 }
