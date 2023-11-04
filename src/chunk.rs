@@ -23,30 +23,20 @@ impl Chunk {
     pub fn new_image() -> Image {
         Image::new(
             Extent3d {
-                height: (CHUNK_SIZE * ATOM_SIZE) as u32,
-                width: (CHUNK_SIZE * ATOM_SIZE) as u32,
+                height: CHUNK_SIZE as u32,
+                width: CHUNK_SIZE as u32,
                 ..Default::default()
             },
             TextureDimension::D2,
-            vec![0; (CHUNK_SIZE * ATOM_SIZE).pow(2) * 4],
+            vec![0; CHUNK_SIZE.pow(2) * 4],
             TextureFormat::Rgba8UnormSrgb,
         )
     }
 
     pub fn update_image_positions(&self, image: &mut Image, positions: &Vec<IVec2>) {
         for pos in positions {
-            let atom_color = &self.atoms[pos.d1()].color;
-
-            for y in 0..ATOM_SIZE {
-                let pixel_index = ((pos.y as usize * ATOM_SIZE + y) * CHUNK_SIZE * ATOM_SIZE
-                    + (pos.x as usize * ATOM_SIZE))
-                    * 4;
-
-                for x in 0..ATOM_SIZE {
-                    image.data[pixel_index + (4 * x)..pixel_index + (4 * (x + 1))]
-                        .copy_from_slice(atom_color);
-                }
-            }
+            let pixel_index = (pos.y as usize * CHUNK_SIZE + pos.x as usize) * 4;
+            image.data[pixel_index..pixel_index + 4].copy_from_slice(&self.atoms[pos.d1()].color);
         }
     }
 
