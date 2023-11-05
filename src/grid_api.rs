@@ -6,7 +6,6 @@ use std::thread;
 
 use bevy::prelude::*;
 
-use rand::seq::SliceRandom;
 use rand::Rng;
 
 use crate::atom::State;
@@ -67,7 +66,7 @@ fn swap_diff_chunk(
             .update_image_positions(&mut chunk2.1.lock().unwrap(), &vec![pos2]);
     });
 
-    for handle in vec![handle1, handle2] {
+    for handle in [handle1, handle2] {
         handle.join().unwrap()
     }
 }
@@ -311,7 +310,7 @@ pub fn extend_rect_if_needed(rect: &mut Rect, pos: &Vec2) {
 // Shuflles range
 pub fn rand_range(vec: Range<usize>) -> Vec<usize> {
     let mut vec: Vec<usize> = vec.collect();
-    vec.shuffle(&mut rand::thread_rng());
+    fastrand::shuffle(&mut vec);
     vec
 }
 

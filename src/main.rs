@@ -1,6 +1,6 @@
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
+//use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 use grid::*;
 use input::*;
@@ -17,14 +17,12 @@ mod player;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-        .add_plugin(WorldInspectorPlugin::new())
+        //.add_plugins(WorldInspectorPlugin::new())
         //local plugins
-        .add_plugin(GridPlugin)
-        .add_plugin(InputPlugin)
-        .add_startup_system(setup)
+        .add_plugins((GridPlugin, InputPlugin))
+        .add_systems(Startup, setup)
         //Frame on console
-        .add_plugin(LogDiagnosticsPlugin::default())
-        .add_plugin(FrameTimeDiagnosticsPlugin::default())
+        .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
         .run();
 }
 

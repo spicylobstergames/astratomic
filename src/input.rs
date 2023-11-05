@@ -33,17 +33,17 @@ fn brush(
     } else if buttons.pressed(MouseButton::Left) {
         state = State::Powder;
         color = [
-            (230 + rand::thread_rng().gen_range(-20..20)) as u8,
-            (197 + rand::thread_rng().gen_range(-20..20)) as u8,
-            (92 + rand::thread_rng().gen_range(-20..20)) as u8,
+            (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+            (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+            (92 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             255,
         ];
-    } else if keys.pressed(KeyCode::LControl) {
+    } else if keys.pressed(KeyCode::ControlLeft) {
         state = State::Liquid;
         color = [
-            (20 + rand::thread_rng().gen_range(-20..20)) as u8,
-            (125 + rand::thread_rng().gen_range(-20..20)) as u8,
-            (204 + rand::thread_rng().gen_range(-20..20)) as u8,
+            (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+            (125 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+            (204 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             255,
         ];
     } else if buttons.pressed(MouseButton::Middle) {
@@ -142,6 +142,6 @@ fn prev_mpos(
 pub struct InputPlugin;
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems((camera, brush, prev_mpos.after(brush)));
+        app.add_systems(Update, (camera, brush, prev_mpos.after(brush)));
     }
 }

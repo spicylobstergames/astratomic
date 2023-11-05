@@ -2,7 +2,7 @@ use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::{thread, vec};
 
-use bevy::math::{ivec2, vec2, vec3};
+use bevy::math::{ivec2, vec3};
 use bevy::prelude::*;
 use bevy::sprite::{self, Anchor};
 
@@ -21,6 +21,9 @@ pub struct Grid {
     pub height: usize,
     pub dt: f32,
 }
+
+#[derive(Component)]
+pub struct ChunkSprite(usize);
 
 fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let side_length = (CHUNK_SIZE * ATOM_SIZE) as f32;
@@ -49,6 +52,7 @@ fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                         )),
                         ..Default::default()
                     })
+                    .insert(ChunkSprite(chunks.len()))
                     .id(),
             );
 
@@ -88,6 +92,7 @@ pub fn grid_update(
     time: Res<Time>,
     actors: Query<(&Actor, &Transform)>,
     rects: Query<Entity, With<DirtyRect>>,
+    mut chunk_sprites: Query<(&ChunkSprite, &mut Handle<Image>)>,
 ) {
     let mut grid = grid.single_mut();
 
@@ -101,12 +106,13 @@ pub fn grid_update(
     }
 
     // Get images
-    let images_removed: Vec<(Handle<Image>, Arc<Mutex<Image>>)> = grid
+    let images_removed: Vec<(usize, Arc<Mutex<Image>>)> = grid
         .chunks
         .iter()
-        .map(|chunk| {
+        .enumerate()
+        .map(|(chunk_index, chunk)| {
             (
-                chunk.read().unwrap().texture.clone(),
+                chunk_index,
                 Arc::new(Mutex::new(
                     images
                         .remove(chunk.read().unwrap().texture.clone())
@@ -173,11 +179,13 @@ pub fn grid_update(
     }
 
     // Add images back after update
-    for image in images_removed {
-        images.set_untracked(
-            image.0,
-            Arc::try_unwrap(image.1).unwrap().into_inner().unwrap(),
-        )
+    for (i, image) in images_removed {
+        let handle = images.add(Arc::try_unwrap(image).unwrap().into_inner().unwrap());
+        grid.chunks[i].write().unwrap().texture = handle;
+    }
+    for (index, mut texture) in chunk_sprites.iter_mut() {
+        let i = index.0;
+        *texture = grid.chunks[i].read().unwrap().texture.clone();
     }
 
     // Dirty Rect rendering
@@ -306,7 +314,8 @@ pub fn update_chunks(
 pub struct GridPlugin;
 impl Plugin for GridPlugin {
     fn build(&self, app: &mut App) {
-        app.add_startup_system(grid_setup).add_system(grid_update);
+        app.add_systems(Startup, grid_setup)
+            .add_systems(Update, grid_update);
     }
 }
 
