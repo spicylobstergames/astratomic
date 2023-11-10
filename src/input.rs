@@ -70,48 +70,26 @@ fn brush(
             IVec2::new(world_position.x as i32, world_position.y as i32)
                 - IVec2::new(prev_mpos.x as i32, prev_mpos.y as i32),
         ) {
-            let x = v.x as f32;
-            let y = v.y as f32;
+            if let Some(pos) = transform_to_local(v.as_vec2(), (grid.width, grid.height)) {
+                let atom = Atom {
+                    color,
+                    state,
+                    ..Default::default()
+                };
+                let mut chunk = grid.chunks[pos.1 as usize].write().unwrap();
+                chunk.atoms[pos.0.d1()] = atom;
+                chunk.update_image_positions(images.get_mut(&chunk.texture).unwrap(), &vec![pos.0]);
 
-            if x < 0. || y < 0. {
-                continue;
-            }
-
-            let (chunk_x, chunk_y) = (
-                (x / (CHUNK_SIZE * ATOM_SIZE) as f32) as usize,
-                (y / (CHUNK_SIZE * ATOM_SIZE) as f32) as usize,
-            );
-
-            let (atom_x, atom_y) = (
-                ((x / ATOM_SIZE as f32) % CHUNK_SIZE as f32) as usize,
-                ((y / ATOM_SIZE as f32) % CHUNK_SIZE as f32) as usize,
-            );
-
-            if chunk_x >= grid.width || chunk_y >= grid.height {
-                continue;
-            }
-
-            let atom = Atom {
-                color,
-                state,
-                ..Default::default()
-            };
-            let mut chunk = grid.chunks[chunk_y * grid.width + chunk_x].write().unwrap();
-            chunk.atoms[atom_y * CHUNK_SIZE + atom_x] = atom;
-            chunk.update_image_positions(
-                images.get_mut(&chunk.texture).unwrap(),
-                &vec![IVec2::new(atom_x as i32, atom_y as i32)],
-            );
-
-            if let Some(dirty_rect) = chunk.dirty_rect.as_mut() {
-                extend_rect_if_needed(dirty_rect, &Vec2::new(atom_x as f32, atom_y as f32))
-            } else {
-                chunk.dirty_rect = Some(Rect::new(
-                    atom_x as f32,
-                    atom_y as f32,
-                    atom_x as f32,
-                    atom_y as f32,
-                ))
+                if let Some(dirty_rect) = chunk.dirty_rect.as_mut() {
+                    extend_rect_if_needed(dirty_rect, &pos.0.as_vec2())
+                } else {
+                    chunk.dirty_rect = Some(Rect::new(
+                        pos.0.x as f32,
+                        pos.0.y as f32,
+                        pos.0.x as f32,
+                        pos.0.y as f32,
+                    ))
+                }
             }
         }
     }

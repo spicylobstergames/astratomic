@@ -2,10 +2,10 @@ use core::f32::consts::PI;
 
 use bevy::prelude::*;
 
+use crate::actors::*;
 use crate::consts::*;
 use crate::geom_tools::*;
 use crate::grid_api::*;
-use crate::player::*;
 
 use rand::Rng;
 

@@ -4,6 +4,7 @@ use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::thread;
 
+use bevy::math::ivec2;
 use bevy::prelude::*;
 
 use rand::Rng;
@@ -312,6 +313,36 @@ pub fn rand_range(vec: Range<usize>) -> Vec<usize> {
     let mut vec: Vec<usize> = vec.collect();
     fastrand::shuffle(&mut vec);
     vec
+}
+
+// Transform pos to chunk coords
+pub fn transform_to_local(pos: Vec2, width_height: (usize, usize)) -> Option<(IVec2, i32)> {
+    if pos.x < 0. || pos.y < 0. {
+        return None;
+    }
+
+    let (chunk_x, chunk_y) = (
+        (pos.x / (CHUNK_SIZE * ATOM_SIZE) as f32) as usize,
+        (pos.y / (CHUNK_SIZE * ATOM_SIZE) as f32) as usize,
+    );
+
+    if chunk_x >= width_height.0 || chunk_y >= width_height.1 {
+        return None;
+    }
+
+    let (atom_x, atom_y) = (
+        ((pos.x / ATOM_SIZE as f32) % CHUNK_SIZE as f32) as i32,
+        ((pos.y / ATOM_SIZE as f32) % CHUNK_SIZE as f32) as i32,
+    );
+
+    let local = (
+        ivec2(atom_x, atom_y),
+        (chunk_y * width_height.0 + chunk_x) as i32,
+    );
+
+    println!("{:?}", local);
+
+    Some(local)
 }
 
 pub trait D1 {

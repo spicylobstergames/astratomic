@@ -6,12 +6,12 @@ use bevy::math::{ivec2, vec3};
 use bevy::prelude::*;
 use bevy::sprite::{self, Anchor};
 
+use crate::actors::*;
 use crate::atom::State;
 use crate::atom::*;
 use crate::chunk::*;
 use crate::consts::*;
 use crate::grid_api::*;
-use crate::player::Actor;
 
 /// The grid is the chunk manager, it updates and do the chunks logic
 #[derive(Component)]
@@ -21,9 +21,6 @@ pub struct Grid {
     pub height: usize,
     pub dt: f32,
 }
-
-#[derive(Component)]
-pub struct ChunkSprite(usize);
 
 fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let side_length = (CHUNK_SIZE * ATOM_SIZE) as f32;
@@ -52,7 +49,6 @@ fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                         )),
                         ..Default::default()
                     })
-                    .insert(ChunkSprite(chunks.len()))
                     .id(),
             );
 
@@ -92,7 +88,6 @@ pub fn grid_update(
     time: Res<Time>,
     actors: Query<(&Actor, &Transform)>,
     rects: Query<Entity, With<DirtyRect>>,
-    mut chunk_sprites: Query<(&ChunkSprite, &mut Handle<Image>)>,
 ) {
     let mut grid = grid.single_mut();
 
@@ -106,7 +101,7 @@ pub fn grid_update(
     }
 
     // Get images
-    let images_removed: Vec<(usize, Arc<Mutex<Image>>)> = grid
+    let images_mutex: Vec<(usize, Arc<Mutex<Image>>)> = grid
         .chunks
         .iter()
         .enumerate()
@@ -115,8 +110,9 @@ pub fn grid_update(
                 chunk_index,
                 Arc::new(Mutex::new(
                     images
-                        .remove(chunk.read().unwrap().texture.clone())
-                        .unwrap(),
+                        .get(chunk.read().unwrap().texture.clone())
+                        .unwrap()
+                        .clone(),
                 )),
             )
         })
@@ -159,7 +155,7 @@ pub fn grid_update(
 
                                 chunks.push(Some((
                                     Arc::clone(&grid.chunks[index]),
-                                    Arc::clone(&images_removed[index].1),
+                                    Arc::clone(&images_mutex[index].1),
                                 )));
                             }
                         }
@@ -178,14 +174,9 @@ pub fn grid_update(
         }
     }
 
-    // Add images back after update
-    for (i, image) in images_removed {
-        let handle = images.add(Arc::try_unwrap(image).unwrap().into_inner().unwrap());
-        grid.chunks[i].write().unwrap().texture = handle;
-    }
-    for (index, mut texture) in chunk_sprites.iter_mut() {
-        let i = index.0;
-        *texture = grid.chunks[i].read().unwrap().texture.clone();
+    for (i, image) in images_mutex {
+        let handle = &grid.chunks[i].read().unwrap().texture;
+        *images.get_mut(handle).unwrap() = Arc::try_unwrap(image).unwrap().into_inner().unwrap();
     }
 
     // Dirty Rect rendering
