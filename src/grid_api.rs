@@ -340,8 +340,6 @@ pub fn transform_to_local(pos: Vec2, width_height: (usize, usize)) -> Option<(IV
         (chunk_y * width_height.0 + chunk_x) as i32,
     );
 
-    println!("{:?}", local);
-
     Some(local)
 }
 
