@@ -4,3 +4,4 @@ pub const CAMERA_SPEED: f32 = 10.;
 pub const GRAVITY: u8 = 1;
 pub const TERM_VEL: u8 = 10;
 pub const FRAMES_SLEEP: u8 = 4;
+pub const GRID_WIDTH_HEIGHT: (usize, usize) = (8, 4);

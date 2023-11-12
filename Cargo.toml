@@ -10,6 +10,7 @@ bevy = "0.12"
 bevy-inspector-egui = "0.21"
 rand = { version = "0.8.5", features = ["small_rng"] }
 fastrand = "2.0.1"
+rayon = "1.8"
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]

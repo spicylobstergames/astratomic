@@ -1,8 +1,8 @@
+use std::collections::{HashMap, HashSet};
 use std::mem;
 use std::ops::Range;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
-use std::thread;
 
 use bevy::math::ivec2;
 use bevy::prelude::*;
@@ -14,61 +14,69 @@ use crate::chunk::*;
 use crate::consts::*;
 
 // Parallel reference for image and chunk data
-pub type UpdateChunksType = Vec<Option<(Arc<RwLock<Chunk>>, Arc<Mutex<Image>>)>>;
-pub type UpdateChunkType = (Arc<RwLock<Chunk>>, Arc<Mutex<Image>>);
+pub type TexturesHash = HashMap<usize, HashSet<IVec2>>;
+pub type ParTexturesHash = Arc<Mutex<TexturesHash>>;
+pub type UpdateChunksType = (Vec<Option<Arc<RwLock<Chunk>>>>, ParTexturesHash);
+pub type UpdateChunkType = Arc<RwLock<Chunk>>;
 
 /// Swap two atoms from the same chunk
-fn swap_same_chunk(chunk: UpdateChunkType, pos1: IVec2, pos2: IVec2, dt: f32) {
+fn swap_same_chunk(
+    chunk: UpdateChunkType,
+    pos1: IVec2,
+    pos2: IVec2,
+    dt: f32,
+    hash: &ParTexturesHash,
+) {
     {
-        let chunk = &mut chunk.0.write().unwrap();
+        let chunk = &mut chunk.write().unwrap();
         chunk.atoms.swap(pos1.d1(), pos2.d1());
         chunk.atoms[pos1.d1()].updated_at = dt;
         chunk.atoms[pos2.d1()].updated_at = dt;
     }
-    let positions = vec![pos1, pos2];
-    chunk
-        .0
-        .read()
-        .unwrap()
-        .update_image_positions(&mut chunk.1.lock().unwrap(), &positions);
+
+    let index = chunk.read().unwrap().index;
+    let mut hash = hash.lock().unwrap();
+    if let Some(set) = hash.get_mut(&index) {
+        set.extend([pos1, pos2].iter());
+    } else {
+        hash.insert(index, HashSet::from([pos1, pos2]));
+    }
 }
 
 /// Swap two atoms from different chunks
 fn swap_diff_chunk(
     chunk1: UpdateChunkType,
     chunk2: UpdateChunkType,
-    pos1: IVec2,
-    pos2: IVec2,
+    pos1: (IVec2, i32),
+    pos2: (IVec2, i32),
     dt: f32,
+    hash: &ParTexturesHash,
 ) {
     {
-        let mut chunk1 = chunk1.0.write().unwrap();
-        let mut chunk2 = chunk2.0.write().unwrap();
+        let mut chunk1 = chunk1.write().unwrap();
+        let mut chunk2 = chunk2.write().unwrap();
 
-        let atom1 = &mut chunk1.atoms[pos1.d1()];
-        let atom2 = &mut chunk2.atoms[pos2.d1()];
+        let atom1 = &mut chunk1.atoms[pos1.0.d1()];
+        let atom2 = &mut chunk2.atoms[pos2.0.d1()];
         atom1.updated_at = dt;
         atom2.updated_at = dt;
         mem::swap(atom1, atom2);
     }
 
-    let handle1 = thread::spawn(move || {
-        chunk1
-            .0
-            .read()
-            .unwrap()
-            .update_image_positions(&mut chunk1.1.lock().unwrap(), &vec![pos1]);
-    });
-    let handle2 = thread::spawn(move || {
-        chunk2
-            .0
-            .read()
-            .unwrap()
-            .update_image_positions(&mut chunk2.1.lock().unwrap(), &vec![pos2]);
-    });
+    let index1 = chunk1.read().unwrap().index;
+    let index2 = chunk2.read().unwrap().index;
 
-    for handle in [handle1, handle2] {
-        handle.join().unwrap()
+    let mut hash = hash.lock().unwrap();
+    if let Some(set) = hash.get_mut(&index1) {
+        set.insert(pos1.0);
+    } else {
+        hash.insert(index1, HashSet::from([pos1.0]));
+    }
+
+    if let Some(set) = hash.get_mut(&index2) {
+        set.insert(pos2.0);
+    } else {
+        hash.insert(index2, HashSet::from([pos2.0]));
     }
 }
 
@@ -80,19 +88,21 @@ pub fn swap(chunks: &UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: f32) {
     if local1.1 != local2.1 {
         //Diff chunk
         swap_diff_chunk(
-            chunks[local1.1 as usize].clone().unwrap(),
-            chunks[local2.1 as usize].clone().unwrap(),
-            local1.0,
-            local2.0,
+            chunks.0[local1.1 as usize].clone().unwrap(),
+            chunks.0[local2.1 as usize].clone().unwrap(),
+            local1,
+            local2,
             dt,
+            &chunks.1,
         )
     } else {
         //Same chunk
         swap_same_chunk(
-            chunks[local1.1 as usize].clone().unwrap(),
+            chunks.0[local1.1 as usize].clone().unwrap(),
             local1.0,
             local2.0,
             dt,
+            &chunks.1,
         )
     }
 }
@@ -141,8 +151,8 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
 pub fn _get_state(chunks: &UpdateChunksType, pos: IVec2) -> Option<State> {
     let local = global_to_local(pos);
 
-    if let Some(chunk) = &chunks[local.1 as usize] {
-        return Some(chunk.0.read().unwrap().atoms[local.0.d1()].state);
+    if let Some(chunk) = &chunks.0[local.1 as usize] {
+        return Some(chunk.read().unwrap().atoms[local.0.d1()].state);
     } else {
         None
     }
@@ -153,8 +163,8 @@ pub fn _get_state(chunks: &UpdateChunksType, pos: IVec2) -> Option<State> {
 pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: f32) -> bool {
     let local = global_to_local(pos);
 
-    if let Some(chunk) = &chunks[local.1 as usize] {
-        let atom = chunk.0.read().unwrap().atoms[local.0.d1()];
+    if let Some(chunk) = &chunks.0[local.1 as usize] {
+        let atom = chunk.read().unwrap().atoms[local.0.d1()];
 
         atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
@@ -213,8 +223,8 @@ pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> Option<IVec2> {
 
     let mut value = None;
 
-    if let Some(chunk) = chunks[local.1 as usize].clone() {
-        value = Some(chunk.0.read().unwrap().atoms[local.0.d1()].velocity);
+    if let Some(chunk) = chunks.0[local.1 as usize].clone() {
+        value = Some(chunk.read().unwrap().atoms[local.0.d1()].velocity);
     }
 
     value.unwrap_or(None)
@@ -224,8 +234,8 @@ pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> Option<IVec2> {
 pub fn set_vel(chunks: &UpdateChunksType, pos: IVec2, velocity: IVec2) {
     let local = global_to_local(pos);
 
-    if let Some(chunk) = chunks[local.1 as usize].clone() {
-        chunk.0.write().unwrap().atoms[local.0.d1()].velocity = if velocity == IVec2::ZERO {
+    if let Some(chunk) = chunks.0[local.1 as usize].clone() {
+        chunk.write().unwrap().atoms[local.0.d1()].velocity = if velocity == IVec2::ZERO {
             None
         } else {
             Some(velocity)
@@ -237,8 +247,8 @@ pub fn set_vel(chunks: &UpdateChunksType, pos: IVec2, velocity: IVec2) {
 pub fn _add_vel(chunks: &UpdateChunksType, pos: IVec2, velocity: IVec2) {
     let local = global_to_local(pos);
 
-    if let Some(chunk) = chunks[local.1 as usize].clone() {
-        let atom_vel = &mut chunk.0.write().unwrap().atoms[local.0.d1()].velocity;
+    if let Some(chunk) = chunks.0[local.1 as usize].clone() {
+        let atom_vel = &mut chunk.write().unwrap().atoms[local.0.d1()].velocity;
         if let Some(atom_vel) = atom_vel {
             *atom_vel += velocity;
         } else {
@@ -257,8 +267,8 @@ pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
 
     let mut value = None;
 
-    if let Some(chunk) = chunks[local.1 as usize].clone() {
-        value = Some(chunk.0.read().unwrap().atoms[local.0.d1()].fall_speed);
+    if let Some(chunk) = chunks.0[local.1 as usize].clone() {
+        value = Some(chunk.read().unwrap().atoms[local.0.d1()].fall_speed);
     }
 
     value.unwrap_or(0)
@@ -268,8 +278,8 @@ pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
 pub fn set_fspeed(chunks: &UpdateChunksType, pos: IVec2, fall_speed: u8) {
     let local = global_to_local(pos);
 
-    if let Some(chunk) = chunks[local.1 as usize].clone() {
-        chunk.0.write().unwrap().atoms[local.0.d1()].fall_speed = fall_speed
+    if let Some(chunk) = chunks.0[local.1 as usize].clone() {
+        chunk.write().unwrap().atoms[local.0.d1()].fall_speed = fall_speed
     }
 }
 
@@ -277,8 +287,8 @@ pub fn set_fspeed(chunks: &UpdateChunksType, pos: IVec2, fall_speed: u8) {
 pub fn _set_dt(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
     let local = global_to_local(pos);
 
-    if let Some(chunk) = chunks[local.1 as usize].clone() {
-        chunk.0.write().unwrap().atoms[local.0.d1()].updated_at = dt
+    if let Some(chunk) = chunks.0[local.1 as usize].clone() {
+        chunk.write().unwrap().atoms[local.0.d1()].updated_at = dt
     }
 }
 
@@ -286,8 +296,8 @@ pub fn _set_dt(chunks: &UpdateChunksType, pos: IVec2, dt: f32) {
 pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
     let local = global_to_local(pos);
 
-    if let Some(chunk) = &chunks[local.1 as usize] {
-        let atom = chunk.0.read().unwrap().atoms[local.0.d1()];
+    if let Some(chunk) = &chunks.0[local.1 as usize] {
+        let atom = chunk.read().unwrap().atoms[local.0.d1()];
         atom.updated_at != dt || atom.state == State::Void
     } else {
         false
@@ -316,7 +326,7 @@ pub fn rand_range(vec: Range<usize>) -> Vec<usize> {
 }
 
 // Transform pos to chunk coords
-pub fn transform_to_local(pos: Vec2, width_height: (usize, usize)) -> Option<(IVec2, i32)> {
+pub fn transform_to_chunk(pos: Vec2, width_height: (usize, usize)) -> Option<(IVec2, i32)> {
     if pos.x < 0. || pos.y < 0. {
         return None;
     }

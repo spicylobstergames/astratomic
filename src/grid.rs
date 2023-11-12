@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::{Arc, RwLock};
 use std::{thread, vec};
@@ -5,6 +6,8 @@ use std::{thread, vec};
 use bevy::math::{ivec2, vec3};
 use bevy::prelude::*;
 use bevy::sprite::{self, Anchor};
+
+use rayon::prelude::*;
 
 use crate::actors::*;
 use crate::atom::State;
@@ -22,9 +25,12 @@ pub struct Grid {
     pub dt: f32,
 }
 
+#[derive(Component)]
+pub struct UpdateTextures(Option<TexturesHash>);
+
 fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let side_length = (CHUNK_SIZE * ATOM_SIZE) as f32;
-    let (width, height) = (8, 4);
+    let (width, height) = GRID_WIDTH_HEIGHT;
 
     let mut images_vec = vec![];
     let mut chunks = vec![];
@@ -53,7 +59,7 @@ fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             );
 
             //Create chunk
-            let chunk = Chunk::new(texture);
+            let chunk = Chunk::new(texture, y * GRID_WIDTH_HEIGHT.0 + x);
 
             //Update chunk image
             let image = images.get_mut(&chunk.texture).unwrap();
@@ -79,44 +85,29 @@ fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     };
 
     commands.spawn(grid);
+    commands.spawn(UpdateTextures(None));
 }
 
 pub fn grid_update(
     mut commands: Commands,
     mut grid: Query<&mut Grid>,
-    mut images: ResMut<Assets<Image>>,
     time: Res<Time>,
     actors: Query<(&Actor, &Transform)>,
     rects: Query<Entity, With<DirtyRect>>,
+    mut uptextures_query: Query<&mut UpdateTextures>,
 ) {
     let mut grid = grid.single_mut();
 
     grid.dt += time.delta_seconds();
     let dt = grid.dt;
 
+    let textures_update: ParTexturesHash = Arc::new(Mutex::new(HashMap::new()));
+
     // Get actors
     let mut actors_vec = vec![];
     for (actor, transform) in actors.iter() {
         actors_vec.push((*actor, *transform))
     }
-
-    // Get images
-    let images_mutex: Vec<(usize, Arc<Mutex<Image>>)> = grid
-        .chunks
-        .iter()
-        .enumerate()
-        .map(|(chunk_index, chunk)| {
-            (
-                chunk_index,
-                Arc::new(Mutex::new(
-                    images
-                        .get(chunk.read().unwrap().texture.clone())
-                        .unwrap()
-                        .clone(),
-                )),
-            )
-        })
-        .collect();
 
     // Take dirty rects
     let dirty_rects: Vec<Option<Rect>> = grid
@@ -153,15 +144,16 @@ pub fn grid_update(
                                     + x as i32
                                     + x_off) as usize;
 
-                                chunks.push(Some((
-                                    Arc::clone(&grid.chunks[index]),
-                                    Arc::clone(&images_mutex[index].1),
-                                )));
+                                chunks.push(Some(Arc::clone(&grid.chunks[index])));
                             }
                         }
 
+                        let textures_update = Arc::clone(&textures_update);
+
                         let actors = actors_vec.clone();
-                        let handle = thread::spawn(move || update_chunks(chunks, dt, actors, rect));
+                        let handle = thread::spawn(move || {
+                            update_chunks((chunks, textures_update), dt, actors, rect)
+                        });
                         handles.push(handle);
                     }
                 }
@@ -174,10 +166,13 @@ pub fn grid_update(
         }
     }
 
-    for (i, image) in images_mutex {
-        let handle = &grid.chunks[i].read().unwrap().texture;
-        *images.get_mut(handle).unwrap() = Arc::try_unwrap(image).unwrap().into_inner().unwrap();
-    }
+    let mut uptextures_comp = uptextures_query.single_mut();
+    uptextures_comp.0.replace(
+        Arc::try_unwrap(textures_update)
+            .unwrap()
+            .into_inner()
+            .unwrap(),
+    );
 
     // Dirty Rect rendering
     for rect in rects.iter() {
@@ -217,6 +212,50 @@ pub fn grid_update(
     }
 }
 
+pub fn textures_update(
+    grid: Query<&Grid>,
+    mut images: ResMut<Assets<Image>>,
+    mut uptextures_query: Query<&mut UpdateTextures>,
+) {
+    let mut uptextures_hash = uptextures_query.single_mut();
+    let grid = grid.single();
+
+    let mut images_mutex: HashMap<usize, Arc<Mutex<Image>>> = HashMap::new();
+
+    for i in uptextures_hash.as_ref().0.as_ref().unwrap().keys() {
+        let chunk = grid.chunks[*i].read().unwrap();
+
+        images_mutex.insert(
+            *i,
+            Arc::new(Mutex::new(
+                images.get(chunk.texture.clone()).unwrap().clone(),
+            )),
+        );
+    }
+
+    uptextures_hash
+        .as_ref()
+        .0
+        .as_ref()
+        .unwrap()
+        .par_iter()
+        .for_each(|(i, positions)| {
+            let chunk = grid.chunks[*i].read().unwrap();
+            chunk.update_image_positions(
+                &mut images_mutex.get(i).unwrap().lock().unwrap(),
+                positions,
+            );
+        });
+
+    for (i, image) in images_mutex.into_iter() {
+        let chunk = grid.chunks[i].read().unwrap();
+        let image_res = images.get_mut(chunk.texture.clone()).unwrap();
+        *image_res = Arc::try_unwrap(image).unwrap().into_inner().unwrap();
+    }
+
+    uptextures_hash.0 = None;
+}
+
 pub fn update_chunks(
     chunks: UpdateChunksType,
     dt: f32,
@@ -236,7 +275,7 @@ pub fn update_chunks(
             let state;
             let vel;
             {
-                let chunk = chunks[local_pos.1 as usize].clone().unwrap().0;
+                let chunk = chunks.0[local_pos.1 as usize].clone().unwrap();
                 let mut chunk = chunk.write().unwrap();
 
                 let atom = &mut chunk.atoms[local_pos.0.d1()];
@@ -260,7 +299,7 @@ pub fn update_chunks(
             };
 
             if awakened.contains(&pos) {
-                let chunk = chunks[local_pos.1 as usize].clone().unwrap().0;
+                let chunk = chunks.0[local_pos.1 as usize].clone().unwrap();
                 let mut chunk = chunk.write().unwrap();
 
                 let atom = &mut chunk.atoms[local_pos.0.d1()];
@@ -276,8 +315,8 @@ pub fn update_chunks(
                         let awoke = awoke + ivec2(x_off, y_off);
 
                         let local_pos = global_to_local(awoke);
-                        if let Some(chunk) = &mut chunks[local_pos.1 as usize].clone() {
-                            let mut chunk = chunk.0.write().unwrap();
+                        if let Some(chunk) = &mut chunks.0[local_pos.1 as usize].clone() {
+                            let mut chunk = chunk.write().unwrap();
 
                             let dirty_rect = &mut chunk.dirty_rect;
 
@@ -306,7 +345,7 @@ pub struct GridPlugin;
 impl Plugin for GridPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, grid_setup)
-            .add_systems(Update, grid_update);
+            .add_systems(Update, (grid_update, textures_update.after(grid_update)));
     }
 }
 

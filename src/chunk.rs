@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bevy::prelude::*;
 use bevy::render::render_resource::*;
 
@@ -9,14 +11,16 @@ pub struct Chunk {
     pub atoms: Vec<Atom>,
     pub texture: Handle<Image>,
     pub dirty_rect: Option<Rect>,
+    pub index: usize,
 }
 
 impl Chunk {
-    pub fn new(texture: Handle<Image>) -> Chunk {
+    pub fn new(texture: Handle<Image>, index: usize) -> Chunk {
         Chunk {
             atoms: vec![Atom::new(); CHUNK_SIZE * CHUNK_SIZE],
             texture,
             dirty_rect: None,
+            index,
         }
     }
 
@@ -33,7 +37,7 @@ impl Chunk {
         )
     }
 
-    pub fn update_image_positions(&self, image: &mut Image, positions: &Vec<IVec2>) {
+    pub fn update_image_positions(&self, image: &mut Image, positions: &HashSet<IVec2>) {
         for pos in positions {
             let pixel_index = (pos.y as usize * CHUNK_SIZE + pos.x as usize) * 4;
             image.data[pixel_index..pixel_index + 4].copy_from_slice(&self.atoms[pos.d1()].color);
@@ -41,7 +45,7 @@ impl Chunk {
     }
 
     pub fn update_all(&self, image: &mut Image) {
-        let positions: Vec<IVec2> = (0..CHUNK_SIZE)
+        let positions: HashSet<IVec2> = (0..CHUNK_SIZE)
             .flat_map(|y| (0..CHUNK_SIZE).map(move |x| IVec2::new(x as i32, y as i32)))
             .collect();
 

@@ -70,7 +70,7 @@ fn brush(
             IVec2::new(world_position.x as i32, world_position.y as i32)
                 - IVec2::new(prev_mpos.x as i32, prev_mpos.y as i32),
         ) {
-            if let Some(pos) = transform_to_local(v.as_vec2(), (grid.width, grid.height)) {
+            if let Some(pos) = transform_to_chunk(v.as_vec2(), (grid.width, grid.height)) {
                 let atom = Atom {
                     color,
                     state,
@@ -78,7 +78,10 @@ fn brush(
                 };
                 let mut chunk = grid.chunks[pos.1 as usize].write().unwrap();
                 chunk.atoms[pos.0.d1()] = atom;
-                chunk.update_image_positions(images.get_mut(&chunk.texture).unwrap(), &vec![pos.0]);
+                chunk.update_image_positions(
+                    images.get_mut(&chunk.texture).unwrap(),
+                    &vec![pos.0].into_iter().collect(),
+                );
 
                 if let Some(dirty_rect) = chunk.dirty_rect.as_mut() {
                     extend_rect_if_needed(dirty_rect, &pos.0.as_vec2())
