@@ -67,17 +67,8 @@ fn swap_diff_chunk(
     let index2 = chunk2.read().unwrap().index;
 
     let mut hash = hash.lock().unwrap();
-    if let Some(set) = hash.get_mut(&index1) {
-        set.insert(pos1.0);
-    } else {
-        hash.insert(index1, HashSet::from([pos1.0]));
-    }
-
-    if let Some(set) = hash.get_mut(&index2) {
-        set.insert(pos2.0);
-    } else {
-        hash.insert(index2, HashSet::from([pos2.0]));
-    }
+    hash.entry(index1).or_default().insert(pos1.0);
+    hash.entry(index2).or_default().insert(pos2.0);
 }
 
 /// Swap two atoms from global 3x3 chunks positions
