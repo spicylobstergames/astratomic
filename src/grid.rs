@@ -22,6 +22,7 @@ pub struct Grid {
     pub chunks: Vec<Arc<RwLock<Chunk>>>,
     pub width: usize,
     pub height: usize,
+    pub textures_hmap: HashMap<AssetId<Image>, usize>,
     pub dt: f32,
 }
 
@@ -34,9 +35,11 @@ fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     let mut images_vec = vec![];
     let mut chunks = vec![];
+    let mut textures_hmap = HashMap::new();
     for y in 0..height {
         for x in 0..width {
             let pos = Vec2::new(x as f32 * side_length, -(y as f32) * side_length);
+            let index = y * GRID_WIDTH_HEIGHT.0 + x;
 
             //Get and spawn texture/chunk image
             let texture = images.add(Chunk::new_image());
@@ -58,8 +61,11 @@ fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
                     .id(),
             );
 
+            //Add texture to grid HashMap
+            textures_hmap.insert(texture.id(), index);
+
             //Create chunk
-            let chunk = Chunk::new(texture, y * GRID_WIDTH_HEIGHT.0 + x);
+            let chunk = Chunk::new(texture, index);
 
             //Update chunk image
             let image = images.get_mut(&chunk.texture).unwrap();
@@ -82,6 +88,7 @@ fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         width,
         height,
         dt: 0.,
+        textures_hmap,
     };
 
     commands.spawn(grid);
@@ -220,38 +227,14 @@ pub fn textures_update(
     let mut uptextures_hash = uptextures_query.single_mut();
     let grid = grid.single();
 
-    let mut images_mutex: HashMap<usize, Arc<Mutex<Image>>> = HashMap::new();
-
-    for i in uptextures_hash.as_ref().0.as_ref().unwrap().keys() {
-        let chunk = grid.chunks[*i].read().unwrap();
-
-        images_mutex.insert(
-            *i,
-            Arc::new(Mutex::new(
-                images.get(chunk.texture.clone()).unwrap().clone(),
-            )),
-        );
-    }
-
-    uptextures_hash
-        .as_ref()
-        .0
-        .as_ref()
-        .unwrap()
-        .par_iter()
-        .for_each(|(i, positions)| {
-            let chunk = grid.chunks[*i].read().unwrap();
-            chunk.update_image_positions(
-                &mut images_mutex.get(i).unwrap().lock().unwrap(),
-                positions,
-            );
-        });
-
-    for (i, image) in images_mutex.into_iter() {
-        let chunk = grid.chunks[i].read().unwrap();
-        let image_res = images.get_mut(chunk.texture.clone()).unwrap();
-        *image_res = Arc::try_unwrap(image).unwrap().into_inner().unwrap();
-    }
+    images.iter_mut().par_bridge().for_each(|(id, image)| {
+        if let Some(chunk_index) = grid.textures_hmap.get(&id) {
+            if let Some(pos_set) = uptextures_hash.as_ref().0.as_ref().unwrap().get(chunk_index) {
+                let chunk = grid.chunks[*chunk_index].read().unwrap();
+                chunk.update_image_positions(image, pos_set);
+            }
+        }
+    });
 
     uptextures_hash.0 = None;
 }
