@@ -129,11 +129,13 @@ pub fn grid_update(
     // Run the 4 update steps in checker like pattern
     for y_thread_off in rand_range(0..2) {
         for x_thread_off in rand_range(0..2) {
-            let mut handles = vec![];
+            let handles = Arc::new(Mutex::new(vec![]));
 
             //Acess chunks
-            for y in (y_thread_off..grid.height).step_by(2) {
-                for x in (x_thread_off..grid.width).step_by(2) {
+            let y_iter = (y_thread_off..grid.height).into_par_iter().step_by(2);
+            y_iter.for_each(|y| {
+                let x_iter = (x_thread_off..grid.width).into_par_iter().step_by(2);
+                x_iter.for_each(|x| {
                     if let Some(rect) = dirty_rects[y * grid.width + x] {
                         let mut chunks = vec![];
                         // Get all 3x3 chunks for each chunk updating
@@ -161,13 +163,13 @@ pub fn grid_update(
                         let handle = thread::spawn(move || {
                             update_chunks((chunks, textures_update), dt, actors, rect)
                         });
-                        handles.push(handle);
+                        Arc::clone(&handles).lock().unwrap().push(handle);
                     }
-                }
-            }
+                });
+            });
 
             // Wait for update step to finish
-            for handle in handles {
+            for handle in Arc::try_unwrap(handles).unwrap().into_inner().unwrap() {
                 handle.join().unwrap()
             }
         }
@@ -229,7 +231,13 @@ pub fn textures_update(
 
     images.iter_mut().par_bridge().for_each(|(id, image)| {
         if let Some(chunk_index) = grid.textures_hmap.get(&id) {
-            if let Some(pos_set) = uptextures_hash.as_ref().0.as_ref().unwrap().get(chunk_index) {
+            if let Some(pos_set) = uptextures_hash
+                .as_ref()
+                .0
+                .as_ref()
+                .unwrap()
+                .get(chunk_index)
+            {
                 let chunk = grid.chunks[*chunk_index].read().unwrap();
                 chunk.update_image_positions(image, pos_set);
             }
