@@ -1,13 +1,15 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::{Arc, RwLock};
-use std::{thread, vec};
+use std::vec;
 
+use async_channel::Sender;
+use atomicell::AtomicCell;
 use bevy::math::{ivec2, vec3};
 use bevy::prelude::*;
 use bevy::sprite::{self, Anchor};
 
-use rayon::prelude::*;
+use bevy::tasks::ComputeTaskPool;
 
 use crate::actors::*;
 use crate::atom::State;
@@ -19,7 +21,7 @@ use crate::grid_api::*;
 /// The grid is the chunk manager, it updates and do the chunks logic
 #[derive(Component)]
 pub struct Grid {
-    pub chunks: Vec<Arc<RwLock<Chunk>>>,
+    pub chunks: Vec<AtomicCell<Chunk>>,
     pub width: usize,
     pub height: usize,
     pub textures_hmap: HashMap<AssetId<Image>, usize>,
@@ -71,7 +73,7 @@ fn grid_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
             let image = images.get_mut(&chunk.texture).unwrap();
             chunk.update_all(image);
 
-            chunks.push(Arc::new(RwLock::new(chunk)));
+            chunks.push(AtomicCell::new(chunk));
         }
     }
 
@@ -117,60 +119,89 @@ pub fn grid_update(
     }
 
     // Take dirty rects
-    let dirty_rects: Vec<Option<Rect>> = grid
+    let dirty_rects: &Vec<Option<Rect>> = &grid
         .chunks
         .iter_mut()
-        .map(|chunk| chunk.write().unwrap().dirty_rect.take())
+        .map(|chunk| chunk.borrow_mut().dirty_rect.take())
         .collect();
 
     let row_range = 0..grid.width as i32;
     let column_range = 0..grid.height as i32;
 
+    let pool = ComputeTaskPool::get();
+
     // Run the 4 update steps in checker like pattern
+    let (deferred_updates_send, deferred_updates_recv) = async_channel::unbounded();
+    let deferred_updates_send = &deferred_updates_send;
     for y_thread_off in rand_range(0..2) {
         for x_thread_off in rand_range(0..2) {
-            let handles = Arc::new(Mutex::new(vec![]));
+            pool.scope(|scope| {
+                //Acess chunks
+                let y_iter = (y_thread_off..grid.height).step_by(2);
+                y_iter.for_each(|y| {
+                    let x_iter = (x_thread_off..grid.width).step_by(2);
+                    x_iter.for_each(|x| {
+                        if let Some(rect) = dirty_rects[y * grid.width + x] {
+                            let mut chunks = vec![];
+                            // Get all 3x3 chunks for each chunk updating
+                            for y_off in -1..=1 {
+                                for x_off in -1..=1 {
+                                    // Checks if chunk pos is within range
+                                    if !column_range.contains(&(y as i32 + y_off))
+                                        || !row_range.contains(&(x as i32 + x_off))
+                                    {
+                                        chunks.push(None);
+                                        continue;
+                                    }
 
-            //Acess chunks
-            let y_iter = (y_thread_off..grid.height).into_par_iter().step_by(2);
-            y_iter.for_each(|y| {
-                let x_iter = (x_thread_off..grid.width).into_par_iter().step_by(2);
-                x_iter.for_each(|x| {
-                    if let Some(rect) = dirty_rects[y * grid.width + x] {
-                        let mut chunks = vec![];
-                        // Get all 3x3 chunks for each chunk updating
-                        for y_off in -1..=1 {
-                            for x_off in -1..=1 {
-                                // Checks if chunk pos is within range
-                                if !column_range.contains(&(y as i32 + y_off))
-                                    || !row_range.contains(&(x as i32 + x_off))
-                                {
-                                    chunks.push(None);
-                                    continue;
+                                    let index =
+                                        ((y as i32 + y_off) * grid.width as i32 + x as i32 + x_off)
+                                            as usize;
+
+                                    chunks.push(Some(&grid.chunks[index]));
                                 }
-
-                                let index = ((y as i32 + y_off) * grid.width as i32
-                                    + x as i32
-                                    + x_off) as usize;
-
-                                chunks.push(Some(Arc::clone(&grid.chunks[index])));
                             }
+
+                            let textures_update = Arc::clone(&textures_update);
+
+                            let actors = &actors_vec;
+                            scope.spawn(async move {
+                                update_chunks(
+                                    (chunks, textures_update),
+                                    deferred_updates_send,
+                                    dt,
+                                    actors,
+                                    rect,
+                                )
+                            });
                         }
-
-                        let textures_update = Arc::clone(&textures_update);
-
-                        let actors = actors_vec.clone();
-                        let handle = thread::spawn(move || {
-                            update_chunks((chunks, textures_update), dt, actors, rect)
-                        });
-                        Arc::clone(&handles).lock().unwrap().push(handle);
-                    }
+                    });
                 });
             });
 
-            // Wait for update step to finish
-            for handle in Arc::try_unwrap(handles).unwrap().into_inner().unwrap() {
-                handle.join().unwrap()
+            // Make any updates to the sleeping chunks
+            while let Ok(update) = deferred_updates_recv.try_recv() {
+                match update {
+                    DeferredChunkUpdate::SetAtom {
+                        chunk_idx,
+                        atom_idx,
+                        atom: new_atom,
+                    } => {
+                        let mut chunk = grid.chunks[chunk_idx].borrow_mut();
+                        let atom = &mut chunk.atoms[atom_idx];
+                        *atom = new_atom;
+                    }
+                    DeferredChunkUpdate::UpdateDirtyRect { chunk_idx, pos } => {
+                        let mut chunk = grid.chunks[chunk_idx].borrow_mut();
+                        let dirty_rect = &mut chunk.dirty_rect;
+
+                        if let Some(dirty_rect) = dirty_rect.as_mut() {
+                            extend_rect_if_needed(dirty_rect, &pos)
+                        } else {
+                            *dirty_rect = Some(Rect::new(pos.x, pos.y, pos.x, pos.y))
+                        }
+                    }
+                }
             }
         }
     }
@@ -190,7 +221,7 @@ pub fn grid_update(
 
     let width = grid.width;
     for (i, chunk) in grid.chunks.iter_mut().enumerate() {
-        let rect = chunk.read().unwrap().dirty_rect;
+        let rect = chunk.borrow().dirty_rect;
 
         if let Some(rect) = rect {
             let chunk_x = i % width;
@@ -229,7 +260,8 @@ pub fn textures_update(
     let mut uptextures_hash = uptextures_query.single_mut();
     let grid = grid.single();
 
-    images.iter_mut().par_bridge().for_each(|(id, image)| {
+    // TODO: Parallelize texture update on GPU.
+    images.iter_mut().for_each(|(id, image)| {
         if let Some(chunk_index) = grid.textures_hmap.get(&id) {
             if let Some(pos_set) = uptextures_hash
                 .as_ref()
@@ -238,7 +270,7 @@ pub fn textures_update(
                 .unwrap()
                 .get(chunk_index)
             {
-                let chunk = grid.chunks[*chunk_index].read().unwrap();
+                let chunk = grid.chunks[*chunk_index].borrow();
                 chunk.update_image_positions(image, pos_set);
             }
         }
@@ -249,8 +281,9 @@ pub fn textures_update(
 
 pub fn update_chunks(
     chunks: UpdateChunksType,
+    deferred_updates: &Sender<DeferredChunkUpdate>,
     dt: f32,
-    actors: Vec<(Actor, Transform)>,
+    actors: &[(Actor, Transform)],
     dirty_rect: Rect,
 ) {
     for y in rand_range(dirty_rect.min.y as usize..dirty_rect.max.y as usize + 1) {
@@ -266,8 +299,8 @@ pub fn update_chunks(
             let state;
             let vel;
             {
-                let chunk = chunks.0[local_pos.1 as usize].clone().unwrap();
-                let mut chunk = chunk.write().unwrap();
+                let chunk = chunks.0[local_pos.1 as usize].unwrap();
+                let mut chunk = chunk.borrow_mut();
 
                 let atom = &mut chunk.atoms[local_pos.0.d1()];
                 state = atom.state;
@@ -280,18 +313,18 @@ pub fn update_chunks(
             }
 
             let mut awakened = if vel {
-                update_particle(&chunks, pos, dt, &actors)
+                update_particle(&chunks, deferred_updates, pos, dt, actors)
             } else {
                 match state {
-                    State::Powder => update_powder(&chunks, pos, dt, &actors),
-                    State::Liquid => update_liquid(&chunks, pos, dt, &actors),
+                    State::Powder => update_powder(&chunks, deferred_updates, pos, dt, actors),
+                    State::Liquid => update_liquid(&chunks, deferred_updates, pos, dt, actors),
                     _ => vec![],
                 }
             };
 
             if awakened.contains(&pos) {
-                let chunk = chunks.0[local_pos.1 as usize].clone().unwrap();
-                let mut chunk = chunk.write().unwrap();
+                let chunk = chunks.0[local_pos.1 as usize].unwrap();
+                let mut chunk = chunk.borrow_mut();
 
                 let atom = &mut chunk.atoms[local_pos.0.d1()];
                 atom.f_idle = 0;
@@ -306,24 +339,15 @@ pub fn update_chunks(
                         let awoke = awoke + ivec2(x_off, y_off);
 
                         let local_pos = global_to_local(awoke);
-                        if let Some(chunk) = &mut chunks.0[local_pos.1 as usize].clone() {
-                            let mut chunk = chunk.write().unwrap();
-
-                            let dirty_rect = &mut chunk.dirty_rect;
-
-                            if let Some(dirty_rect) = dirty_rect.as_mut() {
-                                extend_rect_if_needed(
-                                    dirty_rect,
-                                    &Vec2::new(local_pos.0.x as f32, local_pos.0.y as f32),
-                                )
-                            } else {
-                                *dirty_rect = Some(Rect::new(
-                                    local_pos.0.x as f32,
-                                    local_pos.0.y as f32,
-                                    local_pos.0.x as f32,
-                                    local_pos.0.y as f32,
-                                ))
-                            }
+                        if let Some(chunk) = chunks.0[local_pos.1 as usize] {
+                            // TODO: This borrow fails when scribbling fast and wide.
+                            let chunk = chunk.borrow();
+                            deferred_updates
+                                .try_send(DeferredChunkUpdate::UpdateDirtyRect {
+                                    chunk_idx: chunk.index,
+                                    pos: Vec2::new(local_pos.0.x as f32, local_pos.0.y as f32),
+                                })
+                                .unwrap();
                         }
                     }
                 }

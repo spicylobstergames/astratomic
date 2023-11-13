@@ -76,7 +76,7 @@ fn brush(
                     state,
                     ..Default::default()
                 };
-                let mut chunk = grid.chunks[pos.1 as usize].write().unwrap();
+                let mut chunk = grid.chunks[pos.1 as usize].borrow_mut();
                 chunk.atoms[pos.0.d1()] = atom;
                 chunk.update_image_positions(
                     images.get_mut(&chunk.texture).unwrap(),

@@ -1,5 +1,6 @@
 use core::f32::consts::PI;
 
+use async_channel::Sender;
 use bevy::prelude::*;
 
 use crate::actors::*;
@@ -10,7 +11,7 @@ use crate::grid_api::*;
 use rand::Rng;
 
 // Make smaller
-#[derive(Clone, Copy, Default, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub struct Atom {
     pub color: [u8; 4],
     pub state: State,
@@ -35,7 +36,7 @@ impl Atom {
     }
 }
 
-#[derive(Default, Clone, Copy, PartialEq)]
+#[derive(Default, Clone, Copy, PartialEq, Debug)]
 pub enum State {
     Solid,
     Powder,
@@ -50,6 +51,7 @@ pub enum State {
 /// Updates powder and returns atoms awakened
 pub fn update_powder(
     chunks: &UpdateChunksType,
+    deferred_updates: &Sender<DeferredChunkUpdate>,
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
@@ -70,7 +72,7 @@ pub fn update_powder(
         let mut swapped = false;
         for neigh in neigh {
             if neigh.0 {
-                swap(chunks, cur_pos, cur_pos + neigh.1, dt);
+                swap(chunks, deferred_updates, cur_pos, cur_pos + neigh.1, dt);
                 awakened.push(cur_pos);
                 cur_pos += neigh.1;
                 awakened.push(cur_pos);
@@ -103,6 +105,7 @@ pub fn update_powder(
 /// Updates liquid and returns atoms awakened
 pub fn update_liquid(
     chunks: &UpdateChunksType,
+    deferred_updates: &Sender<DeferredChunkUpdate>,
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
@@ -122,7 +125,7 @@ pub fn update_liquid(
         let neigh = down_neigh(chunks, cur_pos, &[], dt);
         for neigh in neigh {
             if neigh.0 {
-                swap(chunks, cur_pos, cur_pos + neigh.1, dt);
+                swap(chunks, deferred_updates, cur_pos, cur_pos + neigh.1, dt);
                 awakened.push(cur_pos);
                 cur_pos += neigh.1;
                 awakened.push(cur_pos);
@@ -151,7 +154,13 @@ pub fn update_liquid(
                     break;
                 }
 
-                swap(chunks, cur_pos, cur_pos + IVec2::new(side, 0), dt);
+                swap(
+                    chunks,
+                    deferred_updates,
+                    cur_pos,
+                    cur_pos + IVec2::new(side, 0),
+                    dt,
+                );
                 awakened.push(cur_pos);
                 cur_pos += IVec2::new(side, 0);
                 awakened.push(cur_pos);
@@ -165,6 +174,7 @@ pub fn update_liquid(
 /// Updates particle and returns atoms awakened
 pub fn update_particle(
     chunks: &UpdateChunksType,
+    deferred_updates: &Sender<DeferredChunkUpdate>,
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
@@ -183,7 +193,7 @@ pub fn update_particle(
     for pos in Line::new(cur_pos, vel) {
         awakened.push(cur_pos);
         if swapable(chunks, pos, &[], dt) {
-            swap(chunks, cur_pos, pos, dt);
+            swap(chunks, deferred_updates, cur_pos, pos, dt);
             cur_pos = pos;
             awakened.push(cur_pos);
         } else {
