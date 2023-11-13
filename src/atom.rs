@@ -50,7 +50,7 @@ pub enum State {
 
 /// Updates powder and returns atoms awakened
 pub fn update_powder(
-    chunks: &UpdateChunksType,
+    chunks: &mut UpdateChunksType,
     deferred_updates: &Sender<DeferredChunkUpdate>,
     pos: IVec2,
     dt: f32,
@@ -104,7 +104,7 @@ pub fn update_powder(
 
 /// Updates liquid and returns atoms awakened
 pub fn update_liquid(
-    chunks: &UpdateChunksType,
+    chunks: &mut UpdateChunksType,
     deferred_updates: &Sender<DeferredChunkUpdate>,
     pos: IVec2,
     dt: f32,
@@ -173,7 +173,7 @@ pub fn update_liquid(
 
 /// Updates particle and returns atoms awakened
 pub fn update_particle(
-    chunks: &UpdateChunksType,
+    chunks: &mut UpdateChunksType,
     deferred_updates: &Sender<DeferredChunkUpdate>,
     pos: IVec2,
     dt: f32,

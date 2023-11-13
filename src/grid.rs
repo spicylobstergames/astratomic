@@ -142,15 +142,22 @@ pub fn grid_update(
                     let x_iter = (x_thread_off..grid.width).step_by(2);
                     x_iter.for_each(|x| {
                         if let Some(rect) = dirty_rects[y * grid.width + x] {
-                            let mut chunks = vec![];
+                            let mut chunk_group =
+                                ChunkGroup::new(grid.chunks[y * grid.width + x].borrow_mut());
+
                             // Get all 3x3 chunks for each chunk updating
+                            let mut i = 0;
                             for y_off in -1..=1 {
                                 for x_off in -1..=1 {
+                                    if y_off == 0 && x_off == 0 {
+                                        continue;
+                                    }
+                                    let surrounding_idx = i;
+                                    i += 1;
                                     // Checks if chunk pos is within range
                                     if !column_range.contains(&(y as i32 + y_off))
                                         || !row_range.contains(&(x as i32 + x_off))
                                     {
-                                        chunks.push(None);
                                         continue;
                                     }
 
@@ -158,7 +165,8 @@ pub fn grid_update(
                                         ((y as i32 + y_off) * grid.width as i32 + x as i32 + x_off)
                                             as usize;
 
-                                    chunks.push(Some(&grid.chunks[index]));
+                                    chunk_group.surrounding[surrounding_idx] =
+                                        Some(grid.chunks[index].borrow());
                                 }
                             }
 
@@ -167,7 +175,7 @@ pub fn grid_update(
                             let actors = &actors_vec;
                             scope.spawn(async move {
                                 update_chunks(
-                                    (chunks, textures_update),
+                                    &mut (chunk_group, &textures_update),
                                     deferred_updates_send,
                                     dt,
                                     actors,
@@ -280,7 +288,7 @@ pub fn textures_update(
 }
 
 pub fn update_chunks(
-    chunks: UpdateChunksType,
+    chunks: &mut UpdateChunksType,
     deferred_updates: &Sender<DeferredChunkUpdate>,
     dt: f32,
     actors: &[(Actor, Transform)],
@@ -291,7 +299,7 @@ pub fn update_chunks(
             let local_pos = (ivec2(x as i32, y as i32), 4);
             let pos = local_to_global(local_pos);
 
-            if !dt_updatable(&chunks, pos, dt) {
+            if !dt_updatable(chunks, pos, dt) {
                 continue;
             }
 
@@ -299,8 +307,7 @@ pub fn update_chunks(
             let state;
             let vel;
             {
-                let chunk = chunks.0[local_pos.1 as usize].unwrap();
-                let mut chunk = chunk.borrow_mut();
+                let chunk = &mut chunks.0[local_pos.1 as usize];
 
                 let atom = &mut chunk.atoms[local_pos.0.d1()];
                 state = atom.state;
@@ -313,18 +320,17 @@ pub fn update_chunks(
             }
 
             let mut awakened = if vel {
-                update_particle(&chunks, deferred_updates, pos, dt, actors)
+                update_particle(chunks, deferred_updates, pos, dt, actors)
             } else {
                 match state {
-                    State::Powder => update_powder(&chunks, deferred_updates, pos, dt, actors),
-                    State::Liquid => update_liquid(&chunks, deferred_updates, pos, dt, actors),
+                    State::Powder => update_powder(chunks, deferred_updates, pos, dt, actors),
+                    State::Liquid => update_liquid(chunks, deferred_updates, pos, dt, actors),
                     _ => vec![],
                 }
             };
 
             if awakened.contains(&pos) {
-                let chunk = chunks.0[local_pos.1 as usize].unwrap();
-                let mut chunk = chunk.borrow_mut();
+                let chunk = &mut chunks.0[local_pos.1 as usize];
 
                 let atom = &mut chunk.atoms[local_pos.0.d1()];
                 atom.f_idle = 0;
@@ -339,9 +345,8 @@ pub fn update_chunks(
                         let awoke = awoke + ivec2(x_off, y_off);
 
                         let local_pos = global_to_local(awoke);
-                        if let Some(chunk) = chunks.0[local_pos.1 as usize] {
+                        if let Some(chunk) = chunks.0.get(local_pos.1 as usize) {
                             // TODO: This borrow fails when scribbling fast and wide.
-                            let chunk = chunk.borrow();
                             deferred_updates
                                 .try_send(DeferredChunkUpdate::UpdateDirtyRect {
                                     chunk_idx: chunk.index,
