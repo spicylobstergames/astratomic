@@ -8,7 +8,7 @@ use crate::consts::*;
 use crate::grid_api::*;
 
 pub struct Chunk {
-    pub atoms: Vec<Atom>,
+    pub atoms: [Atom; CHUNK_SIZE * CHUNK_SIZE],
     pub texture: Handle<Image>,
     pub dirty_rect: Option<Rect>,
     pub index: usize,
@@ -17,7 +17,7 @@ pub struct Chunk {
 impl Chunk {
     pub fn new(texture: Handle<Image>, index: usize) -> Chunk {
         Chunk {
-            atoms: vec![Atom::new(); CHUNK_SIZE * CHUNK_SIZE],
+            atoms: [Atom::new(); CHUNK_SIZE * CHUNK_SIZE],
             texture,
             dirty_rect: None,
             index,

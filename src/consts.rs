@@ -1,3 +1,4 @@
+// Chunk size MUST be divisible by 4
 pub const CHUNK_SIZE: usize = 64;
 pub const ATOM_SIZE: usize = 3;
 pub const CAMERA_SPEED: f32 = 10.;

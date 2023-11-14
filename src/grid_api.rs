@@ -1,10 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::ops::Range;
+use std::panic;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use async_channel::Sender;
-use atomicell::{Ref as AtomicRef, RefMut as AtomicRefMut};
 use bevy::math::ivec2;
 use bevy::prelude::*;
 
@@ -19,16 +18,21 @@ pub type TexturesHash = HashMap<usize, HashSet<IVec2>>;
 pub type ParTexturesHash = Arc<Mutex<TexturesHash>>;
 pub type UpdateChunksType<'a> = (ChunkGroup<'a>, &'a ParTexturesHash);
 
+pub type ChunkCorners<'a> = [&'a mut [Atom; CHUNK_SIZE * CHUNK_SIZE / 4]; 4];
+pub type ChunkSides<'a> = [&'a mut [Atom; CHUNK_SIZE * CHUNK_SIZE / 2]; 4];
+
 pub struct ChunkGroup<'a> {
-    pub surrounding: [Option<AtomicRef<'a, Chunk>>; 8],
-    pub center: AtomicRefMut<'a, Chunk>,
+    pub center: &'a mut Chunk,
+    pub corners: ChunkCorners<'a>,
+    pub sides: ChunkSides<'a>,
 }
 
 impl<'a> ChunkGroup<'a> {
-    pub fn new(chunk: AtomicRefMut<'a, Chunk>) -> Self {
+    pub fn new(chunk: &'a mut Chunk, corners: ChunkCorners<'a>, sides: ChunkSides<'a>) -> Self {
         Self {
             center: chunk,
-            surrounding: default(),
+            corners,
+            sides,
         }
     }
 
@@ -37,48 +41,64 @@ impl<'a> ChunkGroup<'a> {
         idx == 4
     }
 
-    #[inline]
-    pub fn surrounding_idx(&self, idx: usize) -> Option<usize> {
-        if idx == 4 {
-            None
-        } else if idx < 4 {
-            Some(idx)
-        } else if idx > 4 && idx < 9 {
-            Some(idx - 1)
-        } else {
-            panic!("Invalid index");
+    pub fn get_local(&self, idx: (IVec2, i32)) -> Option<&Atom> {
+        match idx.1 {
+            4 => Some(&self.center.atoms[idx.0.d1()]),
+            0 | 2 | 6 | 8 => todo!(),
+            1 | 3 | 5 | 7 => todo!(),
+            _ => None,
         }
     }
 
-    pub fn get(&self, idx: usize) -> Option<&Chunk> {
-        if let Some(idx) = self.surrounding_idx(idx) {
-            self.surrounding[idx].as_deref()
-        } else {
-            Some(&self.center)
+    pub fn get_mut_local(&mut self, idx: (IVec2, i32)) -> Option<&mut Atom> {
+        match idx.1 {
+            4 => Some(&mut self.center.atoms[idx.0.d1()]),
+            0 | 2 | 6 | 8 => todo!(),
+            1 | 3 | 5 | 7 => todo!(),
+            _ => None,
         }
     }
 
+    pub fn get_global(&self, idx: IVec2) -> Option<&Atom> {
+        let local_idx = global_to_local(idx);
+        self.get_local(local_idx)
+    }
+
+    pub fn get_mut_global(&mut self, idx: IVec2) -> Option<&mut Atom> {
+        let local_idx = global_to_local(idx);
+        self.get_mut_local(local_idx)
+    }
+
+    //TODO Add way to access chunk group dirty rects
+}
+
+// Two ways to index a ChunkGroup to get an atom, by a global(IVec2) and by a local pos (IVec2, i32)
+// Use get_* if you want an Option instead
+impl std::ops::Index<IVec2> for ChunkGroup<'_> {
+    type Output = Atom;
     #[track_caller]
-    pub fn get_mut(&mut self, idx: usize) -> &mut Chunk {
-        if self.is_center(idx) {
-            &mut self.center
-        } else {
-            panic!("Cannot mutably borrow non-center chunk");
-        }
+    fn index(&self, idx: IVec2) -> &Self::Output {
+        self.get_global(idx).expect("Invalid index position.")
+    }
+}
+impl std::ops::IndexMut<IVec2> for ChunkGroup<'_> {
+    #[track_caller]
+    fn index_mut(&mut self, idx: IVec2) -> &mut Self::Output {
+        self.get_mut_global(idx).expect("Invalid index position.")
     }
 }
 
-impl std::ops::Index<usize> for ChunkGroup<'_> {
-    type Output = Chunk;
+impl std::ops::Index<(IVec2, i32)> for ChunkGroup<'_> {
+    type Output = Atom;
     #[track_caller]
-    fn index(&self, idx: usize) -> &Self::Output {
-        self.get(idx).unwrap()
+    fn index(&self, idx: (IVec2, i32)) -> &Self::Output {
+        self.get_local(idx).expect("Invalid index position.")
     }
 }
-impl std::ops::IndexMut<usize> for ChunkGroup<'_> {
+impl std::ops::IndexMut<(IVec2, i32)> for ChunkGroup<'_> {
     #[track_caller]
-    fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
-        self.get_mut(idx)
+    fn index_mut(&mut self, idx: (IVec2, i32)) -> &mut Self::Output {
+        self.get_mut_local(idx).expect("Invalid index position.")
     }
 }
 
@@ -90,35 +110,14 @@ fn swap_same_chunk(chunk: &mut Chunk, pos1: IVec2, pos2: IVec2, dt: f32, hash: &
         chunk.atoms[pos2.d1()].updated_at = dt;
     }
 
-    let index = chunk.index;
     let mut hash = hash.lock().unwrap();
-    if let Some(set) = hash.get_mut(&index) {
-        set.extend([pos1, pos2].iter());
-    } else {
-        hash.insert(index, HashSet::from([pos1, pos2]));
-    }
-}
-
-/// A deferred chunk update message. Indicates that an atom in a chunk should be
-/// set to a specific value.
-#[derive(Debug)]
-pub enum DeferredChunkUpdate {
-    SetAtom {
-        chunk_idx: usize,
-        atom_idx: usize,
-        atom: Atom,
-    },
-    UpdateDirtyRect {
-        chunk_idx: usize,
-        pos: Vec2,
-    },
+    hash.entry(chunk.index).or_default().extend([pos1, pos2]);
 }
 
 /// Swap two atoms from different chunks
 fn swap_diff_chunk(
     chunk1: &mut Chunk,
     chunk2: &Chunk,
-    deferred_updates: &Sender<DeferredChunkUpdate>,
     pos1: (IVec2, i32),
     pos2: (IVec2, i32),
     dt: f32,
@@ -127,65 +126,25 @@ fn swap_diff_chunk(
     {
         let atom1 = &mut chunk1.atoms[pos1.0.d1()];
         let atom2 = chunk2.atoms[pos2.0.d1()];
-        deferred_updates
-            .try_send(DeferredChunkUpdate::SetAtom {
-                chunk_idx: chunk2.index,
-                atom_idx: pos2.0.d1(),
-                atom: *atom1,
-            })
-            .unwrap();
         atom1.updated_at = dt;
         *atom1 = atom2;
     }
 
-    let index1 = chunk1.index;
-    let index2 = chunk2.index;
-
     let mut hash = hash.lock().unwrap();
-    hash.entry(index1).or_default().insert(pos1.0);
-    hash.entry(index2).or_default().insert(pos2.0);
+    hash.entry(chunk1.index).or_default().insert(pos1.0);
+    hash.entry(chunk2.index).or_default().insert(pos2.0);
 }
 
 /// Swap two atoms from global 3x3 chunks positions
-pub fn swap(
-    chunks: &mut UpdateChunksType,
-    deferred_updates: &Sender<DeferredChunkUpdate>,
-    pos1: IVec2,
-    pos2: IVec2,
-    dt: f32,
-) {
+pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: f32) {
     let local1 = global_to_local(pos1);
     let local2 = global_to_local(pos2);
 
-    if local1.1 != local2.1 {
-        let chunk2 = chunks.0.surrounding[chunks.0.surrounding_idx(local2.1 as usize).unwrap()]
-            .as_deref()
-            .unwrap();
-        let chunk1 = if chunks.0.is_center(local1.1 as usize) {
-            &mut chunks.0.center
-        } else {
-            panic!("Cannot mutate non-center chunk");
-        };
-
-        // Diff chunk
-        swap_diff_chunk(
-            chunk1,
-            chunk2,
-            deferred_updates,
-            local1,
-            local2,
-            dt,
-            chunks.1,
-        )
-    } else {
+    if local1.1 == local2.1 {
         //Same chunk
-        swap_same_chunk(
-            &mut chunks.0[local1.1 as usize],
-            local1.0,
-            local2.0,
-            dt,
-            chunks.1,
-        )
+        swap_same_chunk(chunks.0.center, local1.0, local2.0, dt, chunks.1)
+    } else {
+        todo!()
     }
 }
 
@@ -229,24 +188,10 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
     IVec2::new(global_x, global_y)
 }
 
-/// Gets atom state from a global pos
-pub fn _get_state(chunks: &UpdateChunksType, pos: IVec2) -> Option<State> {
-    let local = global_to_local(pos);
-
-    chunks
-        .0
-        .get(local.1 as usize)
-        .map(|chunk| chunk.atoms[local.0.d1()].state)
-}
-
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
 pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: f32) -> bool {
-    let local = global_to_local(pos);
-
-    if let Some(chunk) = chunks.0.get(local.1 as usize) {
-        let atom = chunk.atoms[local.0.d1()];
-
+    if let Some(atom) = chunks.0.get_global(pos) {
         atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
                 state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
@@ -300,81 +245,31 @@ pub fn side_neigh(
 
 /// Gets velocity from a global pos
 pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> Option<IVec2> {
-    let local = global_to_local(pos);
-
-    let mut value = None;
-
-    if let Some(chunk) = chunks.0.get(local.1 as usize) {
-        value = Some(chunk.atoms[local.0.d1()].velocity);
-    }
-
-    value.unwrap_or(None)
+    chunks.0[pos].velocity
 }
 
 /// Sets velocity from a global pos
 pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
-    let local = global_to_local(pos);
-
-    let chunk = chunks.0.get_mut(local.1 as usize);
-    chunk.atoms[local.0.d1()].velocity = if velocity == IVec2::ZERO {
+    chunks.0[pos].velocity = if velocity == IVec2::ZERO {
         None
     } else {
         Some(velocity)
     }
 }
 
-/// Adds velocity from a global pos
-pub fn _add_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
-    let local = global_to_local(pos);
-
-    let chunk = chunks.0.get_mut(local.1 as usize);
-    let atom_vel = &mut chunk.atoms[local.0.d1()].velocity;
-    if let Some(atom_vel) = atom_vel {
-        *atom_vel += velocity;
-    } else {
-        *atom_vel = Some(velocity)
-    }
-
-    if *atom_vel == Some(IVec2::ZERO) {
-        *atom_vel = None
-    }
-}
-
 /// Gets fall speed from a global pos
 pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
-    let local = global_to_local(pos);
-
-    let mut value = None;
-
-    if let Some(chunk) = chunks.0.get(local.1 as usize) {
-        value = Some(chunk.atoms[local.0.d1()].fall_speed);
-    }
-
-    value.unwrap_or(0)
+    chunks.0[pos].fall_speed
 }
 
 /// Sets fall speed from a global pos
 pub fn set_fspeed(chunks: &mut UpdateChunksType, pos: IVec2, fall_speed: u8) {
-    let local = global_to_local(pos);
-
-    let chunk = chunks.0.get_mut(local.1 as usize);
-    chunk.atoms[local.0.d1()].fall_speed = fall_speed
-}
-
-/// Sets atom dt from a global pos
-pub fn _set_dt(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) {
-    let local = global_to_local(pos);
-
-    let chunk = chunks.0.get_mut(local.1 as usize);
-    chunk.atoms[local.0.d1()].updated_at = dt
+    chunks.0[pos].fall_speed = fall_speed
 }
 
 /// Checks if atom is able to update this frame from a global pos
 pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
-    let local = global_to_local(pos);
-
-    if let Some(chunk) = chunks.0.get(local.1 as usize) {
-        let atom = chunk.atoms[local.0.d1()];
+    if let Some(atom) = chunks.0.get_global(pos) {
         atom.updated_at != dt || atom.state == State::Void
     } else {
         false

@@ -3,7 +3,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::vec;
 
-use async_channel::Sender;
 use atomicell::AtomicCell;
 use bevy::math::{ivec2, vec3};
 use bevy::prelude::*;
@@ -131,8 +130,6 @@ pub fn grid_update(
     let pool = ComputeTaskPool::get();
 
     // Run the 4 update steps in checker like pattern
-    let (deferred_updates_send, deferred_updates_recv) = async_channel::unbounded();
-    let deferred_updates_send = &deferred_updates_send;
     for y_thread_off in rand_range(0..2) {
         for x_thread_off in rand_range(0..2) {
             pool.scope(|scope| {
@@ -143,7 +140,7 @@ pub fn grid_update(
                     x_iter.for_each(|x| {
                         if let Some(rect) = dirty_rects[y * grid.width + x] {
                             let mut chunk_group =
-                                ChunkGroup::new(grid.chunks[y * grid.width + x].borrow_mut());
+                                todo!(); // Add way to get the chunk group
 
                             // Get all 3x3 chunks for each chunk updating
                             let mut i = 0;
@@ -165,8 +162,7 @@ pub fn grid_update(
                                         ((y as i32 + y_off) * grid.width as i32 + x as i32 + x_off)
                                             as usize;
 
-                                    chunk_group.surrounding[surrounding_idx] =
-                                        Some(grid.chunks[index].borrow());
+                                    todo!()
                                 }
                             }
 
@@ -176,7 +172,6 @@ pub fn grid_update(
                             scope.spawn(async move {
                                 update_chunks(
                                     &mut (chunk_group, &textures_update),
-                                    deferred_updates_send,
                                     dt,
                                     actors,
                                     rect,
@@ -186,31 +181,6 @@ pub fn grid_update(
                     });
                 });
             });
-
-            // Make any updates to the sleeping chunks
-            while let Ok(update) = deferred_updates_recv.try_recv() {
-                match update {
-                    DeferredChunkUpdate::SetAtom {
-                        chunk_idx,
-                        atom_idx,
-                        atom: new_atom,
-                    } => {
-                        let mut chunk = grid.chunks[chunk_idx].borrow_mut();
-                        let atom = &mut chunk.atoms[atom_idx];
-                        *atom = new_atom;
-                    }
-                    DeferredChunkUpdate::UpdateDirtyRect { chunk_idx, pos } => {
-                        let mut chunk = grid.chunks[chunk_idx].borrow_mut();
-                        let dirty_rect = &mut chunk.dirty_rect;
-
-                        if let Some(dirty_rect) = dirty_rect.as_mut() {
-                            extend_rect_if_needed(dirty_rect, &pos)
-                        } else {
-                            *dirty_rect = Some(Rect::new(pos.x, pos.y, pos.x, pos.y))
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -289,7 +259,6 @@ pub fn textures_update(
 
 pub fn update_chunks(
     chunks: &mut UpdateChunksType,
-    deferred_updates: &Sender<DeferredChunkUpdate>,
     dt: f32,
     actors: &[(Actor, Transform)],
     dirty_rect: Rect,
@@ -307,9 +276,7 @@ pub fn update_chunks(
             let state;
             let vel;
             {
-                let chunk = &mut chunks.0[local_pos.1 as usize];
-
-                let atom = &mut chunk.atoms[local_pos.0.d1()];
+                let atom = &mut chunks.0[local_pos];
                 state = atom.state;
                 vel = atom.velocity.is_some();
 
@@ -320,19 +287,17 @@ pub fn update_chunks(
             }
 
             let mut awakened = if vel {
-                update_particle(chunks, deferred_updates, pos, dt, actors)
+                update_particle(chunks, pos, dt, actors)
             } else {
                 match state {
-                    State::Powder => update_powder(chunks, deferred_updates, pos, dt, actors),
-                    State::Liquid => update_liquid(chunks, deferred_updates, pos, dt, actors),
+                    State::Powder => update_powder(chunks, pos, dt, actors),
+                    State::Liquid => update_liquid(chunks, pos, dt, actors),
                     _ => vec![],
                 }
             };
 
             if awakened.contains(&pos) {
-                let chunk = &mut chunks.0[local_pos.1 as usize];
-
-                let atom = &mut chunk.atoms[local_pos.0.d1()];
+                let atom = &mut chunks.0[local_pos];
                 atom.f_idle = 0;
             } else if awake_self {
                 awakened.push(pos)
@@ -345,14 +310,22 @@ pub fn update_chunks(
                         let awoke = awoke + ivec2(x_off, y_off);
 
                         let local_pos = global_to_local(awoke);
-                        if let Some(chunk) = chunks.0.get(local_pos.1 as usize) {
-                            // TODO: This borrow fails when scribbling fast and wide.
-                            deferred_updates
-                                .try_send(DeferredChunkUpdate::UpdateDirtyRect {
-                                    chunk_idx: chunk.index,
-                                    pos: Vec2::new(local_pos.0.x as f32, local_pos.0.y as f32),
-                                })
-                                .unwrap();
+                        let chunk: Chunk = todo!(); //
+
+                        let dirty_rect = &mut chunk.dirty_rect;
+
+                        if let Some(dirty_rect) = dirty_rect.as_mut() {
+                            extend_rect_if_needed(
+                                dirty_rect,
+                                &Vec2::new(local_pos.0.x as f32, local_pos.0.y as f32),
+                            )
+                        } else {
+                            *dirty_rect = Some(Rect::new(
+                                local_pos.0.x as f32,
+                                local_pos.0.y as f32,
+                                local_pos.0.x as f32,
+                                local_pos.0.y as f32,
+                            ))
                         }
                     }
                 }
