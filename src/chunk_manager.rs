@@ -116,25 +116,16 @@ pub fn chunk_manager_update(
 
     let row_range = 0..CHUNKS_WIDTH as i32;
     let column_range = 0..CHUNKS_HEIGHT as i32;
-
+    
     let pool = ComputeTaskPool::get();
 
     // Run the 4 update steps in checker like pattern
     for y_thread_off in rand_range(0..2) {
         for x_thread_off in rand_range(0..2) {
             pool.scope(|scope| {
-                //Map chunks
-                //TODO maybe create a struct for this
-                let mut centers: Vec<Option<[&mut Atom; CHUNK_LEN]>> = vec![];
-                let mut lefts: Vec<Option<[&mut Atom; HALF_CHUNK_LEN]>> = vec![];
-                let mut rights: Vec<Option<[&mut Atom; HALF_CHUNK_LEN]>> = vec![];
-                let mut ups: Vec<Option<[&mut Atom; HALF_CHUNK_LEN]>> = vec![];
-                let mut downs: Vec<Option<[&mut Atom; HALF_CHUNK_LEN]>> = vec![];
-                let mut up_lefts: Vec<Option<[&mut Atom; QUARTER_CHUNK_LEN]>> = vec![];
-                let mut up_rights: Vec<Option<[&mut Atom; QUARTER_CHUNK_LEN]>> = vec![];
-                let mut down_lefts: Vec<Option<[&mut Atom; QUARTER_CHUNK_LEN]>> = vec![];
-                let mut down_rights: Vec<Option<[&mut Atom; QUARTER_CHUNK_LEN]>> = vec![];
+                let mut mutable_references = MutableReferences::default();
 
+                //Map chunks
                 chunk_manager
                     .chunks
                     .iter_mut()
@@ -147,7 +138,7 @@ pub fn chunk_manager_update(
                         let same_y = (chunk_y + y_thread_off) % 2 == 0;
 
                         match (same_x, same_y) {
-                            (true, true) => centers.push(Some(
+                            (true, true) => mutable_references.centers.push(Some(
                                 chunk
                                     .atoms
                                     .iter_mut()
@@ -158,18 +149,18 @@ pub fn chunk_manager_update(
                             (true, false) => {
                                 let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
 
-                                ups.push(Some(
+                                mutable_references.sides[0].push(Some(
                                     up.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
                                 ));
-                                downs.push(Some(
+                                mutable_references.sides[3].push(Some(
                                     down.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
                                 ));
                             }
                             (false, true) => {
                                 let (left, right) = split_left_right(&mut chunk.atoms);
 
-                                lefts.push(Some(left));
-                                rights.push(Some(right));
+                                mutable_references.sides[1].push(Some(left));
+                                mutable_references.sides[2].push(Some(right));
                             }
 
                             (false, false) => {
@@ -178,10 +169,10 @@ pub fn chunk_manager_update(
                                 let (up_left, up_right) = updown_to_leftright(up);
                                 let (down_left, down_right) = updown_to_leftright(down);
 
-                                up_lefts.push(Some(up_left));
-                                up_rights.push(Some(up_right));
-                                down_lefts.push(Some(down_left));
-                                down_rights.push(Some(down_right));
+                                mutable_references.corners[0].push(Some(up_left));
+                                mutable_references.corners[1].push(Some(up_right));
+                                mutable_references.corners[2].push(Some(down_left));
+                                mutable_references.corners[3].push(Some(down_right));
                             }
                         }
                     });
@@ -194,7 +185,7 @@ pub fn chunk_manager_update(
                         if let Some(rect) = dirty_rects[y * CHUNKS_WIDTH + x] {
                             let center_index = y * CHUNKS_WIDTH + x;
                             let mut chunk_group = ChunkGroup::new(
-                                centers[y / 2 * CHUNKS_WIDTH / 2 + x / 2].take().unwrap(),
+                                mutable_references.centers[y / 2 * CHUNKS_WIDTH / 2 + x / 2].take().unwrap(),
                                 center_index,
                             );
 
@@ -218,20 +209,20 @@ pub fn chunk_manager_update(
                                         (true, false) => {
                                             if x_off == 1 {
                                                 chunk_group.sides[2] =
-                                                    lefts[index_off as usize].take();
+                                                mutable_references.sides[1][index_off as usize].take();
                                             } else {
                                                 chunk_group.sides[1] =
-                                                    rights[index_off as usize].take();
+                                                mutable_references.sides[2][index_off as usize].take();
                                             };
                                         }
 
                                         (false, true) => {
                                             if y_off == 1 {
                                                 chunk_group.sides[3] =
-                                                    ups[index_off as usize].take();
+                                                mutable_references.sides[0][index_off as usize].take();
                                             } else {
                                                 chunk_group.sides[0] =
-                                                    downs[index_off as usize].take();
+                                                mutable_references.sides[3][index_off as usize].take();
                                             };
                                         }
 
@@ -239,19 +230,19 @@ pub fn chunk_manager_update(
                                             match (x_off, y_off) {
                                                 (1, 1) => {
                                                     chunk_group.corners[3] =
-                                                        up_lefts[index_off as usize].take()
+                                                    mutable_references.corners[0][index_off as usize].take()
                                                 }
                                                 (-1, 1) => {
                                                     chunk_group.corners[2] =
-                                                        up_rights[index_off as usize].take()
+                                                    mutable_references.corners[1][index_off as usize].take()
                                                 }
                                                 (1, -1) => {
                                                     chunk_group.corners[1] =
-                                                        down_lefts[index_off as usize].take()
+                                                    mutable_references.corners[2][index_off as usize].take()
                                                 }
                                                 (-1, -1) => {
                                                     chunk_group.corners[0] =
-                                                        down_rights[index_off as usize].take()
+                                                    mutable_references.corners[3][index_off as usize].take()
                                                 }
                                                 _ => unreachable!(),
                                             };
@@ -295,67 +286,6 @@ pub fn chunk_manager_update(
             .into_inner()
             .unwrap(),
     );
-}
-
-pub fn textures_update(
-    chunk_manager: Query<&ChunkManager>,
-    mut images: ResMut<Assets<Image>>,
-    mut uptextures_query: Query<&mut UpdateTextures>,
-) {
-    let mut uptextures_hash = uptextures_query.single_mut();
-    let chunk_manager = chunk_manager.single();
-
-    // TODO: Parallelize texture update on GPU.
-    images.iter_mut().for_each(|(id, image)| {
-        if let Some(chunk_index) = chunk_manager.textures_hmap.get(&id) {
-            if let Some(pos_set) = uptextures_hash
-                .as_ref()
-                .0
-                .as_ref()
-                .unwrap()
-                .get(chunk_index)
-            {
-                let chunk = &chunk_manager.chunks[*chunk_index];
-                chunk.update_image_positions(image, pos_set);
-            }
-        }
-    });
-
-    uptextures_hash.0 = None;
-}
-
-pub fn dirty_rects_update(
-    mut uprects_query: Query<&mut UpdateDirtyRects>,
-    mut chunk_manager: Query<&mut ChunkManager>,
-) {
-    let mut uprects_hash = uprects_query.single_mut();
-    let mut chunk_manager = chunk_manager.single_mut();
-
-    chunk_manager
-        .chunks
-        .iter_mut()
-        .enumerate()
-        .for_each(|(idx, chunk)| {
-            chunk.dirty_rect = None;
-
-            if let Some((_, awaken)) = uprects_hash.0.as_ref().unwrap().get_key_value(&idx) {
-                let mut awaken_iter = awaken.iter();
-                if let Some(pos) = awaken_iter.next() {
-                    let mut rect = Rect::new(
-                        (pos.x - 1).clamp(0, 63) as f32,
-                        (pos.y - 1).clamp(0, 63) as f32,
-                        (pos.x + 1).clamp(0, 63) as f32,
-                        (pos.y + 1).clamp(0, 63) as f32,
-                    );
-
-                    awaken_iter.for_each(|pos| extend_rect_if_needed(&mut rect, &pos.as_vec2()));
-
-                    chunk.dirty_rect = Some(rect);
-                }
-            }
-        });
-
-    uprects_hash.0 = None;
 }
 
 pub fn update_chunks(
@@ -423,6 +353,67 @@ pub fn update_chunks(
             }
         }
     }
+}
+
+pub fn textures_update(
+    chunk_manager: Query<&ChunkManager>,
+    mut images: ResMut<Assets<Image>>,
+    mut uptextures_query: Query<&mut UpdateTextures>,
+) {
+    let mut uptextures_hash = uptextures_query.single_mut();
+    let chunk_manager = chunk_manager.single();
+
+    // TODO: Parallelize texture update on GPU.
+    images.iter_mut().for_each(|(id, image)| {
+        if let Some(chunk_index) = chunk_manager.textures_hmap.get(&id) {
+            if let Some(pos_set) = uptextures_hash
+                .as_ref()
+                .0
+                .as_ref()
+                .unwrap()
+                .get(chunk_index)
+            {
+                let chunk = &chunk_manager.chunks[*chunk_index];
+                chunk.update_image_positions(image, pos_set);
+            }
+        }
+    });
+
+    uptextures_hash.0 = None;
+}
+
+pub fn dirty_rects_update(
+    mut uprects_query: Query<&mut UpdateDirtyRects>,
+    mut chunk_manager: Query<&mut ChunkManager>,
+) {
+    let mut uprects_hash = uprects_query.single_mut();
+    let mut chunk_manager = chunk_manager.single_mut();
+
+    chunk_manager
+        .chunks
+        .iter_mut()
+        .enumerate()
+        .for_each(|(idx, chunk)| {
+            chunk.dirty_rect = None;
+
+            if let Some((_, awaken)) = uprects_hash.0.as_ref().unwrap().get_key_value(&idx) {
+                let mut awaken_iter = awaken.iter();
+                if let Some(pos) = awaken_iter.next() {
+                    let mut rect = Rect::new(
+                        (pos.x - 1).clamp(0, 63) as f32,
+                        (pos.y - 1).clamp(0, 63) as f32,
+                        (pos.x + 1).clamp(0, 63) as f32,
+                        (pos.y + 1).clamp(0, 63) as f32,
+                    );
+
+                    awaken_iter.for_each(|pos| extend_rect_if_needed(&mut rect, &pos.as_vec2()));
+
+                    chunk.dirty_rect = Some(rect);
+                }
+            }
+        });
+
+    uprects_hash.0 = None;
 }
 
 pub struct ChunkManagerPlugin;

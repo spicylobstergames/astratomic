@@ -265,3 +265,24 @@ pub fn updown_to_leftright(
 
     (left.try_into().unwrap(), right.try_into().unwrap())
 }
+
+#[derive(Default)]
+pub struct MutableReferences<'a> {
+    pub centers: Vec<Option<[&'a mut Atom; CHUNK_LEN]>>,
+    pub sides: [Vec<Option<[&'a mut Atom; HALF_CHUNK_LEN]>>; 4],
+    pub corners: [Vec<Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>>; 4],
+}
+
+/// A deferred update message.
+/// Indicates that an image or dirty rect should udpate.
+#[derive(Debug)]
+pub enum DeferredUpdate {
+    UpdateImage {
+        image_id: AssetId<Image>,
+        pos: Vec2,
+    },
+    UpdateDirtyRect {
+        chunk_idx: usize,
+        pos: Vec2,
+    },
+}
