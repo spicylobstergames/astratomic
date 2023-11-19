@@ -1,12 +1,5 @@
-use crate::geom_tools::Line;
-use bevy::prelude::*;
+use crate::prelude::*;
 use rand::Rng;
-
-use crate::atom::State;
-use crate::atom::*;
-use crate::consts::*;
-use crate::grid::Grid;
-use crate::grid_api::*;
 
 fn camera(keys: Res<Input<KeyCode>>, mut camera_q: Query<&mut Transform, With<Camera>>) {
     let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
@@ -19,7 +12,7 @@ fn camera(keys: Res<Input<KeyCode>>, mut camera_q: Query<&mut Transform, With<Ca
 fn brush(
     window: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
-    mut grid: Query<&mut Grid>,
+    mut chunk_manager: Query<&mut ChunkManager>,
     mut images: ResMut<Assets<Image>>,
     prev_mpos: Query<&PreviousMousePos>,
     buttons: Res<Input<MouseButton>>,
@@ -61,7 +54,7 @@ fn brush(
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
         .map(|ray| ray.origin.truncate())
     {
-        let grid = grid.single_mut();
+        let mut chunk_manager = chunk_manager.single_mut();
         world_position.y *= -1.;
         let prev_mpos = prev_mpos.single().0.unwrap();
 
@@ -70,13 +63,13 @@ fn brush(
             IVec2::new(world_position.x as i32, world_position.y as i32)
                 - IVec2::new(prev_mpos.x as i32, prev_mpos.y as i32),
         ) {
-            if let Some(pos) = transform_to_chunk(v.as_vec2(), (grid.width, grid.height)) {
+            if let Some(pos) = transform_to_chunk(v.as_vec2()) {
                 let atom = Atom {
                     color,
                     state,
                     ..Default::default()
                 };
-                let mut chunk = grid.chunks[pos.1 as usize].write().unwrap();
+                let chunk = &mut chunk_manager.chunks[pos.1 as usize];
                 chunk.atoms[pos.0.d1()] = atom;
                 chunk.update_image_positions(
                     images.get_mut(&chunk.texture).unwrap(),

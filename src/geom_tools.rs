@@ -1,4 +1,4 @@
-use bevy::prelude::IVec2;
+use crate::prelude::*;
 
 // TODO Clean code
 pub struct Line {
