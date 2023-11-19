@@ -351,40 +351,6 @@ pub fn textures_update(
     uptextures_hash.0 = None;
 }
 
-/*pub fn dirty_rects_update(
-    mut uprects_query: Query<&mut UpdateDirtyRects>,
-    mut chunk_manager: Query<&mut ChunkManager>,
-) {
-    let mut uprects_hash = uprects_query.single_mut();
-    let mut chunk_manager = chunk_manager.single_mut();
-
-    chunk_manager
-        .chunks
-        .iter_mut()
-        .enumerate()
-        .for_each(|(idx, chunk)| {
-            chunk.dirty_rect = None;
-
-            if let Some((_, awaken)) = uprects_hash.0.as_ref().unwrap().get_key_value(&idx) {
-                let mut awaken_iter = awaken.iter();
-                if let Some(pos) = awaken_iter.next() {
-                    let mut rect = Rect::new(
-                        (pos.x - 1).clamp(0, 63) as f32,
-                        (pos.y - 1).clamp(0, 63) as f32,
-                        (pos.x + 1).clamp(0, 63) as f32,
-                        (pos.y + 1).clamp(0, 63) as f32,
-                    );
-
-                    awaken_iter.for_each(|pos| extend_rect_if_needed(&mut rect, &pos.as_vec2()));
-
-                    chunk.dirty_rect = Some(rect);
-                }
-            }
-        });
-
-    uprects_hash.0 = None;
-}*/
-
 pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
