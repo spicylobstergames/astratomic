@@ -6,14 +6,18 @@ use std::sync::{Arc, Mutex};
 use bevy::math::ivec2;
 use rand::Rng;
 
+use async_channel::Sender;
+
 use crate::prelude::*;
 
 // Parallel reference for image and chunk data
 pub type TexturesHash = HashMap<usize, HashSet<IVec2>>;
 pub type ParTexturesHash = Arc<Mutex<TexturesHash>>;
-pub type DirtyRectHash = HashMap<usize, HashSet<IVec2>>;
-pub type ParDirtyRectHash = Arc<Mutex<DirtyRectHash>>;
-pub type UpdateChunksType<'a> = (ChunkGroup<'a>, &'a ParTexturesHash, &'a ParDirtyRectHash);
+pub type UpdateChunksType<'a> = (
+    ChunkGroup<'a>,
+    &'a ParTexturesHash,
+    &'a Sender<DeferredUpdate>,
+);
 
 /// Swap two atoms from global 3x3 chunks positions
 pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: f32) {
@@ -277,12 +281,6 @@ pub struct MutableReferences<'a> {
 /// Indicates that an image or dirty rect should udpate.
 #[derive(Debug)]
 pub enum DeferredUpdate {
-    UpdateImage {
-        image_id: AssetId<Image>,
-        pos: Vec2,
-    },
-    UpdateDirtyRect {
-        chunk_idx: usize,
-        pos: Vec2,
-    },
+    //UpdateImage { image_id: AssetId<Image>, pos: Vec2 },
+    UpdateDirtyRect { chunk_idx: usize, pos: Vec2 },
 }

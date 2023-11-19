@@ -6,7 +6,6 @@ use crate::prelude::*;
 pub struct Chunk {
     pub atoms: [Atom; CHUNK_LEN],
     pub texture: Handle<Image>,
-    pub dirty_rect: Option<Rect>,
     pub index: usize,
 }
 
@@ -15,7 +14,6 @@ impl Chunk {
         Chunk {
             atoms: [Atom::new(); CHUNK_LEN],
             texture,
-            dirty_rect: None,
             index,
         }
     }

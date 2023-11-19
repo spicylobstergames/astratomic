@@ -19,7 +19,7 @@ pub struct ChunkManager {
 pub struct UpdateTextures(Option<TexturesHash>);
 
 #[derive(Component)]
-pub struct UpdateDirtyRects(Option<DirtyRectHash>);
+pub struct DirtyRects(pub Vec<Option<Rect>>);
 
 fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let side_length = (CHUNK_LENGHT * ATOM_SIZE) as f32;
@@ -81,17 +81,17 @@ fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         textures_hmap,
     };
 
+    commands.spawn(DirtyRects(vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT]));
     commands.spawn(chunk_manager);
     commands.spawn(UpdateTextures(None));
-    commands.spawn(UpdateDirtyRects(None));
 }
 
 pub fn chunk_manager_update(
     mut chunk_manager: Query<&mut ChunkManager>,
+    mut dirty_rects: Query<&mut DirtyRects>,
     time: Res<Time>,
     actors: Query<(&Actor, &Transform)>,
     mut uptextures_query: Query<&mut UpdateTextures>,
-    mut uprects_query: Query<&mut UpdateDirtyRects>,
 ) {
     let mut chunk_manager = chunk_manager.single_mut();
 
@@ -99,7 +99,6 @@ pub fn chunk_manager_update(
     let dt = chunk_manager.dt;
 
     let textures_update: ParTexturesHash = Arc::new(Mutex::new(HashMap::new()));
-    let dirty_rects_update: ParDirtyRectHash = Arc::new(Mutex::new(HashMap::new()));
 
     // Get actors
     let mut actors_vec = vec![];
@@ -107,181 +106,231 @@ pub fn chunk_manager_update(
         actors_vec.push((*actor, *transform))
     }
 
-    // Get dirty rects
-    let dirty_rects: Vec<_> = chunk_manager
-        .chunks
-        .iter_mut()
-        .map(|chunk| chunk.dirty_rect.take())
-        .collect();
-
     let row_range = 0..CHUNKS_WIDTH as i32;
     let column_range = 0..CHUNKS_HEIGHT as i32;
-    
-    let pool = ComputeTaskPool::get();
 
-    // Run the 4 update steps in checker like pattern
-    for y_thread_off in rand_range(0..2) {
-        for x_thread_off in rand_range(0..2) {
-            pool.scope(|scope| {
-                let mut mutable_references = MutableReferences::default();
+    let update_chunks_pool = ComputeTaskPool::get();
+    let images_drects_pool = ComputeTaskPool::get();
 
-                //Map chunks
-                chunk_manager
-                    .chunks
-                    .iter_mut()
-                    .enumerate()
-                    .for_each(|(idx, chunk)| {
-                        let chunk_x = idx % CHUNKS_WIDTH;
-                        let chunk_y = idx / CHUNKS_WIDTH;
+    let (deferred_updates_send, deferred_updates_recv) = async_channel::unbounded();
+    let deferred_updates_send = &deferred_updates_send;
+    {
+        // Get dirty rects
+        let dirty_rects = &dirty_rects.single().0;
+        // Run the 4 update steps in checker like pattern
+        for y_thread_off in rand_range(0..2) {
+            for x_thread_off in rand_range(0..2) {
+                update_chunks_pool.scope(|scope| {
+                    let mut mutable_references = MutableReferences::default();
 
-                        let same_x = (chunk_x + x_thread_off) % 2 == 0;
-                        let same_y = (chunk_y + y_thread_off) % 2 == 0;
+                    //Map chunks
+                    chunk_manager
+                        .chunks
+                        .iter_mut()
+                        .enumerate()
+                        .for_each(|(idx, chunk)| {
+                            let chunk_x = idx % CHUNKS_WIDTH;
+                            let chunk_y = idx / CHUNKS_WIDTH;
 
-                        match (same_x, same_y) {
-                            (true, true) => mutable_references.centers.push(Some(
-                                chunk
-                                    .atoms
-                                    .iter_mut()
-                                    .collect::<Vec<_>>()
-                                    .try_into()
-                                    .unwrap(),
-                            )),
-                            (true, false) => {
-                                let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
+                            let same_x = (chunk_x + x_thread_off) % 2 == 0;
+                            let same_y = (chunk_y + y_thread_off) % 2 == 0;
 
-                                mutable_references.sides[0].push(Some(
-                                    up.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
-                                ));
-                                mutable_references.sides[3].push(Some(
-                                    down.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
-                                ));
-                            }
-                            (false, true) => {
-                                let (left, right) = split_left_right(&mut chunk.atoms);
+                            match (same_x, same_y) {
+                                (true, true) => mutable_references.centers.push(Some(
+                                    chunk
+                                        .atoms
+                                        .iter_mut()
+                                        .collect::<Vec<_>>()
+                                        .try_into()
+                                        .unwrap(),
+                                )),
+                                (true, false) => {
+                                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
 
-                                mutable_references.sides[1].push(Some(left));
-                                mutable_references.sides[2].push(Some(right));
-                            }
+                                    mutable_references.sides[0].push(Some(
+                                        up.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
+                                    ));
+                                    mutable_references.sides[3].push(Some(
+                                        down.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
+                                    ));
+                                }
+                                (false, true) => {
+                                    let (left, right) = split_left_right(&mut chunk.atoms);
 
-                            (false, false) => {
-                                let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
+                                    mutable_references.sides[1].push(Some(left));
+                                    mutable_references.sides[2].push(Some(right));
+                                }
 
-                                let (up_left, up_right) = updown_to_leftright(up);
-                                let (down_left, down_right) = updown_to_leftright(down);
+                                (false, false) => {
+                                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
 
-                                mutable_references.corners[0].push(Some(up_left));
-                                mutable_references.corners[1].push(Some(up_right));
-                                mutable_references.corners[2].push(Some(down_left));
-                                mutable_references.corners[3].push(Some(down_right));
-                            }
-                        }
-                    });
+                                    let (up_left, up_right) = updown_to_leftright(up);
+                                    let (down_left, down_right) = updown_to_leftright(down);
 
-                //Acess chunks
-                let y_iter = (y_thread_off..CHUNKS_HEIGHT).step_by(2);
-                y_iter.for_each(|y| {
-                    let x_iter = (x_thread_off..CHUNKS_WIDTH).step_by(2);
-                    x_iter.for_each(|x| {
-                        if let Some(rect) = dirty_rects[y * CHUNKS_WIDTH + x] {
-                            let center_index = y * CHUNKS_WIDTH + x;
-                            let mut chunk_group = ChunkGroup::new(
-                                mutable_references.centers[y / 2 * CHUNKS_WIDTH / 2 + x / 2].take().unwrap(),
-                                center_index,
-                            );
-
-                            // Get all 3x3 chunks for each chunk updating
-                            for y_off in -1..=1 {
-                                for x_off in -1..=1 {
-                                    if (x_off == 0 && y_off == 0)
-                                        || !column_range.contains(&(y as i32 + y_off))
-                                        || !row_range.contains(&(x as i32 + x_off))
-                                    {
-                                        //If it's the center chunk, or out of bounds continue
-                                        continue;
-                                    }
-
-                                    let x = (x as i32 + x_off) / 2;
-                                    let y = (y as i32 + y_off) / 2;
-                                    let index_off = y * CHUNKS_WIDTH as i32 / 2 + x;
-
-                                    match (x_off != 0, y_off != 0) {
-                                        // (true, false) means same line but different column
-                                        (true, false) => {
-                                            if x_off == 1 {
-                                                chunk_group.sides[2] =
-                                                mutable_references.sides[1][index_off as usize].take();
-                                            } else {
-                                                chunk_group.sides[1] =
-                                                mutable_references.sides[2][index_off as usize].take();
-                                            };
-                                        }
-
-                                        (false, true) => {
-                                            if y_off == 1 {
-                                                chunk_group.sides[3] =
-                                                mutable_references.sides[0][index_off as usize].take();
-                                            } else {
-                                                chunk_group.sides[0] =
-                                                mutable_references.sides[3][index_off as usize].take();
-                                            };
-                                        }
-
-                                        (true, true) => {
-                                            match (x_off, y_off) {
-                                                (1, 1) => {
-                                                    chunk_group.corners[3] =
-                                                    mutable_references.corners[0][index_off as usize].take()
-                                                }
-                                                (-1, 1) => {
-                                                    chunk_group.corners[2] =
-                                                    mutable_references.corners[1][index_off as usize].take()
-                                                }
-                                                (1, -1) => {
-                                                    chunk_group.corners[1] =
-                                                    mutable_references.corners[2][index_off as usize].take()
-                                                }
-                                                (-1, -1) => {
-                                                    chunk_group.corners[0] =
-                                                    mutable_references.corners[3][index_off as usize].take()
-                                                }
-                                                _ => unreachable!(),
-                                            };
-                                        }
-
-                                        _ => unreachable!(),
-                                    }
+                                    mutable_references.corners[0].push(Some(up_left));
+                                    mutable_references.corners[1].push(Some(up_right));
+                                    mutable_references.corners[2].push(Some(down_left));
+                                    mutable_references.corners[3].push(Some(down_right));
                                 }
                             }
+                        });
 
-                            let textures_update = Arc::clone(&textures_update);
-                            let dirty_rects_update = Arc::clone(&dirty_rects_update);
+                    //Acess chunks
+                    let y_iter = (y_thread_off..CHUNKS_HEIGHT).step_by(2);
+                    y_iter.for_each(|y| {
+                        let x_iter = (x_thread_off..CHUNKS_WIDTH).step_by(2);
+                        x_iter.for_each(|x| {
+                            if let Some(rect) = dirty_rects[y * CHUNKS_WIDTH + x] {
+                                let center_index = y * CHUNKS_WIDTH + x;
+                                let mut chunk_group = ChunkGroup::new(
+                                    mutable_references.centers[y / 2 * CHUNKS_WIDTH / 2 + x / 2]
+                                        .take()
+                                        .unwrap(),
+                                    center_index,
+                                );
 
-                            let actors = &actors_vec;
-                            scope.spawn(async move {
-                                update_chunks(
-                                    &mut (chunk_group, &textures_update, &dirty_rects_update),
-                                    dt,
-                                    actors,
-                                    &rect,
-                                )
-                            });
-                        }
+                                // Get all 3x3 chunks for each chunk updating
+                                for y_off in -1..=1 {
+                                    for x_off in -1..=1 {
+                                        if (x_off == 0 && y_off == 0)
+                                            || !column_range.contains(&(y as i32 + y_off))
+                                            || !row_range.contains(&(x as i32 + x_off))
+                                        {
+                                            //If it's the center chunk, or out of bounds continue
+                                            continue;
+                                        }
+
+                                        let x = (x as i32 + x_off) / 2;
+                                        let y = (y as i32 + y_off) / 2;
+                                        let index_off = y * CHUNKS_WIDTH as i32 / 2 + x;
+
+                                        match (x_off != 0, y_off != 0) {
+                                            // (true, false) means same line but different column
+                                            (true, false) => {
+                                                if x_off == 1 {
+                                                    chunk_group.sides[2] = mutable_references.sides
+                                                        [1]
+                                                        [index_off as usize]
+                                                        .take();
+                                                } else {
+                                                    chunk_group.sides[1] = mutable_references.sides
+                                                        [2]
+                                                        [index_off as usize]
+                                                        .take();
+                                                };
+                                            }
+
+                                            (false, true) => {
+                                                if y_off == 1 {
+                                                    chunk_group.sides[3] = mutable_references.sides
+                                                        [0]
+                                                        [index_off as usize]
+                                                        .take();
+                                                } else {
+                                                    chunk_group.sides[0] = mutable_references.sides
+                                                        [3]
+                                                        [index_off as usize]
+                                                        .take();
+                                                };
+                                            }
+
+                                            (true, true) => {
+                                                match (x_off, y_off) {
+                                                    (1, 1) => {
+                                                        chunk_group.corners[3] = mutable_references
+                                                            .corners[0]
+                                                            [index_off as usize]
+                                                            .take()
+                                                    }
+                                                    (-1, 1) => {
+                                                        chunk_group.corners[2] = mutable_references
+                                                            .corners[1]
+                                                            [index_off as usize]
+                                                            .take()
+                                                    }
+                                                    (1, -1) => {
+                                                        chunk_group.corners[1] = mutable_references
+                                                            .corners[2]
+                                                            [index_off as usize]
+                                                            .take()
+                                                    }
+                                                    (-1, -1) => {
+                                                        chunk_group.corners[0] = mutable_references
+                                                            .corners[3]
+                                                            [index_off as usize]
+                                                            .take()
+                                                    }
+                                                    _ => unreachable!(),
+                                                };
+                                            }
+
+                                            _ => unreachable!(),
+                                        }
+                                    }
+                                }
+
+                                let textures_update = Arc::clone(&textures_update);
+
+                                let actors = &actors_vec;
+                                scope.spawn(async move {
+                                    update_chunks(
+                                        &mut (chunk_group, &textures_update, deferred_updates_send),
+                                        dt,
+                                        actors,
+                                        &rect,
+                                    )
+                                });
+                            }
+                        });
                     });
                 });
-            });
+            }
         }
     }
+
+    let mut new_dirty_rects: Vec<Arc<Mutex<Option<Rect>>>> =
+        Vec::with_capacity(CHUNKS_WIDTH * CHUNKS_HEIGHT);
+    (0..CHUNKS_WIDTH * CHUNKS_HEIGHT)
+        .for_each(|_| new_dirty_rects.push(Arc::new(Mutex::new(None))));
+
+    // Maybe this would be better in another system?
+    // Update dirty rects
+    images_drects_pool.scope(|scope| {
+        while let Ok(update) = deferred_updates_recv.try_recv() {
+            match update {
+                DeferredUpdate::UpdateDirtyRect { chunk_idx, pos } => {
+                    let rect = Arc::clone(&new_dirty_rects[chunk_idx]);
+                    scope.spawn(async move {
+                        let mut rect = rect.lock().unwrap();
+
+                        if let Some(rect) = rect.as_mut() {
+                            extend_rect_if_needed(rect, &pos);
+                        } else {
+                            *rect = Some(Rect::new(
+                                (pos.x - 1.).clamp(0., 63.),
+                                (pos.y - 1.).clamp(0., 63.),
+                                (pos.x + 1.).clamp(0., 63.),
+                                (pos.y + 1.).clamp(0., 63.),
+                            ));
+                        }
+                    });
+                }
+                // TODO: Parallelize texture update on GPU.
+                //DeferredUpdate::UpdateImage { .. } => todo!(),
+            }
+        }
+    });
+
+    let new_dirty_rects: Vec<Option<Rect>> = new_dirty_rects
+        .into_iter()
+        .map(|rect| Arc::try_unwrap(rect).unwrap().into_inner().unwrap())
+        .collect();
+
+    dirty_rects.single_mut().0 = new_dirty_rects;
 
     let mut uptextures_comp = uptextures_query.single_mut();
     uptextures_comp.0.replace(
         Arc::try_unwrap(textures_update)
-            .unwrap()
-            .into_inner()
-            .unwrap(),
-    );
-    let mut uprects_comp = uprects_query.single_mut();
-    uprects_comp.0.replace(
-        Arc::try_unwrap(dirty_rects_update)
             .unwrap()
             .into_inner()
             .unwrap(),
@@ -340,14 +389,15 @@ pub fn update_chunks(
                         let local = global_to_local(awoke + ivec2(x, y));
                         let chunk_manager_idx =
                             ChunkGroup::group_to_manager_idx(chunks.0.center_index, local.1);
-
-                        chunks
-                            .2
-                            .lock()
-                            .unwrap()
-                            .entry(chunk_manager_idx)
-                            .or_default()
-                            .insert(local.0);
+                        if (0..CHUNKS_WIDTH * CHUNKS_HEIGHT).contains(&chunk_manager_idx) {
+                            chunks
+                                .2
+                                .try_send(DeferredUpdate::UpdateDirtyRect {
+                                    chunk_idx: chunk_manager_idx,
+                                    pos: local.0.as_vec2(),
+                                })
+                                .unwrap();
+                        }
                     }
                 }
             }
@@ -382,7 +432,7 @@ pub fn textures_update(
     uptextures_hash.0 = None;
 }
 
-pub fn dirty_rects_update(
+/*pub fn dirty_rects_update(
     mut uprects_query: Query<&mut UpdateDirtyRects>,
     mut chunk_manager: Query<&mut ChunkManager>,
 ) {
@@ -414,7 +464,7 @@ pub fn dirty_rects_update(
         });
 
     uprects_hash.0 = None;
-}
+}*/
 
 pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
@@ -424,7 +474,6 @@ impl Plugin for ChunkManagerPlugin {
             (
                 chunk_manager_update,
                 textures_update.after(chunk_manager_update),
-                dirty_rects_update.after(chunk_manager_update),
             ),
         );
     }

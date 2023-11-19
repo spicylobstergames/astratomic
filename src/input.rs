@@ -13,14 +13,14 @@ fn brush(
     window: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut chunk_manager: Query<&mut ChunkManager>,
+    mut dirty_rects: Query<&mut DirtyRects>,
     mut images: ResMut<Assets<Image>>,
     prev_mpos: Query<&PreviousMousePos>,
     buttons: Res<Input<MouseButton>>,
-    keys: Res<Input<KeyCode>>,
 ) {
     let (state, color);
 
-    if keys.pressed(KeyCode::F) {
+    if buttons.pressed(MouseButton::Other(0x113)) {
         state = State::Gas;
         color = [255, 255, 255, 255];
     } else if buttons.pressed(MouseButton::Left) {
@@ -31,7 +31,7 @@ fn brush(
             (92 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             255,
         ];
-    } else if keys.pressed(KeyCode::ControlLeft) {
+    } else if buttons.pressed(MouseButton::Other(0x114)) {
         state = State::Liquid;
         color = [
             (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
@@ -55,6 +55,7 @@ fn brush(
         .map(|ray| ray.origin.truncate())
     {
         let mut chunk_manager = chunk_manager.single_mut();
+        let mut dirty_rects = dirty_rects.single_mut();
         world_position.y *= -1.;
         let prev_mpos = prev_mpos.single().0.unwrap();
 
@@ -76,10 +77,10 @@ fn brush(
                     &vec![pos.0].into_iter().collect(),
                 );
 
-                if let Some(dirty_rect) = chunk.dirty_rect.as_mut() {
+                if let Some(dirty_rect) = dirty_rects.0[pos.1 as usize].as_mut() {
                     extend_rect_if_needed(dirty_rect, &pos.0.as_vec2())
                 } else {
-                    chunk.dirty_rect = Some(Rect::new(
+                    dirty_rects.0[pos.1 as usize] = Some(Rect::new(
                         pos.0.x as f32,
                         pos.0.y as f32,
                         pos.0.x as f32,
