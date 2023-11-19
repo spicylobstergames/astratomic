@@ -122,58 +122,11 @@ pub fn chunk_manager_update(
             for x_thread_off in rand_range(0..2) {
                 update_chunks_pool.scope(|scope| {
                     let mut mutable_references = MutableReferences::default();
-
-                    //Map chunks
-                    chunk_manager
-                        .chunks
-                        .iter_mut()
-                        .enumerate()
-                        .for_each(|(idx, chunk)| {
-                            let chunk_x = idx % CHUNKS_WIDTH;
-                            let chunk_y = idx / CHUNKS_WIDTH;
-
-                            let same_x = (chunk_x + x_thread_off) % 2 == 0;
-                            let same_y = (chunk_y + y_thread_off) % 2 == 0;
-
-                            match (same_x, same_y) {
-                                (true, true) => mutable_references.centers.push(Some(
-                                    chunk
-                                        .atoms
-                                        .iter_mut()
-                                        .collect::<Vec<_>>()
-                                        .try_into()
-                                        .unwrap(),
-                                )),
-                                (true, false) => {
-                                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
-
-                                    mutable_references.sides[0].push(Some(
-                                        up.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
-                                    ));
-                                    mutable_references.sides[3].push(Some(
-                                        down.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
-                                    ));
-                                }
-                                (false, true) => {
-                                    let (left, right) = split_left_right(&mut chunk.atoms);
-
-                                    mutable_references.sides[1].push(Some(left));
-                                    mutable_references.sides[2].push(Some(right));
-                                }
-
-                                (false, false) => {
-                                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
-
-                                    let (up_left, up_right) = updown_to_leftright(up);
-                                    let (down_left, down_right) = updown_to_leftright(down);
-
-                                    mutable_references.corners[0].push(Some(up_left));
-                                    mutable_references.corners[1].push(Some(up_right));
-                                    mutable_references.corners[2].push(Some(down_left));
-                                    mutable_references.corners[3].push(Some(down_right));
-                                }
-                            }
-                        });
+                    get_mutable_references(
+                        &mut chunk_manager.chunks,
+                        &mut mutable_references,
+                        (x_thread_off, y_thread_off),
+                    );
 
                     //Acess chunks
                     let y_iter = (y_thread_off..CHUNKS_HEIGHT).step_by(2);
@@ -204,67 +157,33 @@ pub fn chunk_manager_update(
                                         let y = (y as i32 + y_off) / 2;
                                         let index_off = y * CHUNKS_WIDTH as i32 / 2 + x;
 
-                                        match (x_off != 0, y_off != 0) {
-                                            // (true, false) means same line but different column
-                                            (true, false) => {
-                                                if x_off == 1 {
-                                                    chunk_group.sides[2] = mutable_references.sides
-                                                        [1]
-                                                        [index_off as usize]
-                                                        .take();
-                                                } else {
-                                                    chunk_group.sides[1] = mutable_references.sides
-                                                        [2]
-                                                        [index_off as usize]
-                                                        .take();
-                                                };
-                                            }
-
-                                            (false, true) => {
-                                                if y_off == 1 {
-                                                    chunk_group.sides[3] = mutable_references.sides
-                                                        [0]
-                                                        [index_off as usize]
-                                                        .take();
-                                                } else {
-                                                    chunk_group.sides[0] = mutable_references.sides
-                                                        [3]
-                                                        [index_off as usize]
-                                                        .take();
-                                                };
-                                            }
-
-                                            (true, true) => {
-                                                match (x_off, y_off) {
-                                                    (1, 1) => {
-                                                        chunk_group.corners[3] = mutable_references
-                                                            .corners[0]
-                                                            [index_off as usize]
-                                                            .take()
-                                                    }
-                                                    (-1, 1) => {
-                                                        chunk_group.corners[2] = mutable_references
-                                                            .corners[1]
-                                                            [index_off as usize]
-                                                            .take()
-                                                    }
-                                                    (1, -1) => {
-                                                        chunk_group.corners[1] = mutable_references
-                                                            .corners[2]
-                                                            [index_off as usize]
-                                                            .take()
-                                                    }
-                                                    (-1, -1) => {
-                                                        chunk_group.corners[0] = mutable_references
-                                                            .corners[3]
-                                                            [index_off as usize]
-                                                            .take()
-                                                    }
-                                                    _ => unreachable!(),
-                                                };
-                                            }
-
+                                        let (group_idx, mut_idx) = match (x_off, y_off) {
+                                            // Right Left
+                                            (1, 0) => (2, 1),
+                                            (-1, 0) => (1, 2),
+                                            // Top Down
+                                            (0, 1) => (3, 0),
+                                            (0, -1) => (0, 3),
+                                            // Corners
+                                            (1, 1) => (3, 0),
+                                            (-1, 1) => (2, 1),
+                                            (1, -1) => (1, 2),
+                                            (-1, -1) => (0, 3),
                                             _ => unreachable!(),
+                                        };
+
+                                        if x_off.abs() != y_off.abs() {
+                                            // Side
+                                            chunk_group.sides[group_idx] = mutable_references.sides
+                                                [mut_idx]
+                                                [index_off as usize]
+                                                .take();
+                                        } else {
+                                            // Corner
+                                            chunk_group.corners[group_idx] = mutable_references
+                                                .corners[mut_idx]
+                                                [index_off as usize]
+                                                .take()
                                         }
                                     }
                                 }

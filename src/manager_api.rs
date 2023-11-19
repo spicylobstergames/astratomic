@@ -270,6 +270,58 @@ pub fn updown_to_leftright(
     (left.try_into().unwrap(), right.try_into().unwrap())
 }
 
+pub fn get_mutable_references<'a>(
+    chunks: &'a mut [Chunk],
+    mutable_references: &mut MutableReferences<'a>,
+    thread_off: (usize, usize),
+) {
+    chunks.iter_mut().enumerate().for_each(|(idx, chunk)| {
+        let chunk_x = idx % CHUNKS_WIDTH;
+        let chunk_y = idx / CHUNKS_WIDTH;
+
+        let same_x = (chunk_x + thread_off.0) % 2 == 0;
+        let same_y = (chunk_y + thread_off.1) % 2 == 0;
+
+        match (same_x, same_y) {
+            (true, true) => mutable_references.centers.push(Some(
+                chunk
+                    .atoms
+                    .iter_mut()
+                    .collect::<Vec<_>>()
+                    .try_into()
+                    .unwrap(),
+            )),
+            (true, false) => {
+                let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
+
+                mutable_references.sides[0]
+                    .push(Some(up.iter_mut().collect::<Vec<_>>().try_into().unwrap()));
+                mutable_references.sides[3].push(Some(
+                    down.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
+                ));
+            }
+            (false, true) => {
+                let (left, right) = split_left_right(&mut chunk.atoms);
+
+                mutable_references.sides[1].push(Some(left));
+                mutable_references.sides[2].push(Some(right));
+            }
+
+            (false, false) => {
+                let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
+
+                let (up_left, up_right) = updown_to_leftright(up);
+                let (down_left, down_right) = updown_to_leftright(down);
+
+                mutable_references.corners[0].push(Some(up_left));
+                mutable_references.corners[1].push(Some(up_right));
+                mutable_references.corners[2].push(Some(down_left));
+                mutable_references.corners[3].push(Some(down_right));
+            }
+        }
+    });
+}
+
 #[derive(Default)]
 pub struct MutableReferences<'a> {
     pub centers: Vec<Option<[&'a mut Atom; CHUNK_LEN]>>,
