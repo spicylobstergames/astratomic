@@ -1,15 +1,9 @@
-use core::f32::consts::PI;
-
-use bevy::prelude::*;
-
-use crate::actors::*;
-use crate::consts::*;
-use crate::geom_tools::*;
-use crate::grid_api::*;
-
 use rand::Rng;
+use std::{collections::HashSet, f32::consts::PI};
 
-// Make smaller
+use crate::prelude::*;
+
+// TODO Make smaller
 #[derive(Clone, Copy, Default, PartialEq, Debug)]
 pub struct Atom {
     pub color: [u8; 4],
@@ -53,8 +47,8 @@ pub fn update_powder(
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
-) -> Vec<IVec2> {
-    let mut awakened = vec![];
+) -> HashSet<IVec2> {
+    let mut awakened = HashSet::new();
 
     let mut cur_pos = pos;
 
@@ -65,15 +59,15 @@ pub fn update_powder(
         set_fspeed(chunks, cur_pos, fall_speed);
     }
 
-    for _ in 0..1 {
+    for _ in 0..fall_speed {
         let neigh = down_neigh(chunks, cur_pos, &[(State::Liquid, 0.2)], dt);
         let mut swapped = false;
         for neigh in neigh {
             if neigh.0 {
                 swap(chunks, cur_pos, cur_pos + neigh.1, dt);
-                awakened.push(cur_pos);
+                awakened.insert(cur_pos);
                 cur_pos += neigh.1;
-                awakened.push(cur_pos);
+                awakened.insert(cur_pos);
                 swapped = true;
 
                 break;
@@ -106,8 +100,8 @@ pub fn update_liquid(
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
-) -> Vec<IVec2> {
-    let mut awakened = vec![];
+) -> HashSet<IVec2> {
+    let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 
     // Get fall speed
@@ -123,9 +117,9 @@ pub fn update_liquid(
         for neigh in neigh {
             if neigh.0 {
                 swap(chunks, cur_pos, cur_pos + neigh.1, dt);
-                awakened.push(cur_pos);
+                awakened.insert(cur_pos);
                 cur_pos += neigh.1;
-                awakened.push(cur_pos);
+                awakened.insert(cur_pos);
                 swapped = true;
 
                 break;
@@ -152,9 +146,9 @@ pub fn update_liquid(
                 }
 
                 swap(chunks, cur_pos, cur_pos + IVec2::new(side, 0), dt);
-                awakened.push(cur_pos);
+                awakened.insert(cur_pos);
                 cur_pos += IVec2::new(side, 0);
-                awakened.push(cur_pos);
+                awakened.insert(cur_pos);
             }
         }
     }
@@ -168,8 +162,8 @@ pub fn update_particle(
     pos: IVec2,
     dt: f32,
     _actors: &[(Actor, Transform)],
-) -> Vec<IVec2> {
-    let mut awakened = vec![];
+) -> HashSet<IVec2> {
+    let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 
     // Add gravity
@@ -181,11 +175,11 @@ pub fn update_particle(
 
     // Move
     for pos in Line::new(cur_pos, vel) {
-        awakened.push(cur_pos);
+        awakened.insert(cur_pos);
         if swapable(chunks, pos, &[], dt) {
             swap(chunks, cur_pos, pos, dt);
             cur_pos = pos;
-            awakened.push(cur_pos);
+            awakened.insert(cur_pos);
         } else {
             if vel.abs().x > 4 && vel.abs().y > 4 {
                 set_vel(
