@@ -77,10 +77,10 @@ fn brush(
                     &vec![pos.0].into_iter().collect(),
                 );
 
-                if let Some(dirty_rect) = dirty_rects.0[pos.1 as usize].as_mut() {
+                if let Some(dirty_rect) = dirty_rects.current[pos.1 as usize].as_mut() {
                     extend_rect_if_needed(dirty_rect, &pos.0.as_vec2())
                 } else {
-                    dirty_rects.0[pos.1 as usize] = Some(Rect::new(
+                    dirty_rects.current[pos.1 as usize] = Some(Rect::new(
                         pos.0.x as f32,
                         pos.0.y as f32,
                         pos.0.x as f32,

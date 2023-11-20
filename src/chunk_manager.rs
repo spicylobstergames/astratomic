@@ -19,7 +19,16 @@ pub struct ChunkManager {
 pub struct UpdateTextures(Option<TexturesHash>);
 
 #[derive(Component)]
-pub struct DirtyRects(pub Vec<Option<Rect>>);
+pub struct DirtyRects {
+    pub current: Vec<Option<Rect>>,
+    pub new: Vec<Option<Rect>>,
+}
+
+impl DirtyRects {
+    pub fn swap(&mut self) {
+        std::mem::swap(&mut self.current, &mut self.new)
+    }
+}
 
 fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     let side_length = (CHUNK_LENGHT * ATOM_SIZE) as f32;
@@ -81,7 +90,10 @@ fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         textures_hmap,
     };
 
-    commands.spawn(DirtyRects(vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT]));
+    commands.spawn(DirtyRects {
+        current: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
+        new: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
+    });
     commands.spawn(chunk_manager);
     commands.spawn(UpdateTextures(None));
 }
@@ -100,6 +112,13 @@ pub fn chunk_manager_update(
 
     let textures_update: ParTexturesHash = Arc::new(Mutex::new(HashMap::new()));
 
+    // Get dirty rects
+    let mut dirty_rects_resource = dirty_rects.single_mut();
+    let DirtyRects {
+        current: dirty_rects,
+        new: new_dirty_rects,
+    } = &mut *dirty_rects_resource;
+
     // Get actors
     let mut actors_vec = vec![];
     for (actor, transform) in actors.iter() {
@@ -109,18 +128,43 @@ pub fn chunk_manager_update(
     let row_range = 0..CHUNKS_WIDTH as i32;
     let column_range = 0..CHUNKS_HEIGHT as i32;
 
-    let update_chunks_pool = ComputeTaskPool::get();
-    let images_drects_pool = ComputeTaskPool::get();
+    let compute_pool = ComputeTaskPool::get();
 
     let (deferred_updates_send, deferred_updates_recv) = async_channel::unbounded();
     let deferred_updates_send = &deferred_updates_send;
-    {
-        // Get dirty rects
-        let dirty_rects = &dirty_rects.single().0;
+
+    // Create a scope in which we handle deferred updates and update chunks.
+    compute_pool.scope(|deferred_scope| {
+        // Spawn a task on the deferred scope for handling the deferred updates.
+        deferred_scope.spawn(async move {
+            // Clear the new dirty rects so we can update a fresh list
+            new_dirty_rects.iter_mut().for_each(|x| *x = None);
+
+            // Loop through deferred tasks
+            while let Ok(update) = deferred_updates_recv.recv().await {
+                match update {
+                    DeferredUpdate::UpdateDirtyRect { chunk_idx, pos } => {
+                        let rect = &mut new_dirty_rects[chunk_idx];
+                        if let Some(rect) = rect.as_mut() {
+                            extend_rect_if_needed(rect, &pos);
+                        } else {
+                            *rect = Some(Rect::new(
+                                (pos.x - 1.).clamp(0., 63.),
+                                (pos.y - 1.).clamp(0., 63.),
+                                (pos.x + 1.).clamp(0., 63.),
+                                (pos.y + 1.).clamp(0., 63.),
+                            ));
+                        }
+                    } // TODO: Parallelize texture update on GPU.
+                      //DeferredUpdate::UpdateImage { .. } => todo!(),
+                }
+            }
+        });
+
         // Run the 4 update steps in checker like pattern
         for y_thread_off in rand_range(0..2) {
             for x_thread_off in rand_range(0..2) {
-                update_chunks_pool.scope(|scope| {
+                compute_pool.scope(|scope| {
                     let mut mutable_references = MutableReferences::default();
 
                     //Map chunks
@@ -286,47 +330,13 @@ pub fn chunk_manager_update(
                 });
             }
         }
-    }
 
-    let mut new_dirty_rects: Vec<Arc<Mutex<Option<Rect>>>> =
-        Vec::with_capacity(CHUNKS_WIDTH * CHUNKS_HEIGHT);
-    (0..CHUNKS_WIDTH * CHUNKS_HEIGHT)
-        .for_each(|_| new_dirty_rects.push(Arc::new(Mutex::new(None))));
-
-    // Maybe this would be better in another system?
-    // Update dirty rects
-    images_drects_pool.scope(|scope| {
-        while let Ok(update) = deferred_updates_recv.try_recv() {
-            match update {
-                DeferredUpdate::UpdateDirtyRect { chunk_idx, pos } => {
-                    let rect = Arc::clone(&new_dirty_rects[chunk_idx]);
-                    scope.spawn(async move {
-                        let mut rect = rect.lock().unwrap();
-
-                        if let Some(rect) = rect.as_mut() {
-                            extend_rect_if_needed(rect, &pos);
-                        } else {
-                            *rect = Some(Rect::new(
-                                (pos.x - 1.).clamp(0., 63.),
-                                (pos.y - 1.).clamp(0., 63.),
-                                (pos.x + 1.).clamp(0., 63.),
-                                (pos.y + 1.).clamp(0., 63.),
-                            ));
-                        }
-                    });
-                }
-                // TODO: Parallelize texture update on GPU.
-                //DeferredUpdate::UpdateImage { .. } => todo!(),
-            }
-        }
+        // Close the deferred updates channel so that our deferred update task will complete.
+        deferred_updates_send.close();
     });
 
-    let new_dirty_rects: Vec<Option<Rect>> = new_dirty_rects
-        .into_iter()
-        .map(|rect| Arc::try_unwrap(rect).unwrap().into_inner().unwrap())
-        .collect();
-
-    dirty_rects.single_mut().0 = new_dirty_rects;
+    // Once we are done with our updates, swap the new dirty rects to the current one.
+    dirty_rects_resource.swap();
 
     let mut uptextures_comp = uptextures_query.single_mut();
     uptextures_comp.0.replace(
