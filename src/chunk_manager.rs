@@ -110,47 +110,17 @@ pub fn chunk_manager_update(
     let column_range = 0..CHUNKS_HEIGHT as i32;
 
     let update_chunks_pool = ComputeTaskPool::get();
-    let s = ComputeTaskPool::get();
-
-    let mut new_dirty_rects: Vec<Arc<Mutex<Option<Rect>>>> =
-        Vec::with_capacity(CHUNKS_WIDTH * CHUNKS_HEIGHT);
-    (0..CHUNKS_WIDTH * CHUNKS_HEIGHT)
-        .for_each(|_| new_dirty_rects.push(Arc::new(Mutex::new(None))));
+    let images_drects_pool = ComputeTaskPool::get();
 
     let (deferred_updates_send, deferred_updates_recv) = async_channel::unbounded();
     let deferred_updates_send = &deferred_updates_send;
-
-    update_chunks_pool.scope(|scope| {
-        //Start thread to update deferred
-        scope.spawn(async {
-            while let Ok(update) = deferred_updates_recv.recv().await {
-                match update {
-                    DeferredUpdate::UpdateDirtyRect { chunk_idx, pos } => {
-                        let rect: Arc<Mutex<Option<Rect>>> =
-                            Arc::clone(&new_dirty_rects[chunk_idx]);
-                        scope.spawn(async move {
-                            let mut rect = rect.lock().unwrap();
-                            if let Some(rect) = rect.as_mut() {
-                                extend_rect_if_needed(rect, &pos);
-                            } else {
-                                *rect = Some(Rect::new(
-                                    (pos.x - 1.).clamp(0., 63.),
-                                    (pos.y - 1.).clamp(0., 63.),
-                                    (pos.x + 1.).clamp(0., 63.),
-                                    (pos.y + 1.).clamp(0., 63.),
-                                ));
-                            }
-                        });
-                    } // TODO: Parallelize texture update on GPU.
-                }
-            }
-        });
-
+    {
+        // Get dirty rects
         let dirty_rects = &dirty_rects.single().0;
         // Run the 4 update steps in checker like pattern
         for y_thread_off in rand_range(0..2) {
             for x_thread_off in rand_range(0..2) {
-                s.scope(|scope| {
+                update_chunks_pool.scope(|scope| {
                     let mut mutable_references = MutableReferences::default();
                     get_mutable_references(
                         &mut chunk_manager.chunks,
@@ -163,9 +133,7 @@ pub fn chunk_manager_update(
                     y_iter.for_each(|y| {
                         let x_iter = (x_thread_off..CHUNKS_WIDTH).step_by(2);
                         x_iter.for_each(|x| {
-                            // If chunks is active, start update
                             if let Some(rect) = dirty_rects[y * CHUNKS_WIDTH + x] {
-                                // Get all 3x3 chunks for each chunk updating
                                 let center_index = y * CHUNKS_WIDTH + x;
                                 let mut chunk_group = ChunkGroup::new(
                                     mutable_references.centers[y / 2 * CHUNKS_WIDTH / 2 + x / 2]
@@ -174,6 +142,7 @@ pub fn chunk_manager_update(
                                     center_index,
                                 );
 
+                                // Get all 3x3 chunks for each chunk updating
                                 for y_off in -1..=1 {
                                     for x_off in -1..=1 {
                                         if (x_off == 0 && y_off == 0)
@@ -236,13 +205,46 @@ pub fn chunk_manager_update(
                 });
             }
         }
-        deferred_updates_send.close();
+    }
+
+    let mut new_dirty_rects: Vec<Arc<Mutex<Option<Rect>>>> =
+        Vec::with_capacity(CHUNKS_WIDTH * CHUNKS_HEIGHT);
+    (0..CHUNKS_WIDTH * CHUNKS_HEIGHT)
+        .for_each(|_| new_dirty_rects.push(Arc::new(Mutex::new(None))));
+
+    // Maybe this would be better in another system?
+    // Update dirty rects
+    images_drects_pool.scope(|scope| {
+        while let Ok(update) = deferred_updates_recv.try_recv() {
+            match update {
+                DeferredUpdate::UpdateDirtyRect { chunk_idx, pos } => {
+                    let rect = Arc::clone(&new_dirty_rects[chunk_idx]);
+                    scope.spawn(async move {
+                        let mut rect = rect.lock().unwrap();
+
+                        if let Some(rect) = rect.as_mut() {
+                            extend_rect_if_needed(rect, &pos);
+                        } else {
+                            *rect = Some(Rect::new(
+                                (pos.x - 1.).clamp(0., 63.),
+                                (pos.y - 1.).clamp(0., 63.),
+                                (pos.x + 1.).clamp(0., 63.),
+                                (pos.y + 1.).clamp(0., 63.),
+                            ));
+                        }
+                    });
+                }
+                // TODO: Parallelize texture update on GPU.
+                //DeferredUpdate::UpdateImage { .. } => todo!(),
+            }
+        }
     });
 
     let new_dirty_rects: Vec<Option<Rect>> = new_dirty_rects
         .into_iter()
         .map(|rect| Arc::try_unwrap(rect).unwrap().into_inner().unwrap())
         .collect();
+
     dirty_rects.single_mut().0 = new_dirty_rects;
 
     let mut uptextures_comp = uptextures_query.single_mut();

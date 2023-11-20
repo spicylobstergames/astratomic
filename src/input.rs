@@ -16,14 +16,14 @@ fn brush(
     mut dirty_rects: Query<&mut DirtyRects>,
     mut images: ResMut<Assets<Image>>,
     prev_mpos: Query<&PreviousMousePos>,
-    input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
+    buttons: Res<Input<MouseButton>>,
 ) {
     let (state, color);
 
-    if input.1.pressed(KeyCode::L) {
+    if buttons.pressed(MouseButton::Other(0x113)) {
         state = State::Gas;
         color = [255, 255, 255, 255];
-    } else if input.0.pressed(MouseButton::Left) {
+    } else if buttons.pressed(MouseButton::Left) {
         state = State::Powder;
         color = [
             (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
@@ -31,7 +31,7 @@ fn brush(
             (92 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             255,
         ];
-    } else if input.1.pressed(KeyCode::ControlLeft) {
+    } else if buttons.pressed(MouseButton::Other(0x114)) {
         state = State::Liquid;
         color = [
             (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
@@ -39,7 +39,7 @@ fn brush(
             (204 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             255,
         ];
-    } else if input.0.pressed(MouseButton::Middle) {
+    } else if buttons.pressed(MouseButton::Middle) {
         state = State::Solid;
         color = [127, 131, 134, 255];
     } else {
