@@ -6,7 +6,7 @@ pub fn render_dirty_rects(
     dirty_rects: Query<&DirtyRects>,
     rects: Query<Entity, With<DirtyRect>>,
 ) {
-    let dirty_rects = &dirty_rects.single().0;
+    let dirty_rects = &dirty_rects.single().current;
 
     for rect in rects.iter() {
         commands.entity(rect).despawn();
