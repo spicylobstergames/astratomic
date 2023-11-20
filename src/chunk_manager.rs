@@ -143,20 +143,11 @@ pub fn chunk_manager_update(
             // Loop through deferred tasks
             while let Ok(update) = deferred_updates_recv.recv().await {
                 match update {
-                    DeferredUpdate::UpdateDirtyRect { chunk_idx, pos } => {
-                        let rect = &mut new_dirty_rects[chunk_idx];
-                        if let Some(rect) = rect.as_mut() {
-                            extend_rect_if_needed(rect, &pos);
-                        } else {
-                            *rect = Some(Rect::new(
-                                (pos.x - 1.).clamp(0., 63.),
-                                (pos.y - 1.).clamp(0., 63.),
-                                (pos.x + 1.).clamp(0., 63.),
-                                (pos.y + 1.).clamp(0., 63.),
-                            ));
-                        }
-                    } // TODO: Parallelize texture update on GPU.
-                      //DeferredUpdate::UpdateImage { .. } => todo!(),
+                    DeferredUpdate::UpdateDirtyRect { chunk_idx, pos, global_pos, center_idx } => {
+                        update_dirty_rects(pos, new_dirty_rects, chunk_idx, global_pos, center_idx)
+                    }
+                    // TODO: Parallelize texture update on GPU.
+                    //DeferredUpdate::UpdateImage { .. } => todo!(),
                 }
             }
         });
@@ -313,21 +304,19 @@ pub fn update_chunks(
             }
 
             for awoke in awakened {
-                for x in -1..=1 {
-                    for y in -1..=1 {
-                        let local = global_to_local(awoke + ivec2(x, y));
-                        let chunk_manager_idx =
-                            ChunkGroup::group_to_manager_idx(chunks.0.center_index, local.1);
-                        if (0..CHUNKS_WIDTH * CHUNKS_HEIGHT).contains(&chunk_manager_idx) {
-                            chunks
-                                .2
-                                .try_send(DeferredUpdate::UpdateDirtyRect {
-                                    chunk_idx: chunk_manager_idx,
-                                    pos: local.0.as_vec2(),
-                                })
-                                .unwrap();
-                        }
-                    }
+                let local = global_to_local(awoke);
+                let chunk_manager_idx =
+                    ChunkGroup::group_to_manager_idx(chunks.0.center_index, local.1);
+                if (0..CHUNKS_WIDTH * CHUNKS_HEIGHT).contains(&chunk_manager_idx) {
+                    chunks
+                        .2
+                        .try_send(DeferredUpdate::UpdateDirtyRect {
+                            chunk_idx: chunk_manager_idx,
+                            pos: local.0.as_vec2(),
+                            global_pos: awoke,
+                            center_idx: chunks.0.center_index
+                        })
+                        .unwrap();
                 }
             }
         }
