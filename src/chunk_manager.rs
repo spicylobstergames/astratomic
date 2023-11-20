@@ -1,9 +1,15 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
 
+use bevy::ecs::system::lifetimeless::SRes;
 use bevy::math::{ivec2, vec3};
+use bevy::render::render_asset::{RenderAssetDependency, RenderAssets};
+use bevy::render::render_resource::{Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d};
+use bevy::render::renderer::{RenderDevice, RenderQueue};
+use bevy::render::texture::DefaultImageSampler;
+use bevy::render::{Extract, RenderApp, RenderSet};
 use bevy::sprite::Anchor;
 use bevy::tasks::ComputeTaskPool;
+use smallvec::SmallVec;
 
 use crate::prelude::*;
 
@@ -16,12 +22,13 @@ pub struct ChunkManager {
 }
 
 #[derive(Component)]
-pub struct UpdateTextures(Option<TexturesHash>);
-
-#[derive(Component)]
 pub struct DirtyRects {
+    /// The current chunk update dirty rects
     pub current: Vec<Option<Rect>>,
+    /// The new chunk update dirty rects
     pub new: Vec<Option<Rect>>,
+    /// The dirty render rects
+    pub render: Vec<Option<Rect>>,
 }
 
 impl DirtyRects {
@@ -93,9 +100,9 @@ fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.spawn(DirtyRects {
         current: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
         new: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
+        render: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
     });
     commands.spawn(chunk_manager);
-    commands.spawn(UpdateTextures(None));
 }
 
 pub fn chunk_manager_update(
@@ -103,20 +110,18 @@ pub fn chunk_manager_update(
     mut dirty_rects: Query<&mut DirtyRects>,
     time: Res<Time>,
     actors: Query<(&Actor, &Transform)>,
-    mut uptextures_query: Query<&mut UpdateTextures>,
 ) {
     let mut chunk_manager = chunk_manager.single_mut();
 
     chunk_manager.dt += time.delta_seconds();
     let dt = chunk_manager.dt;
 
-    let textures_update: ParTexturesHash = Arc::new(Mutex::new(HashMap::new()));
-
     // Get dirty rects
     let mut dirty_rects_resource = dirty_rects.single_mut();
     let DirtyRects {
         current: dirty_rects,
         new: new_dirty_rects,
+        render: render_dirty_rects,
     } = &mut *dirty_rects_resource;
 
     // Get actors
@@ -130,25 +135,49 @@ pub fn chunk_manager_update(
 
     let compute_pool = ComputeTaskPool::get();
 
-    let (deferred_updates_send, deferred_updates_recv) = async_channel::unbounded();
-    let deferred_updates_send = &deferred_updates_send;
+    // Create channel for sending dirty update rects
+    let (dirty_update_rects_send, dirty_update_rects_recv) =
+        async_channel::unbounded::<DeferredDirtyRectUpdate>();
+    let dirty_update_rect_send = &dirty_update_rects_send;
+
+    // Create channel for sending dirty render rect updates
+    let (dirty_render_rects_send, dirty_render_rects_recv) =
+        async_channel::unbounded::<DeferredDirtyRectUpdate>();
+    let dirty_render_rect_send = &dirty_render_rects_send;
 
     // Create a scope in which we handle deferred updates and update chunks.
     compute_pool.scope(|deferred_scope| {
-        // Spawn a task on the deferred scope for handling the deferred updates.
+        // Spawn a task on the deferred scope for handling the deferred dirty update rects.
         deferred_scope.spawn(async move {
             // Clear the new dirty rects so we can update a fresh list
             new_dirty_rects.iter_mut().for_each(|x| *x = None);
 
             // Loop through deferred tasks
-            while let Ok(update) = deferred_updates_recv.recv().await {
-                match update {
-                    DeferredUpdate::UpdateDirtyRect { chunk_idx, pos, global_pos, center_idx } => {
-                        update_dirty_rects(pos, new_dirty_rects, chunk_idx, global_pos, center_idx)
-                    }
-                    // TODO: Parallelize texture update on GPU.
-                    //DeferredUpdate::UpdateImage { .. } => todo!(),
-                }
+            while let Ok(update) = dirty_update_rects_recv.recv().await {
+                update_dirty_rects(
+                    update.pos,
+                    new_dirty_rects,
+                    update.chunk_idx,
+                    update.global_pos,
+                    update.center_idx,
+                );
+            }
+        });
+
+        // Spawn a task on the deferred scope for handling deferred dirty render rects.
+        deferred_scope.spawn(async move {
+            // Clear the previous render rects
+            render_dirty_rects.iter_mut().for_each(|x| *x = None);
+
+            // Loop through deferred tasks
+            while let Ok(update) = dirty_render_rects_recv.recv().await {
+                update_dirty_rects(
+                    update.pos,
+                    render_dirty_rects,
+                    update.chunk_idx,
+                    update.global_pos,
+                    update.center_idx,
+                );
             }
         });
 
@@ -223,12 +252,14 @@ pub fn chunk_manager_update(
                                     }
                                 }
 
-                                let textures_update = Arc::clone(&textures_update);
-
                                 let actors = &actors_vec;
                                 scope.spawn(async move {
                                     update_chunks(
-                                        &mut (chunk_group, &textures_update, deferred_updates_send),
+                                        &mut UpdateChunksType {
+                                            group: chunk_group,
+                                            dirty_update_rect_send,
+                                            dirty_render_rect_send,
+                                        },
                                         dt,
                                         actors,
                                         &rect,
@@ -242,19 +273,12 @@ pub fn chunk_manager_update(
         }
 
         // Close the deferred updates channel so that our deferred update task will complete.
-        deferred_updates_send.close();
+        dirty_update_rect_send.close();
+        dirty_render_rect_send.close();
     });
 
     // Once we are done with our updates, swap the new dirty rects to the current one.
     dirty_rects_resource.swap();
-
-    let mut uptextures_comp = uptextures_query.single_mut();
-    uptextures_comp.0.replace(
-        Arc::try_unwrap(textures_update)
-            .unwrap()
-            .into_inner()
-            .unwrap(),
-    );
 }
 
 pub fn update_chunks(
@@ -276,7 +300,7 @@ pub fn update_chunks(
             let state;
             let vel;
             {
-                let atom = &mut chunks.0[local_pos];
+                let atom = &mut chunks.group[local_pos];
                 state = atom.state;
                 vel = atom.velocity.is_some();
 
@@ -297,7 +321,7 @@ pub fn update_chunks(
             };
 
             if awakened.contains(&pos) {
-                let atom = &mut chunks.0[local_pos];
+                let atom = &mut chunks.group[local_pos];
                 atom.f_idle = 0;
             } else if awake_self {
                 awakened.insert(pos);
@@ -306,15 +330,15 @@ pub fn update_chunks(
             for awoke in awakened {
                 let local = global_to_local(awoke);
                 let chunk_manager_idx =
-                    ChunkGroup::group_to_manager_idx(chunks.0.center_index, local.1);
+                    ChunkGroup::group_to_manager_idx(chunks.group.center_index, local.1);
                 if (0..CHUNKS_WIDTH * CHUNKS_HEIGHT).contains(&chunk_manager_idx) {
                     chunks
-                        .2
-                        .try_send(DeferredUpdate::UpdateDirtyRect {
+                        .dirty_update_rect_send
+                        .try_send(DeferredDirtyRectUpdate {
                             chunk_idx: chunk_manager_idx,
                             pos: local.0.as_vec2(),
                             global_pos: awoke,
-                            center_idx: chunks.0.center_index
+                            center_idx: chunks.group.center_index,
                         })
                         .unwrap();
                 }
@@ -323,42 +347,101 @@ pub fn update_chunks(
     }
 }
 
-pub fn textures_update(
-    chunk_manager: Query<&ChunkManager>,
-    mut images: ResMut<Assets<Image>>,
-    mut uptextures_query: Query<&mut UpdateTextures>,
+#[derive(Resource, Default, Deref, DerefMut)]
+struct ExtractedTextureUpdates(Vec<ExtractedTextureUpdate>);
+
+struct ExtractedTextureUpdate {
+    id: AssetId<Image>,
+    // TODO: determine a good size for the data smallvec array.
+    // The size of the array determines how many bytes we can store before it overflows and has
+    // to make a heap allocation. 256 is enough to store an 8x8 pixel dirty rect.
+    data: SmallVec<[u8; 256]>,
+    origin: Origin3d,
+    size: Extent3d,
+}
+
+fn extract_chunk_texture_updates(
+    chunk_manager: Extract<Query<&ChunkManager>>,
+    dirty_rects: Extract<Query<&DirtyRects>>,
+    mut extracted_updates: ResMut<ExtractedTextureUpdates>,
 ) {
-    let mut uptextures_hash = uptextures_query.single_mut();
+    let dirty_rects = dirty_rects.single();
     let chunk_manager = chunk_manager.single();
 
-    // TODO: Parallelize texture update on GPU.
-    images.iter_mut().for_each(|(id, image)| {
-        if let Some(chunk_index) = chunk_manager.textures_hmap.get(&id) {
-            if let Some(pos_set) = uptextures_hash
-                .as_ref()
-                .0
-                .as_ref()
-                .unwrap()
-                .get(chunk_index)
-            {
-                let chunk = &chunk_manager.chunks[*chunk_index];
-                chunk.update_image_positions(image, pos_set);
-            }
-        }
-    });
+    for (chunk, dirty_rect) in chunk_manager.chunks.iter().zip(&dirty_rects.render) {
+        if let Some(rect) = dirty_rect {
+            let rect = rect.as_urect();
+            let id = chunk.texture.id();
+            let mut data = SmallVec::new();
 
-    uptextures_hash.0 = None;
+            for y in rect.min.y..=rect.max.y {
+                for x in rect.min.x..=rect.max.x {
+                    let pos = IVec2::new(x as i32, y as i32);
+                    let color = chunk.atoms[pos.d1()].color;
+                    data.extend_from_slice(&color)
+                }
+            }
+
+            extracted_updates.push(ExtractedTextureUpdate {
+                id,
+                data,
+                origin: Origin3d {
+                    x: rect.min.x,
+                    y: rect.min.y,
+                    z: 0,
+                },
+                size: Extent3d {
+                    width: rect.width(),
+                    height: rect.height(),
+                    depth_or_array_layers: 1,
+                },
+            });
+        }
+    }
+}
+
+fn prepare_chunk_gpu_textures(
+    queue: Res<RenderQueue>,
+    image_render_assets: Res<RenderAssets<Image>>,
+    mut extracted_updates: ResMut<ExtractedTextureUpdates>,
+) {
+    for update in extracted_updates.drain(..) {
+        let Some(gpu_image) = image_render_assets.get(update.id) else {
+            continue;
+        };
+
+        queue.write_texture(
+            ImageCopyTexture {
+                texture: &gpu_image.texture,
+                mip_level: 0,
+                origin: update.origin,
+                aspect: bevy::render::render_resource::TextureAspect::All,
+            },
+            &update.data,
+            ImageDataLayout {
+                offset: 0,
+                bytes_per_row: Some(update.size.width * 4),
+                rows_per_image: None,
+            },
+            update.size,
+        );
+    }
 }
 
 pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, manager_setup).add_systems(
-            Update,
-            (
-                chunk_manager_update,
-                textures_update.after(chunk_manager_update),
-            ),
-        );
+        app.add_systems(Startup, manager_setup)
+            .add_systems(Update, chunk_manager_update);
+
+        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+            render_app
+                .init_resource::<ExtractedTextureUpdates>()
+                .add_systems(ExtractSchedule, extract_chunk_texture_updates);
+            Image::register_system(
+                render_app,
+                prepare_chunk_gpu_textures.in_set(RenderSet::PrepareAssets),
+            )
+        }
     }
 }

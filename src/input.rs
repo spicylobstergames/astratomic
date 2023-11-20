@@ -14,7 +14,9 @@ fn brush(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut chunk_manager: Query<&mut ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
-    mut images: ResMut<Assets<Image>>,
+    // TODO: We need to not update the images here when brushing. We need to update the dirty render rects
+    // instead, so that the GPU image is updated properly.
+    // images: ResMut<Assets<Image>>,
     prev_mpos: Query<&PreviousMousePos>,
     input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
 ) {
@@ -72,10 +74,10 @@ fn brush(
                 };
                 let chunk = &mut chunk_manager.chunks[pos.1 as usize];
                 chunk.atoms[pos.0.d1()] = atom;
-                chunk.update_image_positions(
-                    images.get_mut(&chunk.texture).unwrap(),
-                    &vec![pos.0].into_iter().collect(),
-                );
+                // chunk.update_image_positions(
+                //     images.get_mut(&chunk.texture).unwrap(),
+                //     &vec![pos.0].into_iter().collect(),
+                // );
 
                 if let Some(dirty_rect) = dirty_rects.current[pos.1 as usize].as_mut() {
                     extend_rect_if_needed(dirty_rect, &pos.0.as_vec2())
