@@ -1,11 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use bevy::ecs::system::lifetimeless::SRes;
 use bevy::math::{ivec2, vec3};
 use bevy::render::render_asset::{RenderAssetDependency, RenderAssets};
 use bevy::render::render_resource::{Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d};
-use bevy::render::renderer::{RenderDevice, RenderQueue};
-use bevy::render::texture::DefaultImageSampler;
+use bevy::render::renderer::RenderQueue;
 use bevy::render::{Extract, RenderApp, RenderSet};
 use bevy::sprite::Anchor;
 use bevy::tasks::ComputeTaskPool;
@@ -171,13 +169,12 @@ pub fn chunk_manager_update(
 
             // Loop through deferred tasks
             while let Ok(update) = dirty_render_rects_recv.recv().await {
-                update_dirty_rects(
-                    update.pos,
-                    render_dirty_rects,
-                    update.chunk_idx,
-                    update.global_pos,
-                    update.center_idx,
-                );
+                let rect = &mut render_dirty_rects[update.chunk_idx];
+                if let Some(rect) = rect {
+                    extend_rect_if_needed(rect, &update.pos)
+                } else {
+                    *rect = Some(Rect::new(update.pos.x, update.pos.y, update.pos.x, update.pos.y))
+                }
             }
         });
 
@@ -391,8 +388,8 @@ fn extract_chunk_texture_updates(
                     z: 0,
                 },
                 size: Extent3d {
-                    width: rect.width(),
-                    height: rect.height(),
+                    width: rect.width()+1,
+                    height: rect.height()+1,
                     depth_or_array_layers: 1,
                 },
             });
