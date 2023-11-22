@@ -173,7 +173,12 @@ pub fn chunk_manager_update(
                 if let Some(rect) = rect {
                     extend_rect_if_needed(rect, &update.pos)
                 } else {
-                    *rect = Some(Rect::new(update.pos.x, update.pos.y, update.pos.x, update.pos.y))
+                    *rect = Some(Rect::new(
+                        update.pos.x,
+                        update.pos.y,
+                        update.pos.x,
+                        update.pos.y,
+                    ))
                 }
             }
         });
@@ -388,8 +393,8 @@ fn extract_chunk_texture_updates(
                     z: 0,
                 },
                 size: Extent3d {
-                    width: rect.width()+1,
-                    height: rect.height()+1,
+                    width: rect.width() + 1,
+                    height: rect.height() + 1,
                     depth_or_array_layers: 1,
                 },
             });
