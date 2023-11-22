@@ -1,6 +1,6 @@
 # Astratomic
 
-Astratomic is a 2D survival game that draws inspiration from the likes of Noita and Starbound.
+Astratomic is a survival game that draws inspiration from the likes of Noita and Starbound.
 Powered by a similar engine as Noita, made from scratch with Rust.
 
 ## Current State and Goals
