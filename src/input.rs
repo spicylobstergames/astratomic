@@ -14,9 +14,6 @@ fn brush(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut chunk_manager: Query<&mut ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
-    // TODO: We need to not update the images here when brushing. We need to update the dirty render rects
-    // instead, so that the GPU image is updated properly.
-    // images: ResMut<Assets<Image>>,
     prev_mpos: Query<&PreviousMousePos>,
     input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
 ) {

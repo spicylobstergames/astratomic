@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-// TODO Clean code
+// TODO Clear code
 pub struct Line {
     start: IVec2,
     current: IVec2,
@@ -81,7 +81,7 @@ impl Iterator for Line {
     }
 }
 
-// Gonna be used for fluid sim in the future
+// Gonna maybe be used for fluid sim in the future
 pub fn _circle_points(center: IVec2, radius: i32) -> Vec<IVec2> {
     let mut points = vec![];
 
