@@ -1,7 +1,5 @@
-use std::collections::{HashMap, HashSet};
 use std::ops::Range;
 use std::panic;
-use std::sync::{Arc, Mutex};
 
 use bevy::math::{ivec2, vec2};
 use rand::Rng;
@@ -10,21 +8,18 @@ use async_channel::Sender;
 
 use crate::prelude::*;
 
-// Parallel reference for image and chunk data
-pub type TexturesHash = HashMap<usize, HashSet<IVec2>>;
-pub type ParTexturesHash = Arc<Mutex<TexturesHash>>;
-pub type UpdateChunksType<'a> = (
-    ChunkGroup<'a>,
-    &'a ParTexturesHash,
-    &'a Sender<DeferredUpdate>,
-);
+pub struct UpdateChunksType<'a> {
+    pub group: ChunkGroup<'a>,
+    pub dirty_update_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
+    pub dirty_render_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
+}
 
 /// Swap two atoms from global 3x3 chunks positions
 pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: f32) {
     let local1 = global_to_local(pos1);
     let local2 = global_to_local(pos2);
 
-    let chunk_group = &mut chunks.0;
+    let chunk_group = &mut chunks.group;
     {
         let temp = *chunk_group.get_local(local1).unwrap();
         chunk_group[local1] = chunk_group[local2];
@@ -34,17 +29,18 @@ pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: f32) {
         chunk_group[local2].updated_at = dt;
     }
 
-    let mut hash = chunks.1.lock().unwrap();
-    let local1_manager_idx = ChunkGroup::group_to_manager_idx(chunk_group.center_index, local1.1);
-    if local1.1 == local2.1 {
-        hash.entry(local1_manager_idx)
-            .or_default()
-            .extend([local1.0, local2.0]);
-    } else {
-        let local2_manager_idx =
-            ChunkGroup::group_to_manager_idx(chunk_group.center_index, local2.1);
-        hash.entry(local1_manager_idx).or_default().insert(local1.0);
-        hash.entry(local2_manager_idx).or_default().insert(local2.0);
+    for (global_pos, (pos, idx)) in [(pos1, local1), (pos2, local2)] {
+        let chunk_idx = ChunkGroup::group_to_manager_idx(chunk_group.center_index, idx);
+
+        chunks
+            .dirty_render_rect_send
+            .send_blocking(DeferredDirtyRectUpdate {
+                chunk_idx,
+                pos: pos.as_vec2(),
+                global_pos,
+                center_idx: chunk_group.center_index,
+            })
+            .unwrap();
     }
 }
 
@@ -91,7 +87,7 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
 pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: f32) -> bool {
-    if let Some(atom) = chunks.0.get_global(pos) {
+    if let Some(atom) = chunks.group.get_global(pos) {
         atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
                 state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
@@ -145,12 +141,12 @@ pub fn side_neigh(
 
 /// Gets velocity from a global pos
 pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> Option<IVec2> {
-    chunks.0[pos].velocity
+    chunks.group[pos].velocity
 }
 
 /// Sets velocity from a global pos
 pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
-    chunks.0[pos].velocity = if velocity == IVec2::ZERO {
+    chunks.group[pos].velocity = if velocity == IVec2::ZERO {
         None
     } else {
         Some(velocity)
@@ -159,17 +155,17 @@ pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
 
 /// Gets fall speed from a global pos
 pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
-    chunks.0[pos].fall_speed
+    chunks.group[pos].fall_speed
 }
 
 /// Sets fall speed from a global pos
 pub fn set_fspeed(chunks: &mut UpdateChunksType, pos: IVec2, fall_speed: u8) {
-    chunks.0[pos].fall_speed = fall_speed
+    chunks.group[pos].fall_speed = fall_speed
 }
 
 /// Checks if atom is able to update this frame from a global pos
 pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
-    if let Some(atom) = chunks.0.get_global(pos) {
+    if let Some(atom) = chunks.group.get_global(pos) {
         atom.updated_at != dt || atom.state == State::Void
     } else {
         false
@@ -328,7 +324,7 @@ pub fn update_dirty_rects(
     new_dirty_rects: &mut [Option<Rect>],
     chunk_idx: usize,
     global_pos: IVec2,
-    center_idx: i32
+    center_idx: i32,
 ) {
     if (1.0..62.0).contains(&pos.x) && (1.0..62.0).contains(&pos.y) {
         // Case where the 3x3 position area is within a chunk
@@ -445,12 +441,9 @@ pub struct MutableReferences<'a> {
 /// A deferred update message.
 /// Indicates that an image or dirty rect should udpate.
 #[derive(Debug)]
-pub enum DeferredUpdate {
-    //UpdateImage { image_id: AssetId<Image>, pos: Vec2 },
-    UpdateDirtyRect {
-        chunk_idx: usize,
-        pos: Vec2,
-        global_pos: IVec2,
-        center_idx: i32
-    },
+pub struct DeferredDirtyRectUpdate {
+    pub chunk_idx: usize,
+    pub pos: Vec2,
+    pub global_pos: IVec2,
+    pub center_idx: i32,
 }
