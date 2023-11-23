@@ -1,7 +1,7 @@
 use std::ops::Range;
 use std::panic;
 
-use bevy::math::{ivec2, vec2};
+use bevy::math::ivec2;
 use rand::Rng;
 
 use async_channel::Sender;
@@ -36,7 +36,7 @@ pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: f32) {
             .dirty_render_rect_send
             .send_blocking(DeferredDirtyRectUpdate {
                 chunk_idx,
-                pos: pos.as_vec2(),
+                pos,
                 global_pos,
                 center_idx: chunk_group.center_index,
             })
@@ -172,17 +172,17 @@ pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
     }
 }
 
-pub fn extend_rect_if_needed(rect: &mut Rect, pos: &Vec2) {
+pub fn extend_rect_if_needed(rect: &mut IRect, pos: &IVec2) {
     if pos.x < rect.min.x {
-        rect.min.x = (pos.x).clamp(0., 63.)
+        rect.min.x = (pos.x).clamp(0, 63)
     } else if pos.x > rect.max.x {
-        rect.max.x = (pos.x).clamp(0., 63.)
+        rect.max.x = (pos.x).clamp(0, 63)
     }
 
     if pos.y < rect.min.y {
-        rect.min.y = (pos.y).clamp(0., 63.)
+        rect.min.y = (pos.y).clamp(0, 63)
     } else if pos.y > rect.max.y {
-        rect.max.y = (pos.y).clamp(0., 63.)
+        rect.max.y = (pos.y).clamp(0, 63)
     }
 }
 
@@ -320,95 +320,101 @@ pub fn get_mutable_references<'a>(
 
 // TODO make function less verbose
 pub fn update_dirty_rects(
-    pos: Vec2,
-    new_dirty_rects: &mut [Option<Rect>],
+    pos: IVec2,
+    new_dirty_rects: &mut [Option<IRect>],
     chunk_idx: usize,
     global_pos: IVec2,
     center_idx: i32,
 ) {
-    if (1.0..62.0).contains(&pos.x) && (1.0..62.0).contains(&pos.y) {
+    if (1..62).contains(&pos.x) && (1..62).contains(&pos.y) {
         // Case where the 3x3 position area is within a chunk
         let rect = &mut new_dirty_rects[chunk_idx];
         if let Some(rect) = rect {
-            extend_rect_if_needed(rect, &(pos + Vec2::ONE));
-            extend_rect_if_needed(rect, &(pos + Vec2::NEG_ONE));
+            extend_rect_if_needed(rect, &(pos + IVec2::ONE));
+            extend_rect_if_needed(rect, &(pos + IVec2::NEG_ONE));
         } else {
-            *rect = Some(Rect::new(pos.x - 1., pos.y - 1., pos.x + 1., pos.y + 1.));
+            *rect = Some(IRect::new(pos.x - 1, pos.y - 1, pos.x + 1, pos.y + 1));
         }
-    } else if (pos.x == 0. || pos.x == 63.) && (1.0..62.0).contains(&pos.y) {
+    } else if (pos.x == 0 || pos.x == 63) && (1..62).contains(&pos.y) {
         // Case where the 3x3 position area is in another chunk into the left or right
         if let Some(rect) = &mut new_dirty_rects[chunk_idx] {
             extend_rect_if_needed(
                 rect,
                 &(pos
-                    + if pos.x == 0. {
-                        Vec2::NEG_Y
+                    + if pos.x == 0 {
+                        IVec2::NEG_Y
                     } else {
-                        Vec2::NEG_ONE
+                        IVec2::NEG_ONE
                     }),
             );
-            extend_rect_if_needed(rect, &(pos + if pos.x == 0. { Vec2::ONE } else { Vec2::Y }));
+            extend_rect_if_needed(
+                rect,
+                &(pos + if pos.x == 0 { IVec2::ONE } else { IVec2::Y }),
+            );
         } else {
-            new_dirty_rects[chunk_idx] = Some(Rect::new(
-                pos.x + if pos.x == 0. { 0. } else { -1. },
-                pos.y - 1.,
-                pos.x + if pos.x == 0. { 1. } else { 0. },
-                pos.y + 1.,
+            new_dirty_rects[chunk_idx] = Some(IRect::new(
+                pos.x + if pos.x == 0 { 0 } else { -1 },
+                pos.y - 1,
+                pos.x + if pos.x == 0 { 1 } else { 0 },
+                pos.y + 1,
             ));
         }
 
-        let x = if pos.x == 0. { 63. } else { 0. };
-        if (pos.x == 0. && chunk_idx % CHUNKS_WIDTH > 0)
-            || (pos.x == 63. && chunk_idx % CHUNKS_WIDTH < CHUNKS_WIDTH - 1)
+        let x = if pos.x == 0 { 63 } else { 0 };
+        if (pos.x == 0 && chunk_idx % CHUNKS_WIDTH > 0)
+            || (pos.x == 63 && chunk_idx % CHUNKS_WIDTH < CHUNKS_WIDTH - 1)
         {
-            let rect = &mut new_dirty_rects[if pos.x == 0. {
+            let rect = &mut new_dirty_rects[if pos.x == 0 {
                 chunk_idx - 1
             } else {
                 chunk_idx + 1
             }];
             if let Some(rect) = rect {
-                extend_rect_if_needed(rect, &(vec2(x, pos.y + 1.)));
-                extend_rect_if_needed(rect, &(vec2(x, pos.y - 1.)));
+                extend_rect_if_needed(rect, &(ivec2(x, pos.y + 1)));
+                extend_rect_if_needed(rect, &(ivec2(x, pos.y - 1)));
             } else {
-                *rect = Some(Rect::new(x, pos.y - 1., x, pos.y + 1.));
+                *rect = Some(IRect::new(x, pos.y - 1, x, pos.y + 1));
             }
         }
-    } else if (pos.y == 0. || pos.y == 63.) && (1.0..62.0).contains(&pos.x) {
+    } else if (pos.y == 0 || pos.y == 63) && (1..62).contains(&pos.x) {
         // Case where the 3x3 position area is in another chunk into the up or down
         if let Some(rect) = &mut new_dirty_rects[chunk_idx] {
             extend_rect_if_needed(
                 rect,
                 &(pos
-                    + if pos.y == 0. {
-                        Vec2::NEG_X
+                    + if pos.y == 0 {
+                        IVec2::NEG_X
                     } else {
-                        Vec2::NEG_ONE
+                        IVec2::NEG_ONE
                     }),
             );
-            extend_rect_if_needed(rect, &(pos + if pos.y == 0. { Vec2::ONE } else { Vec2::X }));
+            extend_rect_if_needed(
+                rect,
+                &(pos + if pos.y == 0 { IVec2::ONE } else { IVec2::X }),
+            );
         } else {
-            new_dirty_rects[chunk_idx] = Some(Rect::new(
-                pos.x - 1.,
-                pos.y + if pos.y == 0. { 0. } else { -1. },
-                pos.x + 1.,
-                pos.y + if pos.y == 0. { 1. } else { 0. },
+            new_dirty_rects[chunk_idx] = Some(IRect::new(
+                pos.x - 1,
+                pos.y + if pos.y == 0 { 0 } else { -1 },
+                pos.x + 1,
+                pos.y + if pos.y == 0 { 1 } else { 0 },
             ));
         }
 
-        let y = if pos.y == 0. { 63. } else { 0. };
-        if (pos.y == 0. && chunk_idx / CHUNKS_WIDTH > 0)
-            || (pos.y == 63. && chunk_idx / CHUNKS_WIDTH < CHUNKS_HEIGHT - 1)
+        let y = if pos.y == 0 { 63 } else { 0 };
+        if (pos.y == 0 && chunk_idx / CHUNKS_WIDTH > 0)
+            || (pos.y == 63 && chunk_idx / CHUNKS_WIDTH < CHUNKS_HEIGHT - 1)
         {
-            let rect = &mut new_dirty_rects[if pos.y == 0. {
+            let rect = &mut new_dirty_rects[if pos.y == 0 {
                 chunk_idx - CHUNKS_WIDTH
             } else {
                 chunk_idx + CHUNKS_WIDTH
             }];
             if let Some(rect) = rect {
-                extend_rect_if_needed(rect, &(vec2(pos.x + 1., y)));
-                extend_rect_if_needed(rect, &(vec2(pos.x - 1., y)));
+                extend_rect_if_needed(rect, &(ivec2(pos.x + 1, y)));
+                extend_rect_if_needed(rect, &(ivec2(pos.x - 1, y)));
             } else {
-                *rect = Some(Rect::new(pos.x - 1., y, pos.x + 1., y));
+                *rect = Some(IRect::new(pos.x - 1, y, pos.x + 1, y));
             }
         }
     } else {
@@ -416,14 +422,14 @@ pub fn update_dirty_rects(
         for y in -1..=1 {
             for x in -1..=1 {
                 let local = global_to_local(global_pos + ivec2(x, y));
-                let pos = local.0.as_vec2();
+                let pos = local.0;
                 let chunk_manager_idx = ChunkGroup::group_to_manager_idx(center_idx, local.1);
 
                 if let Some(rect) = new_dirty_rects.get_mut(chunk_manager_idx) {
                     if let Some(rect) = rect {
                         extend_rect_if_needed(rect, &pos)
                     } else {
-                        *rect = Some(Rect::new(pos.x, pos.y, pos.x, pos.y));
+                        *rect = Some(IRect::new(pos.x, pos.y, pos.x, pos.y));
                     }
                 }
             }
@@ -443,7 +449,7 @@ pub struct MutableReferences<'a> {
 #[derive(Debug)]
 pub struct DeferredDirtyRectUpdate {
     pub chunk_idx: usize,
-    pub pos: Vec2,
+    pub pos: IVec2,
     pub global_pos: IVec2,
     pub center_idx: i32,
 }

@@ -42,12 +42,7 @@ pub enum State {
 // Update different types of atoms
 
 /// Updates powder and returns atoms awakened
-pub fn update_powder(
-    chunks: &mut UpdateChunksType,
-    pos: IVec2,
-    dt: f32,
-    _actors: &[(Actor, Transform)],
-) -> HashSet<IVec2> {
+pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
 
     let mut cur_pos = pos;
@@ -95,12 +90,7 @@ pub fn update_powder(
 }
 
 /// Updates liquid and returns atoms awakened
-pub fn update_liquid(
-    chunks: &mut UpdateChunksType,
-    pos: IVec2,
-    dt: f32,
-    _actors: &[(Actor, Transform)],
-) -> HashSet<IVec2> {
+pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 
@@ -157,12 +147,7 @@ pub fn update_liquid(
 }
 
 /// Updates particle and returns atoms awakened
-pub fn update_particle(
-    chunks: &mut UpdateChunksType,
-    pos: IVec2,
-    dt: f32,
-    _actors: &[(Actor, Transform)],
-) -> HashSet<IVec2> {
+pub fn update_particle(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 

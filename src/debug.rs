@@ -22,20 +22,26 @@ pub fn render_dirty_rects(
                 .spawn(SpriteBundle {
                     sprite: Sprite {
                         color: Color::rgba(0.25, 0.25, 0.75, 0.50),
-                        custom_size: Some(Vec2::new(
-                            (rect.max.x - rect.min.x + 1.) * ATOM_SIZE as f32,
-                            (rect.max.y - rect.min.y + 1.) * ATOM_SIZE as f32,
-                        )),
+                        custom_size: Some(
+                            IVec2::new(
+                                (rect.max.x - rect.min.x + 1) * ATOM_SIZE as i32,
+                                (rect.max.y - rect.min.y + 1) * ATOM_SIZE as i32,
+                            )
+                            .as_vec2(),
+                        ),
                         anchor: Anchor::TopLeft,
                         ..default()
                     },
-                    transform: Transform::from_translation(Vec3::new(
-                        (chunk_x * CHUNK_LENGHT * ATOM_SIZE) as f32
-                            + (rect.min.x * ATOM_SIZE as f32),
-                        -((chunk_y * CHUNK_LENGHT * ATOM_SIZE) as f32)
-                            - (rect.min.y * ATOM_SIZE as f32),
-                        1.,
-                    )),
+                    transform: Transform::from_translation(
+                        IVec3::new(
+                            (chunk_x * CHUNK_LENGHT * ATOM_SIZE) as i32
+                                + (rect.min.x * ATOM_SIZE as i32),
+                            -((chunk_y * CHUNK_LENGHT * ATOM_SIZE) as i32)
+                                - (rect.min.y * ATOM_SIZE as i32),
+                            1,
+                        )
+                        .as_vec3(),
+                    ),
                     ..default()
                 })
                 .insert(DirtyRect);
@@ -49,6 +55,6 @@ pub struct DirtyRect;
 pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, render_dirty_rects.after(chunk_manager_update));
+        //app.add_systems(Update, render_dirty_rects.after(chunk_manager_update));
     }
 }

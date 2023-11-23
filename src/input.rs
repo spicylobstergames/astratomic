@@ -74,26 +74,18 @@ fn brush(
 
                 // Update simultation rect
                 if let Some(dirty_rect) = dirty_rects.current[pos.1 as usize].as_mut() {
-                    extend_rect_if_needed(dirty_rect, &pos.0.as_vec2())
+                    extend_rect_if_needed(dirty_rect, &pos.0)
                 } else {
-                    dirty_rects.current[pos.1 as usize] = Some(Rect::new(
-                        pos.0.x as f32,
-                        pos.0.y as f32,
-                        pos.0.x as f32,
-                        pos.0.y as f32,
-                    ))
+                    dirty_rects.current[pos.1 as usize] =
+                        Some(IRect::new(pos.0.x, pos.0.y, pos.0.x, pos.0.y))
                 }
 
                 // Update render rect
                 if let Some(dirty_rect) = dirty_rects.render[pos.1 as usize].as_mut() {
-                    extend_rect_if_needed(dirty_rect, &pos.0.as_vec2())
+                    extend_rect_if_needed(dirty_rect, &pos.0)
                 } else {
-                    dirty_rects.render[pos.1 as usize] = Some(Rect::new(
-                        pos.0.x as f32,
-                        pos.0.y as f32,
-                        pos.0.x as f32,
-                        pos.0.y as f32,
-                    ))
+                    dirty_rects.render[pos.1 as usize] =
+                        Some(IRect::new(pos.0.x, pos.0.y, pos.0.x, pos.0.y))
                 }
             }
         }

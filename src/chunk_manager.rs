@@ -22,11 +22,11 @@ pub struct ChunkManager {
 #[derive(Component)]
 pub struct DirtyRects {
     /// The current chunk update dirty rects
-    pub current: Vec<Option<Rect>>,
+    pub current: Vec<Option<IRect>>,
     /// The new chunk update dirty rects
-    pub new: Vec<Option<Rect>>,
+    pub new: Vec<Option<IRect>>,
     /// The dirty render rects
-    pub render: Vec<Option<Rect>>,
+    pub render: Vec<Option<IRect>>,
 }
 
 impl DirtyRects {
@@ -107,7 +107,6 @@ pub fn chunk_manager_update(
     mut chunk_manager: Query<&mut ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
     time: Res<Time>,
-    actors: Query<(&Actor, &Transform)>,
 ) {
     let mut chunk_manager = chunk_manager.single_mut();
 
@@ -121,12 +120,6 @@ pub fn chunk_manager_update(
         new: new_dirty_rects,
         render: render_dirty_rects,
     } = &mut *dirty_rects_resource;
-
-    // Get actors
-    let mut actors_vec = vec![];
-    for (actor, transform) in actors.iter() {
-        actors_vec.push((*actor, *transform))
-    }
 
     let row_range = 0..CHUNKS_WIDTH as i32;
     let column_range = 0..CHUNKS_HEIGHT as i32;
@@ -173,7 +166,7 @@ pub fn chunk_manager_update(
                 if let Some(rect) = rect {
                     extend_rect_if_needed(rect, &update.pos)
                 } else {
-                    *rect = Some(Rect::new(
+                    *rect = Some(IRect::new(
                         update.pos.x,
                         update.pos.y,
                         update.pos.x,
@@ -254,7 +247,6 @@ pub fn chunk_manager_update(
                                     }
                                 }
 
-                                let actors = &actors_vec;
                                 scope.spawn(async move {
                                     update_chunks(
                                         &mut UpdateChunksType {
@@ -263,7 +255,6 @@ pub fn chunk_manager_update(
                                             dirty_render_rect_send,
                                         },
                                         dt,
-                                        actors,
                                         &rect,
                                     )
                                 });
@@ -283,12 +274,7 @@ pub fn chunk_manager_update(
     dirty_rects_resource.swap();
 }
 
-pub fn update_chunks(
-    chunks: &mut UpdateChunksType,
-    dt: f32,
-    actors: &[(Actor, Transform)],
-    dirty_rect: &Rect,
-) {
+pub fn update_chunks(chunks: &mut UpdateChunksType, dt: f32, dirty_rect: &IRect) {
     for y in rand_range(dirty_rect.min.y as usize..dirty_rect.max.y as usize + 1) {
         for x in rand_range(dirty_rect.min.x as usize..dirty_rect.max.x as usize + 1) {
             let local_pos = (ivec2(x as i32, y as i32), 4);
@@ -313,11 +299,11 @@ pub fn update_chunks(
             }
 
             let mut awakened = if vel {
-                update_particle(chunks, pos, dt, actors)
+                update_particle(chunks, pos, dt)
             } else {
                 match state {
-                    State::Powder => update_powder(chunks, pos, dt, actors),
-                    State::Liquid => update_liquid(chunks, pos, dt, actors),
+                    State::Powder => update_powder(chunks, pos, dt),
+                    State::Liquid => update_liquid(chunks, pos, dt),
                     _ => HashSet::new(),
                 }
             };
@@ -338,7 +324,7 @@ pub fn update_chunks(
                         .dirty_update_rect_send
                         .try_send(DeferredDirtyRectUpdate {
                             chunk_idx: chunk_manager_idx,
-                            pos: local.0.as_vec2(),
+                            pos: local.0,
                             global_pos: awoke,
                             center_idx: chunks.group.center_index,
                         })
