@@ -16,7 +16,7 @@ use crate::prelude::*;
 pub struct ChunkManager {
     pub chunks: Vec<Chunk>,
     pub textures_hmap: HashMap<AssetId<Image>, usize>,
-    pub dt: f32,
+    pub dt: u8,
 }
 
 #[derive(Component)]
@@ -91,7 +91,7 @@ fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     let chunk_manager = ChunkManager {
         chunks,
-        dt: 0.,
+        dt: 0,
         textures_hmap,
     };
 
@@ -106,12 +106,11 @@ fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 pub fn chunk_manager_update(
     mut chunk_manager: Query<&mut ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
-    time: Res<Time>,
     actors: Query<(&Actor, &Transform)>,
 ) {
     let mut chunk_manager = chunk_manager.single_mut();
 
-    chunk_manager.dt += time.delta_seconds();
+    chunk_manager.dt += 1;
     let dt = chunk_manager.dt;
 
     // Get dirty rects
@@ -285,7 +284,7 @@ pub fn chunk_manager_update(
 
 pub fn update_chunks(
     chunks: &mut UpdateChunksType,
-    dt: f32,
+    dt: u8,
     actors: &[(Actor, Transform)],
     dirty_rect: &Rect,
 ) {
@@ -304,7 +303,7 @@ pub fn update_chunks(
             {
                 let atom = &mut chunks.group[local_pos];
                 state = atom.state;
-                vel = atom.velocity.is_some();
+                vel = atom.velocity != (0, 0);
 
                 if atom.f_idle < FRAMES_SLEEP && state != State::Void && state != State::Solid {
                     atom.f_idle += 1;

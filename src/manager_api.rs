@@ -15,7 +15,7 @@ pub struct UpdateChunksType<'a> {
 }
 
 /// Swap two atoms from global 3x3 chunks positions
-pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: f32) {
+pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
     let local1 = global_to_local(pos1);
     let local2 = global_to_local(pos2);
 
@@ -86,7 +86,7 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
 
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
-pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: f32) -> bool {
+pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: u8) -> bool {
     if let Some(atom) = chunks.group.get_global(pos) {
         atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
@@ -102,7 +102,7 @@ pub fn down_neigh(
     chunks: &UpdateChunksType,
     pos: IVec2,
     states: &[(State, f32)],
-    dt: f32,
+    dt: u8,
 ) -> [(bool, IVec2); 3] {
     let mut neigh = [(false, IVec2::ZERO); 3];
 
@@ -123,7 +123,7 @@ pub fn side_neigh(
     chunks: &UpdateChunksType,
     pos: IVec2,
     states: &[(State, f32)],
-    dt: f32,
+    dt: u8,
 ) -> [(bool, IVec2); 2] {
     let mut neigh = [(false, IVec2::ZERO); 2];
 
@@ -141,15 +141,21 @@ pub fn side_neigh(
 
 /// Gets velocity from a global pos
 pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> Option<IVec2> {
-    chunks.group[pos].velocity
+    let vel = chunks.group[pos].velocity;
+
+    if vel == (0, 0) {
+        None
+    } else {
+        Some(ivec2(vel.0 as i32, vel.1 as i32))
+    }
 }
 
 /// Sets velocity from a global pos
 pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
     chunks.group[pos].velocity = if velocity == IVec2::ZERO {
-        None
+        (0, 0)
     } else {
-        Some(velocity)
+        (velocity.x as i8, velocity.y as i8)
     }
 }
 
@@ -164,7 +170,7 @@ pub fn set_fspeed(chunks: &mut UpdateChunksType, pos: IVec2, fall_speed: u8) {
 }
 
 /// Checks if atom is able to update this frame from a global pos
-pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: f32) -> bool {
+pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: u8) -> bool {
     if let Some(atom) = chunks.group.get_global(pos) {
         atom.updated_at != dt || atom.state == State::Void
     } else {
