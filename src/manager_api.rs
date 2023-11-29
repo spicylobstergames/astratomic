@@ -285,14 +285,7 @@ pub fn get_mutable_references<'a>(
         let same_y = (chunk_y + thread_off.1) % 2 == 0;
 
         match (same_x, same_y) {
-            (true, true) => mutable_references.centers.push(Some(
-                chunk
-                    .atoms
-                    .iter_mut()
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
-            )),
+            (true, true) => mutable_references.centers.push(Some(&mut chunk.atoms)),
             (true, false) => {
                 let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
 
@@ -439,7 +432,7 @@ pub fn update_dirty_rects(
 
 #[derive(Default)]
 pub struct MutableReferences<'a> {
-    pub centers: Vec<Option<[&'a mut Atom; CHUNK_LEN]>>,
+    pub centers: Vec<Option<&'a mut [Atom; CHUNK_LEN]>>,
     pub sides: [Vec<Option<[&'a mut Atom; HALF_CHUNK_LEN]>>; 4],
     pub corners: [Vec<Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>>; 4],
 }

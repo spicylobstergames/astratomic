@@ -4,7 +4,7 @@ pub type ChunkCorners<'a> = [Option<[&'a mut Atom; CHUNK_LEN / 4]>; 4];
 pub type ChunkSides<'a> = [Option<[&'a mut Atom; CHUNK_LEN / 2]>; 4];
 
 pub struct ChunkGroup<'a> {
-    pub center: [&'a mut Atom; CHUNK_LEN],
+    pub center: &'a mut [Atom; CHUNK_LEN],
     pub corners: ChunkCorners<'a>,
     pub sides: ChunkSides<'a>,
     // The index of the center chunk on the chunk manager vec
@@ -12,7 +12,7 @@ pub struct ChunkGroup<'a> {
 }
 
 impl<'a> ChunkGroup<'a> {
-    pub fn new(center: [&'a mut Atom; CHUNK_LEN], center_index: usize) -> Self {
+    pub fn new(center: &'a mut [Atom; CHUNK_LEN], center_index: usize) -> Self {
         Self {
             center,
             corners: [None, None, None, None],
@@ -50,7 +50,7 @@ impl<'a> ChunkGroup<'a> {
         let mut pos = idx.0;
         match idx.1 {
             // Center
-            4 => Some(self.center[idx.0.d1()]),
+            4 => Some(&self.center[idx.0.d1()]),
             // Corners
             0 | 2 | 6 | 8 => {
                 // Offset position
