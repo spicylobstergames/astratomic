@@ -2,6 +2,8 @@
 
 [![Discord](https://img.shields.io/discord/865004050357682246?logo=discord&logoColor=white)](https://discord.gg/JFhxYBvxR8) 
 
+https://github.com/Zac8668/astratomic/assets/78173025/7b2a79ba-2c31-41d9-bf31-a00965b25e41
+
 Astratomic is a survival game that draws inspiration from the likes of Noita and Starbound.
 Powered by a similar engine as Noita, made from scratch with Rust.
 
