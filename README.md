@@ -15,6 +15,7 @@ Powered by a similar engine as Noita, made from scratch with Rust.
 
 **What's next:**
   - AABB colliders for the player and mobs
+  - Player with special gun to shoot and suck atoms
   - More types of atoms! Like lava, acid, seeds, ...
   - Rapier2d rigidbodies (with simulated pixels) for things you can throw!
   - Bigger map, with saving/loading
