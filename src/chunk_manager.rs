@@ -16,7 +16,7 @@ use crate::prelude::*;
 pub struct ChunkManager {
     pub chunks: Vec<Chunk>,
     pub textures_hmap: HashMap<AssetId<Image>, usize>,
-    pub dt: f32,
+    pub dt: u8,
 }
 
 #[derive(Component)]
@@ -91,7 +91,7 @@ fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 
     let chunk_manager = ChunkManager {
         chunks,
-        dt: 0.,
+        dt: 0,
         textures_hmap,
     };
 
@@ -106,11 +106,10 @@ fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 pub fn chunk_manager_update(
     mut chunk_manager: Query<&mut ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
-    time: Res<Time>,
 ) {
     let mut chunk_manager = chunk_manager.single_mut();
 
-    chunk_manager.dt += time.delta_seconds();
+    chunk_manager.dt += 1;
     let dt = chunk_manager.dt;
 
     // Get dirty rects
@@ -274,7 +273,8 @@ pub fn chunk_manager_update(
     dirty_rects_resource.swap();
 }
 
-pub fn update_chunks(chunks: &mut UpdateChunksType, dt: f32, dirty_rect: &IRect) {
+
+pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &IRect) {
     for y in rand_range(dirty_rect.min.y as usize..dirty_rect.max.y as usize + 1) {
         for x in rand_range(dirty_rect.min.x as usize..dirty_rect.max.x as usize + 1) {
             let local_pos = (ivec2(x as i32, y as i32), 4);
@@ -290,7 +290,7 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: f32, dirty_rect: &IRect)
             {
                 let atom = &mut chunks.group[local_pos];
                 state = atom.state;
-                vel = atom.velocity.is_some();
+                vel = atom.velocity != (0, 0);
 
                 if atom.f_idle < FRAMES_SLEEP && state != State::Void && state != State::Solid {
                     atom.f_idle += 1;

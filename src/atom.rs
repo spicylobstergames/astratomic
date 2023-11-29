@@ -8,10 +8,10 @@ use crate::prelude::*;
 pub struct Atom {
     pub color: [u8; 4],
     pub state: State,
-    pub updated_at: f32,
+    pub updated_at: u8,
     pub fall_speed: u8,
     // Used when thrown up, etc
-    pub velocity: Option<IVec2>,
+    pub velocity: (i8, i8),
     // Frames idle
     pub f_idle: u8,
 }
@@ -21,9 +21,9 @@ impl Atom {
         Atom {
             color: [55, 55, 55, 255],
             state: State::Void,
-            updated_at: 0.,
+            updated_at: 0,
             fall_speed: 0,
-            velocity: None,
+            velocity: (0, 0),
             f_idle: 0,
         }
     }
@@ -42,7 +42,7 @@ pub enum State {
 // Update different types of atoms
 
 /// Updates powder and returns atoms awakened
-pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) -> HashSet<IVec2> {
+pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
 
     let mut cur_pos = pos;
@@ -90,7 +90,7 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) -> Hash
 }
 
 /// Updates liquid and returns atoms awakened
-pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) -> HashSet<IVec2> {
+pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 
@@ -147,7 +147,7 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) -> Hash
 }
 
 /// Updates particle and returns atoms awakened
-pub fn update_particle(chunks: &mut UpdateChunksType, pos: IVec2, dt: f32) -> HashSet<IVec2> {
+pub fn update_particle(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 
