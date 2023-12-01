@@ -126,12 +126,12 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
 
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
-pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: u8) -> bool {
+pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: u8, state: State) -> bool {
     if let Some(atom) = chunks.group.get_global(pos) {
-        atom.state == State::Void
+        (atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
                 state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
-            }) && atom.updated_at != dt)
+            }) && atom.updated_at != dt)) && (!atom.actor || state == State::Liquid)
     } else {
         false
     }
@@ -142,12 +142,13 @@ pub fn down_neigh(
     chunks: &UpdateChunksType,
     pos: IVec2,
     states: &[(State, f32)],
+    state: State,
     dt: u8,
 ) -> [(bool, IVec2); 3] {
     let mut neigh = [(false, IVec2::ZERO); 3];
 
     for (neigh, x) in neigh.iter_mut().zip([0, -1, 1]) {
-        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), states, dt);
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), states, dt, state);
         neigh.1 = IVec2::new(x, 1);
     }
 
@@ -163,12 +164,13 @@ pub fn side_neigh(
     chunks: &UpdateChunksType,
     pos: IVec2,
     states: &[(State, f32)],
+    state: State,
     dt: u8,
 ) -> [(bool, IVec2); 2] {
     let mut neigh = [(false, IVec2::ZERO); 2];
 
     for (neigh, x) in neigh.iter_mut().zip([-1, 1]) {
-        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), states, dt);
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), states, dt, state);
         neigh.1 = IVec2::new(x, 0);
     }
 
@@ -202,6 +204,11 @@ pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
 /// Gets fall speed from a global pos
 pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
     chunks.group[pos].fall_speed
+}
+
+/// Gets state from a global pos
+pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
+    chunks.group[pos].state
 }
 
 /// Sets fall speed from a global pos

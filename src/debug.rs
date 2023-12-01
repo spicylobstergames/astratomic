@@ -72,7 +72,7 @@ fn brush(
                     ..Default::default()
                 };
                 let chunk = &mut chunk_manager.chunks[pos.1 as usize];
-                if chunk.atoms[pos.0.d1()].state == State::Actor {
+                if chunk.atoms[pos.0.d1()].actor {
                     continue;
                 }
 
