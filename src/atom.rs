@@ -29,12 +29,15 @@ impl Atom {
     }
 }
 
+// TODO Change this to a Material type
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
 pub enum State {
     Solid,
     Powder,
     Liquid,
     Gas,
+    //Will contain an id to inflict damage, etc
+    Actor,
     #[default]
     Void,
 }

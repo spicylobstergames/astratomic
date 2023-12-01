@@ -1,7 +1,6 @@
 use std::ops::Range;
 use std::panic;
 
-use bevy::math::ivec2;
 use rand::Rng;
 
 use async_channel::Sender;
@@ -44,7 +43,47 @@ pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
     }
 }
 
+/// Transforms a global manager pos to a chunk pos
+pub fn global_to_chunk(mut pos: IVec2) -> (IVec2, i32) {
+    //Hacky fix for some cases, will get removed when we use a hashmap to store chunks
+    if pos.x < 0 {
+        pos.x = i32::MIN;
+    }
+    if pos.y < 0 {
+        pos.y = i32::MIN;
+    }
+
+    let mut chunk_x = pos.x / CHUNK_LENGHT as i32;
+    let mut chunk_y = pos.y / CHUNK_LENGHT as i32;
+
+    //Hacky fix for some cases, will get removed when we use a hashmap to store chunks
+    if chunk_x >= CHUNKS_WIDTH as i32 {
+        chunk_x = 20000
+    }
+    if chunk_y >= CHUNKS_HEIGHT as i32 {
+        chunk_y = 20000
+    }
+
+    let chunk_idx = chunk_y * CHUNKS_WIDTH as i32 + chunk_x;
+
+    let (x, y) = (pos.x % CHUNK_LENGHT as i32, pos.y % CHUNK_LENGHT as i32);
+
+    (ivec2(x, y), chunk_idx)
+}
+
+/// Transforms a chunk pos to a global manager pos
+pub fn _chunk_to_global(mut pos: (IVec2, i32)) -> IVec2 {
+    let chunk_x = pos.1 % CHUNKS_WIDTH as i32;
+    let chunk_y = pos.1 / CHUNKS_WIDTH as i32;
+
+    pos.0.x += chunk_x * CHUNK_LENGHT as i32;
+    pos.0.y += chunk_y * CHUNK_LENGHT as i32;
+
+    pos.0
+}
+
 /// Transforms global 3x3 chunk position to local 3x3 chunks position
+/// Used for chunk multithreaded updates
 pub fn global_to_local(pos: IVec2) -> (IVec2, i32) {
     let range = 0..CHUNK_LENGHT as i32 * 3;
     if !range.contains(&pos.x) || !range.contains(&pos.y) {
@@ -65,6 +104,7 @@ pub fn global_to_local(pos: IVec2) -> (IVec2, i32) {
 }
 
 /// Transforms local 3x3 chunk position to global 3x3 chunks position
+/// Used for chunk multithreaded updates
 pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
     let range = 0..CHUNK_LENGHT as i32;
     if !range.contains(&pos.0.x) || !range.contains(&pos.0.y) || !(0..9).contains(&pos.1) {

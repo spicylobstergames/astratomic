@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
 
-use bevy::math::{ivec2, vec3};
 use bevy::render::render_asset::{RenderAssetDependency, RenderAssets};
 use bevy::render::render_resource::{Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d};
 use bevy::render::renderer::RenderQueue;
@@ -35,7 +34,12 @@ impl DirtyRects {
     }
 }
 
-fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
+pub fn manager_setup(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    asset_server: Res<AssetServer>,
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+) {
     let side_length = (CHUNK_LENGHT * ATOM_SIZE) as f32;
     let (width, height) = (CHUNKS_WIDTH, CHUNKS_HEIGHT);
 
@@ -89,11 +93,40 @@ fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
         ))
         .push_children(&images_vec);
 
-    let chunk_manager = ChunkManager {
+    let mut chunk_manager = ChunkManager {
         chunks,
         dt: 0,
         textures_hmap,
     };
+
+    let player_actor = Actor {
+        height: 17,
+        width: 10,
+        pos: ivec2(0, 0),
+        vel: vec2(0., 0.),
+    };
+    add_actor(&mut chunk_manager, &player_actor);
+
+    let texture_handle = asset_server.load("player/player_sheet.png");
+    let texture_atlas =
+        TextureAtlas::from_grid(texture_handle, Vec2::new(24.0, 24.0), 8, 4, None, None);
+    let texture_atlas_handle = texture_atlases.add(texture_atlas);
+    let animation_indices = AnimationIndices { first: 0, last: 1 };
+    let mut transform = Transform::from_scale(Vec3::splat(3.0));
+    transform.translation = vec2(5. * 3., -8. * 3.).extend(2.);
+
+    commands.spawn((
+        player_actor,
+        Player::default(),
+        SpriteSheetBundle {
+            texture_atlas: texture_atlas_handle,
+            sprite: TextureAtlasSprite::new(animation_indices.first),
+            transform,
+            ..default()
+        },
+        animation_indices,
+        AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
+    ));
 
     commands.spawn(DirtyRects {
         current: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
@@ -109,7 +142,7 @@ pub fn chunk_manager_update(
 ) {
     let mut chunk_manager = chunk_manager.single_mut();
 
-    chunk_manager.dt += 1;
+    chunk_manager.dt = chunk_manager.dt.wrapping_add(1);
     let dt = chunk_manager.dt;
 
     // Get dirty rects
@@ -272,7 +305,6 @@ pub fn chunk_manager_update(
     // Once we are done with our updates, swap the new dirty rects to the current one.
     dirty_rects_resource.swap();
 }
-
 
 pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &IRect) {
     for y in rand_range(dirty_rect.min.y as usize..dirty_rect.max.y as usize + 1) {

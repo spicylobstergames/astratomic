@@ -3,6 +3,7 @@ use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod actors;
+mod animation;
 mod atom;
 mod chunk;
 mod chunk_group;
@@ -10,16 +11,18 @@ mod chunk_manager;
 mod consts;
 mod debug;
 mod geom_tools;
-mod input;
 mod manager_api;
+mod player;
 mod prelude {
     pub use crate::{
-        actors::*, atom::State, atom::*, chunk::*, chunk_group::*, chunk_manager::*, consts::*,
-        debug::*, geom_tools::*, input::*, manager_api::*,
+        actors::*, animation::*, atom::State, atom::*, chunk::*, chunk_group::*, chunk_manager::*,
+        consts::*, debug::*, geom_tools::*, manager_api::*, player::*,
     };
+    pub use bevy::math::{ivec2, ivec3, vec2, vec3};
     pub use bevy::prelude::*;
 }
 
+use crate::animation::AnimationPlugin;
 use prelude::*;
 
 fn main() {
@@ -27,7 +30,13 @@ fn main() {
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .add_plugins(WorldInspectorPlugin::new())
         //local plugins
-        .add_plugins((ChunkManagerPlugin, InputPlugin, DebugPlugin))
+        .add_plugins((
+            ChunkManagerPlugin,
+            DebugPlugin,
+            ActorsPlugin,
+            PlayerPlugin,
+            AnimationPlugin,
+        ))
         .add_systems(Startup, setup)
         //Frame on console
         .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
