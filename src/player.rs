@@ -16,12 +16,13 @@ impl Default for Player {
 }
 
 // Player consts
-const FUEL_MAX: f32 = 10.;
+const FUEL_MAX: f32 = 50.;
 const FUEL_REGEN: f32 = 1.;
 const FUEL_COMSUMPTON: f32 = 0.48;
-const JUMP_MAG: f32 = 15.;
-const JETPACK_FORCE: f32 = 2.5;
-const JETPACK_MAX: f32 = 6.;
+const JUMP_MAG: f32 = 13.;
+const JETPACK_FORCE: f32 = 1.5;
+const JETPACK_MAX: f32 = 3.;
+const RUN_SPEED: f32 = 5.;
 
 /// Updates player
 pub fn update_player(
@@ -47,7 +48,7 @@ pub fn update_player(
 
     // Movement
     let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
-    actor.vel.x = x * 5.;
+    actor.vel.x = x * RUN_SPEED;
 
     // Jump and Jetpack
     if on_ground {

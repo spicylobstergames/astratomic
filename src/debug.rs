@@ -65,34 +65,43 @@ fn brush(
             IVec2::new(world_position.x as i32, world_position.y as i32)
                 - IVec2::new(prev_mpos.x as i32, prev_mpos.y as i32),
         ) {
-            if let Some(pos) = transform_to_chunk(v.as_vec2()) {
-                let atom = Atom {
-                    color,
-                    state,
-                    ..Default::default()
-                };
-                let chunk = &mut chunk_manager.chunks[pos.1 as usize];
-                if chunk.atoms[pos.0.d1()].actor {
+            let pos = transform_to_chunk(v.as_vec2());
+
+            //Checks if there is a atom at the pos and if we can draw on it
+            if let Some(atom) = chunk_manager.get_atom(&pos) {
+                if atom.actor {
                     continue;
                 }
+            } else {
+                continue;
+            }
 
-                chunk.atoms[pos.0.d1()] = atom;
+            let atom = Atom {
+                color,
+                state,
+                ..Default::default()
+            };
 
-                // Update simultation rect
-                if let Some(dirty_rect) = dirty_rects.current[pos.1 as usize].as_mut() {
-                    extend_rect_if_needed(dirty_rect, &pos.0)
-                } else {
-                    dirty_rects.current[pos.1 as usize] =
-                        Some(IRect::new(pos.0.x, pos.0.y, pos.0.x, pos.0.y))
-                }
+            chunk_manager[pos] = atom;
 
-                // Update render rect
-                if let Some(dirty_rect) = dirty_rects.render[pos.1 as usize].as_mut() {
-                    extend_rect_if_needed(dirty_rect, &pos.0)
-                } else {
-                    dirty_rects.render[pos.1 as usize] =
-                        Some(IRect::new(pos.0.x, pos.0.y, pos.0.x, pos.0.y))
-                }
+            // Update simultation rect
+            if let Some(dirty_rect) = dirty_rects.current.get_mut(&pos.chunk) {
+                extend_rect_if_needed(dirty_rect, &pos.atom)
+            } else {
+                dirty_rects.current.insert(
+                    pos.chunk,
+                    URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
+                );
+            }
+
+            // Update render rect
+            if let Some(dirty_rect) = dirty_rects.render.get_mut(&pos.chunk) {
+                extend_rect_if_needed(dirty_rect, &pos.atom)
+            } else {
+                dirty_rects.render.insert(
+                    pos.chunk,
+                    URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
+                );
             }
         }
     }
@@ -131,40 +140,35 @@ pub fn render_dirty_rects(
         commands.entity(rect).despawn();
     }
 
-    for (i, rect) in dirty_rects.iter().enumerate() {
-        if let Some(rect) = rect {
-            let chunk_x = i % CHUNKS_WIDTH;
-            let chunk_y = i / CHUNKS_WIDTH;
-
-            // Rectangle
-            commands
-                .spawn(SpriteBundle {
-                    sprite: Sprite {
-                        color: Color::rgba(0.25, 0.25, 0.75, 0.2),
-                        custom_size: Some(
-                            IVec2::new(
-                                (rect.max.x - rect.min.x + 1) * ATOM_SIZE as i32,
-                                (rect.max.y - rect.min.y + 1) * ATOM_SIZE as i32,
-                            )
-                            .as_vec2(),
-                        ),
-                        anchor: Anchor::TopLeft,
-                        ..default()
-                    },
-                    transform: Transform::from_translation(
-                        IVec3::new(
-                            (chunk_x * CHUNK_LENGHT * ATOM_SIZE) as i32
-                                + (rect.min.x * ATOM_SIZE as i32),
-                            -((chunk_y * CHUNK_LENGHT * ATOM_SIZE) as i32)
-                                - (rect.min.y * ATOM_SIZE as i32),
-                            1,
+    for (chunk_pos, rect) in dirty_rects {
+        // Rectangle
+        commands
+            .spawn(SpriteBundle {
+                sprite: Sprite {
+                    color: Color::rgba(0.25, 0.25, 0.75, 0.2),
+                    custom_size: Some(
+                        UVec2::new(
+                            (rect.max.x - rect.min.x + 1) * ATOM_SIZE as u32,
+                            (rect.max.y - rect.min.y + 1) * ATOM_SIZE as u32,
                         )
-                        .as_vec3(),
+                        .as_vec2(),
                     ),
+                    anchor: Anchor::TopLeft,
                     ..default()
-                })
-                .insert(DirtyRect);
-        }
+                },
+                transform: Transform::from_translation(
+                    IVec3::new(
+                        chunk_pos.x * (CHUNK_LENGHT * ATOM_SIZE) as i32
+                            + (rect.min.x as i32 * ATOM_SIZE as i32),
+                        -(chunk_pos.y * (CHUNK_LENGHT * ATOM_SIZE) as i32)
+                            - (rect.min.y as i32 * ATOM_SIZE as i32),
+                        1,
+                    )
+                    .as_vec3(),
+                ),
+                ..default()
+            })
+            .insert(DirtyRect);
     }
 }
 

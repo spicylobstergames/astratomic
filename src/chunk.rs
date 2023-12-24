@@ -6,11 +6,11 @@ use crate::prelude::*;
 pub struct Chunk {
     pub atoms: [Atom; CHUNK_LEN],
     pub texture: Handle<Image>,
-    pub index: usize,
+    pub index: IVec2,
 }
 
 impl Chunk {
-    pub fn new(texture: Handle<Image>, index: usize) -> Chunk {
+    pub fn new(texture: Handle<Image>, index: IVec2) -> Chunk {
         Chunk {
             atoms: [Atom::new(); CHUNK_LEN],
             texture,

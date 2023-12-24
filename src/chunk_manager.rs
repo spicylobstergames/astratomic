@@ -1,5 +1,3 @@
-use std::collections::{HashMap, HashSet};
-
 use bevy::render::render_asset::{RenderAssetDependency, RenderAssets};
 use bevy::render::render_resource::{Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d};
 use bevy::render::renderer::RenderQueue;
@@ -13,19 +11,51 @@ use crate::prelude::*;
 /// Updates and do the chunks logic
 #[derive(Component)]
 pub struct ChunkManager {
-    pub chunks: Vec<Chunk>,
-    pub textures_hmap: HashMap<AssetId<Image>, usize>,
+    pub chunks: HashMap<IVec2, Chunk>,
+    pub textures_hmap: HashMap<AssetId<Image>, IVec2>,
     pub dt: u8,
+}
+
+impl ChunkManager {
+    pub fn get_atom(&self, pos: &ChunkPos) -> Option<&Atom> {
+        if let Some(chunk) = self.chunks.get(&pos.chunk) {
+            chunk.atoms.get(pos.atom.d1())
+        } else {
+            None
+        }
+    }
+
+    pub fn get_mut_atom(&mut self, pos: ChunkPos) -> Option<&mut Atom> {
+        if let Some(chunk) = self.chunks.get_mut(&pos.chunk) {
+            chunk.atoms.get_mut(pos.atom.d1())
+        } else {
+            None
+        }
+    }
+}
+
+impl std::ops::Index<ChunkPos> for ChunkManager {
+    type Output = Atom;
+    #[track_caller]
+    fn index(&self, pos: ChunkPos) -> &Self::Output {
+        self.get_atom(&pos).expect("Invalid index position.")
+    }
+}
+impl std::ops::IndexMut<ChunkPos> for ChunkManager {
+    #[track_caller]
+    fn index_mut(&mut self, pos: ChunkPos) -> &mut Self::Output {
+        self.get_mut_atom(pos).expect("Invalid index position.")
+    }
 }
 
 #[derive(Component)]
 pub struct DirtyRects {
     /// The current chunk update dirty rects
-    pub current: Vec<Option<IRect>>,
+    pub current: HashMap<IVec2, URect>,
     /// The new chunk update dirty rects
-    pub new: Vec<Option<IRect>>,
+    pub new: HashMap<IVec2, URect>,
     /// The dirty render rects
-    pub render: Vec<Option<IRect>>,
+    pub render: HashMap<IVec2, URect>,
 }
 
 impl DirtyRects {
@@ -44,12 +74,12 @@ pub fn manager_setup(
     let (width, height) = (CHUNKS_WIDTH, CHUNKS_HEIGHT);
 
     let mut images_vec = vec![];
-    let mut chunks = vec![];
+    let mut chunks = HashMap::new();
     let mut textures_hmap = HashMap::new();
     for y in 0..height {
         for x in 0..width {
             let pos = Vec2::new(x as f32 * side_length, -(y as f32) * side_length);
-            let index = y * CHUNKS_WIDTH + x;
+            let index = ivec2(x as i32, y as i32);
 
             //Get and spawn texture/chunk image
             let texture = images.add(Chunk::new_image());
@@ -81,7 +111,7 @@ pub fn manager_setup(
             let image = images.get_mut(&chunk.texture).unwrap();
             chunk.update_all(image);
 
-            chunks.push(chunk);
+            chunks.insert(index, chunk);
         }
     }
 
@@ -129,9 +159,9 @@ pub fn manager_setup(
     ));
 
     commands.spawn(DirtyRects {
-        current: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
-        new: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
-        render: vec![None; CHUNKS_WIDTH * CHUNKS_HEIGHT],
+        current: HashMap::new(),
+        new: HashMap::new(),
+        render: HashMap::new(),
     });
     commands.spawn(chunk_manager);
 }
@@ -173,37 +203,29 @@ pub fn chunk_manager_update(
         // Spawn a task on the deferred scope for handling the deferred dirty update rects.
         deferred_scope.spawn(async move {
             // Clear the new dirty rects so we can update a fresh list
-            new_dirty_rects.iter_mut().for_each(|x| *x = None);
+            *new_dirty_rects = HashMap::new();
 
             // Loop through deferred tasks
             while let Ok(update) = dirty_update_rects_recv.recv().await {
-                update_dirty_rects(
-                    update.pos,
-                    new_dirty_rects,
-                    update.chunk_idx,
-                    update.global_pos,
-                    update.center_idx,
-                );
+                update_dirty_rects(new_dirty_rects, update.chunk_pos);
             }
         });
 
         // Spawn a task on the deferred scope for handling deferred dirty render rects.
         deferred_scope.spawn(async move {
             // Clear the previous render rects
-            render_dirty_rects.iter_mut().for_each(|x| *x = None);
+            *render_dirty_rects = HashMap::new();
 
             // Loop through deferred tasks
             while let Ok(update) = dirty_render_rects_recv.recv().await {
-                let rect = &mut render_dirty_rects[update.chunk_idx];
-                if let Some(rect) = rect {
-                    extend_rect_if_needed(rect, &update.pos)
+                let pos = update.chunk_pos;
+                if let Some(rect) = render_dirty_rects.get_mut(&pos.chunk) {
+                    extend_rect_if_needed(rect, &pos.atom)
                 } else {
-                    *rect = Some(IRect::new(
-                        update.pos.x,
-                        update.pos.y,
-                        update.pos.x,
-                        update.pos.y,
-                    ))
+                    render_dirty_rects.insert(
+                        pos.chunk,
+                        URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
+                    );
                 }
             }
         });
@@ -212,7 +234,7 @@ pub fn chunk_manager_update(
         for y_thread_off in rand_range(0..2) {
             for x_thread_off in rand_range(0..2) {
                 compute_pool.scope(|scope| {
-                    let mut mutable_references = MutableReferences::default();
+                    let mut mutable_references = HashMap::new();
                     get_mutable_references(
                         &mut chunk_manager.chunks,
                         &mut mutable_references,
@@ -224,14 +246,17 @@ pub fn chunk_manager_update(
                     y_iter.for_each(|y| {
                         let x_iter = (x_thread_off..CHUNKS_WIDTH).step_by(2);
                         x_iter.for_each(|x| {
-                            if let Some(rect) = dirty_rects[y * CHUNKS_WIDTH + x] {
-                                let center_index = y * CHUNKS_WIDTH + x;
-                                let mut chunk_group = ChunkGroup::new(
-                                    mutable_references.centers[y / 2 * CHUNKS_WIDTH / 2 + x / 2]
-                                        .take()
-                                        .unwrap(),
-                                    center_index,
-                                );
+                            let center_pos = ivec2(x as i32, y as i32);
+                            if let Some(rect) = dirty_rects.get(&center_pos) {
+                                let center = if let ChunkReference::Center(center) =
+                                    mutable_references.remove(&center_pos).unwrap()
+                                {
+                                    center
+                                } else {
+                                    unreachable!()
+                                };
+
+                                let mut chunk_group = ChunkGroup::new(center, center_pos);
 
                                 // Get all 3x3 chunks for each chunk updating
                                 for y_off in -1..=1 {
@@ -244,17 +269,13 @@ pub fn chunk_manager_update(
                                             continue;
                                         }
 
-                                        let x = (x as i32 + x_off) / 2;
-                                        let y = (y as i32 + y_off) / 2;
-                                        let index_off = y * CHUNKS_WIDTH as i32 / 2 + x;
-
-                                        let (group_idx, mut_idx) = match (x_off, y_off) {
+                                        let (group_idx, reference_idx) = match (x_off, y_off) {
                                             // Right Left
-                                            (1, 0) => (2, 1),
-                                            (-1, 0) => (1, 2),
+                                            (1, 0) => (2, 0),
+                                            (-1, 0) => (1, 1),
                                             // Top Down
                                             (0, 1) => (3, 0),
-                                            (0, -1) => (0, 3),
+                                            (0, -1) => (0, 1),
                                             // Corners
                                             (1, 1) => (3, 0),
                                             (-1, 1) => (2, 1),
@@ -265,16 +286,30 @@ pub fn chunk_manager_update(
 
                                         if x_off.abs() != y_off.abs() {
                                             // Side
-                                            chunk_group.sides[group_idx] = mutable_references.sides
-                                                [mut_idx]
-                                                [index_off as usize]
-                                                .take();
+                                            let side =
+                                                if let Some(ChunkReference::Sides(mut sides)) =
+                                                    mutable_references
+                                                        .remove(&(center_pos + ivec2(x_off, y_off)))
+                                                {
+                                                    sides[reference_idx].take()
+                                                } else {
+                                                    None
+                                                };
+
+                                            chunk_group.sides[group_idx] = side;
                                         } else {
                                             // Corner
-                                            chunk_group.corners[group_idx] = mutable_references
-                                                .corners[mut_idx]
-                                                [index_off as usize]
-                                                .take()
+                                            let corner =
+                                                if let Some(ChunkReference::Corners(mut corners)) =
+                                                    mutable_references
+                                                        .remove(&(center_pos + ivec2(x_off, y_off)))
+                                                {
+                                                    corners[reference_idx].take()
+                                                } else {
+                                                    None
+                                                };
+
+                                            chunk_group.corners[group_idx] = corner;
                                         }
                                     }
                                 }
@@ -287,7 +322,7 @@ pub fn chunk_manager_update(
                                             dirty_render_rect_send,
                                         },
                                         dt,
-                                        &rect,
+                                        rect,
                                     )
                                 });
                             }
@@ -306,7 +341,7 @@ pub fn chunk_manager_update(
     dirty_rects_resource.swap();
 }
 
-pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &IRect) {
+pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) {
     for y in rand_range(dirty_rect.min.y as usize..dirty_rect.max.y as usize + 1) {
         for x in rand_range(dirty_rect.min.x as usize..dirty_rect.max.x as usize + 1) {
             let local_pos = (ivec2(x as i32, y as i32), 4);
@@ -349,19 +384,14 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &IRect) 
 
             for awoke in awakened {
                 let local = global_to_local(awoke);
-                let chunk_manager_idx =
-                    ChunkGroup::group_to_manager_idx(chunks.group.center_index, local.1);
-                if (0..CHUNKS_WIDTH * CHUNKS_HEIGHT).contains(&chunk_manager_idx) {
-                    chunks
-                        .dirty_update_rect_send
-                        .try_send(DeferredDirtyRectUpdate {
-                            chunk_idx: chunk_manager_idx,
-                            pos: local.0,
-                            global_pos: awoke,
-                            center_idx: chunks.group.center_index,
-                        })
-                        .unwrap();
-                }
+                let chunk = ChunkGroup::group_to_chunk(chunks.group.center_pos, local.1);
+
+                chunks
+                    .dirty_update_rect_send
+                    .try_send(DeferredDirtyRectUpdate {
+                        chunk_pos: ChunkPos::new(local.0.try_into().unwrap(), chunk),
+                    })
+                    .unwrap();
             }
         }
     }
@@ -388,9 +418,8 @@ fn extract_chunk_texture_updates(
     let dirty_rects = dirty_rects.single();
     let chunk_manager = chunk_manager.single();
 
-    for (chunk, dirty_rect) in chunk_manager.chunks.iter().zip(&dirty_rects.render) {
-        if let Some(rect) = dirty_rect {
-            let rect = rect.as_urect();
+    for (chunk_pos, chunk) in chunk_manager.chunks.iter() {
+        if let Some(rect) = dirty_rects.render.get(chunk_pos) {
             let id = chunk.texture.id();
             let mut data = SmallVec::new();
 

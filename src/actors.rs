@@ -10,27 +10,20 @@ pub struct Actor {
 }
 
 pub fn add_actor(chunk_manager: &mut ChunkManager, actor: &Actor) {
-    let chunks = &mut chunk_manager.chunks;
-
     for x_off in 0..actor.width as i32 {
         for y_off in 0..actor.height as i32 {
             let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
-            chunks[pos.1 as usize].atoms[pos.0.d1()].actor = true;
+            chunk_manager[pos].actor = true;
         }
     }
 }
 
 pub fn on_ground(chunk_manager: &ChunkManager, actor: &Actor) -> bool {
-    let chunks = &chunk_manager.chunks;
     for x_off in 0..actor.width {
         let chunk_pos = global_to_chunk(actor.pos + ivec2(x_off as i32, actor.height as i32));
 
-        if let Some(chunk) = chunks.get(chunk_pos.1 as usize) {
-            if let Some(atom) = chunk.atoms.get(chunk_pos.0.d1()) {
-                if atom.state != State::Void {
-                    return true;
-                }
-            } else {
+        if let Some(atom) = chunk_manager.get_atom(&chunk_pos) {
+            if atom.state != State::Void {
                 return true;
             }
         } else {
@@ -60,8 +53,6 @@ pub fn update_actors(mut chunk_manager: Query<&mut ChunkManager>, mut actors: Qu
 }
 
 pub fn move_x(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> bool {
-    let chunks = &mut chunk_manager.chunks;
-
     //Check if we can move
     for y_off in 0..actor.height as i32 {
         let pos = actor.pos
@@ -73,16 +64,15 @@ pub fn move_x(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
                 ivec2(-1, y_off)
             };
         let chunk_pos = global_to_chunk(pos);
-        if chunk_pos.1 < 0 {
-            return false;
-        }
 
         // Check bounds and if it's free to move
-        if let Some(chunk) = chunks.get(chunk_pos.1 as usize) {
-            let state = chunk.atoms[chunk_pos.0.d1()].state;
-            if state == State::Powder || state == State::Solid {
+        if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
+            if atom.state == State::Powder || atom.state == State::Solid {
                 actor.vel = Vec2::ZERO;
                 return false;
+            } else if atom.state == State::Liquid {
+                //Water splashes
+                atom.velocity = (0, -20)
             }
         } else {
             actor.vel = Vec2::ZERO;
@@ -112,8 +102,8 @@ pub fn move_x(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
 
         let chunk_pos1 = global_to_chunk(pos1);
         let chunk_pos2 = global_to_chunk(pos2);
-        chunks[chunk_pos1.1 as usize].atoms[chunk_pos1.0.d1()].actor = true;
-        chunks[chunk_pos2.1 as usize].atoms[chunk_pos2.0.d1()].actor = false;
+        chunk_manager[chunk_pos1].actor = true;
+        chunk_manager[chunk_pos2].actor = false;
     }
     actor.pos.x += dir;
 
@@ -121,8 +111,6 @@ pub fn move_x(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
 }
 
 pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> bool {
-    let chunks = &mut chunk_manager.chunks;
-
     //Check if we can move
     for x_off in 0..actor.width as i32 {
         let pos = actor.pos
@@ -134,16 +122,15 @@ pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
                 ivec2(x_off, -1)
             };
         let chunk_pos = global_to_chunk(pos);
-        if chunk_pos.1 < 0 {
-            return false;
-        }
 
         // Check bounds and if it's free to move
-        if let Some(chunk) = chunks.get(chunk_pos.1 as usize) {
-            let state = chunk.atoms[chunk_pos.0.d1()].state;
-            if state == State::Powder || state == State::Solid {
+        if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
+            if atom.state == State::Powder || atom.state == State::Solid {
                 actor.vel = Vec2::ZERO;
                 return false;
+            } else if atom.state == State::Liquid {
+                //Water splashes
+                atom.velocity = (0, -20)
             }
         } else {
             actor.vel = Vec2::ZERO;
@@ -173,8 +160,8 @@ pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
 
         let chunk_pos1 = global_to_chunk(pos1);
         let chunk_pos2 = global_to_chunk(pos2);
-        chunks[chunk_pos1.1 as usize].atoms[chunk_pos1.0.d1()].actor = true;
-        chunks[chunk_pos2.1 as usize].atoms[chunk_pos2.0.d1()].actor = false;
+        chunk_manager[chunk_pos1].actor = true;
+        chunk_manager[chunk_pos2].actor = false;
     }
 
     actor.pos.y += dir;

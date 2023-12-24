@@ -7,32 +7,30 @@ pub struct ChunkGroup<'a> {
     pub center: [&'a mut Atom; CHUNK_LEN],
     pub corners: ChunkCorners<'a>,
     pub sides: ChunkSides<'a>,
-    // The index of the center chunk on the chunk manager vec
-    pub center_index: i32,
+    // The pos of the center chunk on the chunk manager vec
+    pub center_pos: IVec2,
 }
 
 impl<'a> ChunkGroup<'a> {
-    pub fn new(center: [&'a mut Atom; CHUNK_LEN], center_index: usize) -> Self {
+    pub fn new(center: [&'a mut Atom; CHUNK_LEN], center_pos: IVec2) -> Self {
         Self {
             center,
             corners: [None, None, None, None],
             sides: [None, None, None, None],
-            center_index: center_index as i32,
+            center_pos,
         }
     }
 
-    pub fn group_to_manager_idx(center_manager_idx: i32, group_idx: i32) -> usize {
-        if group_idx == 4 {
-            center_manager_idx as usize
-        } else {
+    pub fn group_to_chunk(center_pos: IVec2, group_idx: i32) -> IVec2 {
             let x_diff = group_idx % 3 - 1;
             let y_diff = group_idx / 3 - 1;
 
-            let mut index = center_manager_idx;
-            index += y_diff * CHUNKS_WIDTH as i32 + x_diff;
+            let mut pos = center_pos;
+            pos.x += x_diff;
+            pos.y += y_diff;
 
-            index as usize
-        }
+            pos
+        
     }
 
     #[inline]

@@ -15,71 +15,54 @@ pub struct UpdateChunksType<'a> {
 
 /// Swap two atoms from global 3x3 chunks positions
 pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
+    let chunk_group = &mut chunks.group;
+    {
+        let temp = chunk_group[pos1];
+        chunk_group[pos1] = chunk_group[pos2];
+        chunk_group[pos2] = temp;
+
+        chunk_group[pos1].updated_at = dt;
+        chunk_group[pos2].updated_at = dt;
+    }
+
     let local1 = global_to_local(pos1);
     let local2 = global_to_local(pos2);
 
-    let chunk_group = &mut chunks.group;
-    {
-        let temp = *chunk_group.get_local(local1).unwrap();
-        chunk_group[local1] = chunk_group[local2];
-        chunk_group[local2] = temp;
-
-        chunk_group[local1].updated_at = dt;
-        chunk_group[local2].updated_at = dt;
-    }
-
-    for (global_pos, (pos, idx)) in [(pos1, local1), (pos2, local2)] {
-        let chunk_idx = ChunkGroup::group_to_manager_idx(chunk_group.center_index, idx);
+    for (pos, idx) in [local1, local2] {
+        let chunk = ChunkGroup::group_to_chunk(chunk_group.center_pos, idx);
 
         chunks
             .dirty_render_rect_send
             .send_blocking(DeferredDirtyRectUpdate {
-                chunk_idx,
-                pos,
-                global_pos,
-                center_idx: chunk_group.center_index,
+                chunk_pos: ChunkPos::new(pos.try_into().unwrap(), chunk),
             })
             .unwrap();
     }
 }
 
 /// Transforms a global manager pos to a chunk pos
-pub fn global_to_chunk(mut pos: IVec2) -> (IVec2, i32) {
-    //Hacky fix for some cases, will get removed when we use a hashmap to store chunks
+pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
+    //This makes sure we dont have double 0 chunks
     if pos.x < 0 {
-        pos.x = i32::MIN;
+        pos.x -= CHUNK_LENGHT as i32;
     }
     if pos.y < 0 {
-        pos.y = i32::MIN;
+        pos.y -= CHUNK_LENGHT as i32;
     }
 
-    let mut chunk_x = pos.x / CHUNK_LENGHT as i32;
-    let mut chunk_y = pos.y / CHUNK_LENGHT as i32;
+    let (chunk_x, chunk_y) = (pos.x / CHUNK_LENGHT as i32, pos.y / CHUNK_LENGHT as i32);
+    let (x, y) = (pos.x as u32 % CHUNK_LENGHT as u32, pos.y as u32 % CHUNK_LENGHT as u32);
 
-    //Hacky fix for some cases, will get removed when we use a hashmap to store chunks
-    if chunk_x >= CHUNKS_WIDTH as i32 {
-        chunk_x = 20000
-    }
-    if chunk_y >= CHUNKS_HEIGHT as i32 {
-        chunk_y = 20000
-    }
-
-    let chunk_idx = chunk_y * CHUNKS_WIDTH as i32 + chunk_x;
-
-    let (x, y) = (pos.x % CHUNK_LENGHT as i32, pos.y % CHUNK_LENGHT as i32);
-
-    (ivec2(x, y), chunk_idx)
+    ChunkPos::new(uvec2(x, y), ivec2(chunk_x, chunk_y))
 }
 
 /// Transforms a chunk pos to a global manager pos
-pub fn _chunk_to_global(mut pos: (IVec2, i32)) -> IVec2 {
-    let chunk_x = pos.1 % CHUNKS_WIDTH as i32;
-    let chunk_y = pos.1 / CHUNKS_WIDTH as i32;
+pub fn chunk_to_global(pos: ChunkPos) -> IVec2 {
+    let mut atom = pos.atom.as_ivec2();
+    atom.x += pos.chunk.x * CHUNK_LENGHT as i32;
+    atom.y += pos.chunk.y * CHUNK_LENGHT as i32;
 
-    pos.0.x += chunk_x * CHUNK_LENGHT as i32;
-    pos.0.y += chunk_y * CHUNK_LENGHT as i32;
-
-    pos.0
+    atom
 }
 
 /// Transforms global 3x3 chunk position to local 3x3 chunks position
@@ -126,12 +109,19 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
 
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
-pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: u8, state: State) -> bool {
+pub fn swapable(
+    chunks: &UpdateChunksType,
+    pos: IVec2,
+    states: &[(State, f32)],
+    dt: u8,
+    state: State,
+) -> bool {
     if let Some(atom) = chunks.group.get_global(pos) {
         (atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
                 state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
-            }) && atom.updated_at != dt)) && (!atom.actor || state == State::Liquid)
+            }) && atom.updated_at != dt))
+            && (!atom.actor || state == State::Liquid)
     } else {
         false
     }
@@ -225,7 +215,7 @@ pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: u8) -> bool {
     }
 }
 
-pub fn extend_rect_if_needed(rect: &mut IRect, pos: &IVec2) {
+pub fn extend_rect_if_needed(rect: &mut URect, pos: &UVec2) {
     if pos.x < rect.min.x {
         rect.min.x = (pos.x).clamp(0, 63)
     } else if pos.x > rect.max.x {
@@ -247,30 +237,26 @@ pub fn rand_range(vec: Range<usize>) -> Vec<usize> {
 }
 
 // Transform pos to chunk coords
-pub fn transform_to_chunk(pos: Vec2) -> Option<(IVec2, i32)> {
-    if pos.x < 0. || pos.y < 0. {
-        return None;
+pub fn transform_to_chunk(mut pos: Vec2) -> ChunkPos {
+    //This makes sure we dont have double 0 chunks
+    if pos.x < 0. {
+        pos.x -= (CHUNK_LENGHT * ATOM_SIZE) as f32;
     }
-
-    let (width, height) = (CHUNKS_WIDTH, CHUNKS_HEIGHT);
+    if pos.y < 0. {
+        pos.y -= (CHUNK_LENGHT * ATOM_SIZE) as f32;
+    }
 
     let (chunk_x, chunk_y) = (
-        (pos.x / (CHUNK_LENGHT * ATOM_SIZE) as f32) as usize,
-        (pos.y / (CHUNK_LENGHT * ATOM_SIZE) as f32) as usize,
+        (pos.x / (CHUNK_LENGHT * ATOM_SIZE) as f32) as i32,
+        (pos.y / (CHUNK_LENGHT * ATOM_SIZE) as f32) as i32,
     );
 
-    if chunk_x >= width || chunk_y >= height {
-        return None;
-    }
-
-    let (atom_x, atom_y) = (
-        ((pos.x / ATOM_SIZE as f32) % CHUNK_LENGHT as f32) as i32,
-        ((pos.y / ATOM_SIZE as f32) % CHUNK_LENGHT as f32) as i32,
+    let (x, y) = (
+        ((pos.x / ATOM_SIZE as f32) % CHUNK_LENGHT as f32) as u32,
+        ((pos.y / ATOM_SIZE as f32) % CHUNK_LENGHT as f32) as u32,
     );
 
-    let local = (ivec2(atom_x, atom_y), (chunk_y * width + chunk_x) as i32);
-
-    Some(local)
+    ChunkPos::new(uvec2(x, y), ivec2(chunk_x, chunk_y))
 }
 
 pub trait D1 {
@@ -320,40 +306,44 @@ pub fn updown_to_leftright(
 }
 
 pub fn get_mutable_references<'a>(
-    chunks: &'a mut [Chunk],
-    mutable_references: &mut MutableReferences<'a>,
+    chunks: &'a mut HashMap<IVec2, Chunk>,
+    mutable_references: &mut HashMap<IVec2, ChunkReference<'a>>,
     thread_off: (usize, usize),
 ) {
-    chunks.iter_mut().enumerate().for_each(|(idx, chunk)| {
-        let chunk_x = idx % CHUNKS_WIDTH;
-        let chunk_y = idx / CHUNKS_WIDTH;
-
-        let same_x = (chunk_x + thread_off.0) % 2 == 0;
-        let same_y = (chunk_y + thread_off.1) % 2 == 0;
+    chunks.iter_mut().for_each(|(chunk_pos, chunk)| {
+        let same_x = (chunk_pos.x as usize + thread_off.0) % 2 == 0;
+        let same_y = (chunk_pos.y as usize + thread_off.1) % 2 == 0;
 
         match (same_x, same_y) {
-            (true, true) => mutable_references.centers.push(Some(
-                chunk
-                    .atoms
-                    .iter_mut()
-                    .collect::<Vec<_>>()
-                    .try_into()
-                    .unwrap(),
-            )),
+            (true, true) => {
+                mutable_references.insert(
+                    *chunk_pos,
+                    ChunkReference::Center(
+                        chunk
+                            .atoms
+                            .iter_mut()
+                            .collect::<Vec<_>>()
+                            .try_into()
+                            .unwrap(),
+                    ),
+                );
+            }
             (true, false) => {
                 let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
 
-                mutable_references.sides[0]
-                    .push(Some(up.iter_mut().collect::<Vec<_>>().try_into().unwrap()));
-                mutable_references.sides[3].push(Some(
-                    down.iter_mut().collect::<Vec<_>>().try_into().unwrap(),
-                ));
+                mutable_references.insert(
+                    *chunk_pos,
+                    ChunkReference::Sides([
+                        Some(up.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
+                        Some(down.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
+                    ]),
+                );
             }
             (false, true) => {
                 let (left, right) = split_left_right(&mut chunk.atoms);
 
-                mutable_references.sides[1].push(Some(left));
-                mutable_references.sides[2].push(Some(right));
+                mutable_references
+                    .insert(*chunk_pos, ChunkReference::Sides([Some(left), Some(right)]));
             }
 
             (false, false) => {
@@ -362,147 +352,163 @@ pub fn get_mutable_references<'a>(
                 let (up_left, up_right) = updown_to_leftright(up);
                 let (down_left, down_right) = updown_to_leftright(down);
 
-                mutable_references.corners[0].push(Some(up_left));
-                mutable_references.corners[1].push(Some(up_right));
-                mutable_references.corners[2].push(Some(down_left));
-                mutable_references.corners[3].push(Some(down_right));
+                mutable_references.insert(
+                    *chunk_pos,
+                    ChunkReference::Corners([
+                        Some(up_left),
+                        Some(up_right),
+                        Some(down_left),
+                        Some(down_right),
+                    ]),
+                );
             }
         }
     });
 }
 
 // TODO make function less verbose
-pub fn update_dirty_rects(
-    pos: IVec2,
-    new_dirty_rects: &mut [Option<IRect>],
-    chunk_idx: usize,
-    global_pos: IVec2,
-    center_idx: i32,
-) {
-    if (1..62).contains(&pos.x) && (1..62).contains(&pos.y) {
+pub fn update_dirty_rects(new_dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos: ChunkPos) {
+    let atom = chunk_pos.atom;
+    let mut chunk = chunk_pos.chunk;
+
+    /*if (1..62).contains(&atom.x) && (1..62).contains(&atom.y) {
         // Case where the 3x3 position area is within a chunk
-        let rect = &mut new_dirty_rects[chunk_idx];
-        if let Some(rect) = rect {
-            extend_rect_if_needed(rect, &(pos + IVec2::ONE));
-            extend_rect_if_needed(rect, &(pos + IVec2::NEG_ONE));
+        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
+            extend_rect_if_needed(rect, &(atom + UVec2::ONE));
+            extend_rect_if_needed(rect, &(atom - UVec2::ONE));
         } else {
-            *rect = Some(IRect::new(pos.x - 1, pos.y - 1, pos.x + 1, pos.y + 1));
+            new_dirty_rects.insert(
+                chunk,
+                URect::new(atom.x - 1, atom.y - 1, atom.x + 1, atom.y + 1),
+            );
         }
-    } else if (pos.x == 0 || pos.x == 63) && (1..62).contains(&pos.y) {
+    } else if (atom.x == 0 || atom.x == 63) && (1..62).contains(&atom.y) {
         // Case where the 3x3 position area is in another chunk into the left or right
-        if let Some(rect) = &mut new_dirty_rects[chunk_idx] {
+        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
             extend_rect_if_needed(
                 rect,
-                &(pos
-                    + if pos.x == 0 {
-                        IVec2::NEG_Y
+                &(atom
+                    - if atom.x == 0 {
+                        UVec2::Y
                     } else {
-                        IVec2::NEG_ONE
+                        UVec2::ONE
                     }),
             );
             extend_rect_if_needed(
                 rect,
-                &(pos + if pos.x == 0 { IVec2::ONE } else { IVec2::Y }),
+                &(atom + if atom.x == 0 { UVec2::ONE } else { UVec2::Y }),
             );
         } else {
-            new_dirty_rects[chunk_idx] = Some(IRect::new(
-                pos.x + if pos.x == 0 { 0 } else { -1 },
-                pos.y - 1,
-                pos.x + if pos.x == 0 { 1 } else { 0 },
-                pos.y + 1,
-            ));
+            new_dirty_rects.insert(
+                chunk,
+                URect::new(
+                    atom.x - if atom.x == 0 { 0 } else { 1 },
+                    atom.y - 1,
+                    atom.x + if atom.x == 0 { 1 } else { 0 },
+                    atom.y + 1,
+                ),
+            );
         }
 
-        let x = if pos.x == 0 { 63 } else { 0 };
-        if (pos.x == 0 && chunk_idx % CHUNKS_WIDTH > 0)
-            || (pos.x == 63 && chunk_idx % CHUNKS_WIDTH < CHUNKS_WIDTH - 1)
-        {
-            let rect = &mut new_dirty_rects[if pos.x == 0 {
-                chunk_idx - 1
-            } else {
-                chunk_idx + 1
-            }];
-            if let Some(rect) = rect {
-                extend_rect_if_needed(rect, &(ivec2(x, pos.y + 1)));
-                extend_rect_if_needed(rect, &(ivec2(x, pos.y - 1)));
-            } else {
-                *rect = Some(IRect::new(x, pos.y - 1, x, pos.y + 1));
-            }
+        let x = if atom.x == 0 { 63 } else { 0 };
+        if atom.x == 0 {
+            chunk.x -= 1
+        } else {
+            chunk.x += 1
         }
-    } else if (pos.y == 0 || pos.y == 63) && (1..62).contains(&pos.x) {
+        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
+            extend_rect_if_needed(rect, &(uvec2(x, atom.y + 1)));
+            extend_rect_if_needed(rect, &(uvec2(x, atom.y - 1)));
+        } else {
+            new_dirty_rects.insert(chunk, URect::new(x, atom.y - 1, x, atom.y + 1));
+        }
+    } else if (atom.y == 0 || atom.y == 63) && (1..62).contains(&atom.x) {
         // Case where the 3x3 position area is in another chunk into the up or down
-        if let Some(rect) = &mut new_dirty_rects[chunk_idx] {
+        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
             extend_rect_if_needed(
                 rect,
-                &(pos
-                    + if pos.y == 0 {
-                        IVec2::NEG_X
+                &(atom
+                    - if atom.y == 0 {
+                        UVec2::X
                     } else {
-                        IVec2::NEG_ONE
+                        UVec2::ONE
                     }),
             );
             extend_rect_if_needed(
                 rect,
-                &(pos + if pos.y == 0 { IVec2::ONE } else { IVec2::X }),
+                &(atom + if atom.y == 0 { UVec2::ONE } else { UVec2::X }),
             );
         } else {
-            new_dirty_rects[chunk_idx] = Some(IRect::new(
-                pos.x - 1,
-                pos.y + if pos.y == 0 { 0 } else { -1 },
-                pos.x + 1,
-                pos.y + if pos.y == 0 { 1 } else { 0 },
-            ));
+            new_dirty_rects.insert(
+                chunk,
+                URect::new(
+                    atom.x - 1,
+                    atom.y - if atom.y == 0 { 0 } else { 1 },
+                    atom.x + 1,
+                    atom.y + if atom.y == 0 { 1 } else { 0 },
+                ),
+            );
         }
 
-        let y = if pos.y == 0 { 63 } else { 0 };
-        if (pos.y == 0 && chunk_idx / CHUNKS_WIDTH > 0)
-            || (pos.y == 63 && chunk_idx / CHUNKS_WIDTH < CHUNKS_HEIGHT - 1)
-        {
-            let rect = &mut new_dirty_rects[if pos.y == 0 {
-                chunk_idx - CHUNKS_WIDTH
-            } else {
-                chunk_idx + CHUNKS_WIDTH
-            }];
-            if let Some(rect) = rect {
-                extend_rect_if_needed(rect, &(ivec2(pos.x + 1, y)));
-                extend_rect_if_needed(rect, &(ivec2(pos.x - 1, y)));
-            } else {
-                *rect = Some(IRect::new(pos.x - 1, y, pos.x + 1, y));
-            }
+        let y = if atom.y == 0 { 63 } else { 0 };
+        if atom.y == 0 {
+            chunk.y -= 1
+        } else {
+            chunk.y += 1
         }
-    } else {
+        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
+            extend_rect_if_needed(rect, &(uvec2(atom.x + 1, y)));
+            extend_rect_if_needed(rect, &(uvec2(atom.x - 1, y)));
+        } else {
+            new_dirty_rects.insert(chunk, URect::new(atom.x - 1, y, atom.x + 1, y));
+        }
+    } else {*/
         // Case where the 3x3 position are is in the corner of a chunk
         for y in -1..=1 {
             for x in -1..=1 {
-                let local = global_to_local(global_pos + ivec2(x, y));
-                let pos = local.0;
-                let chunk_manager_idx = ChunkGroup::group_to_manager_idx(center_idx, local.1);
+                let mut global = chunk_to_global(chunk_pos);
+                global += ivec2(x, y);
+                let chunk_pos = global_to_chunk(global);
 
-                if let Some(rect) = new_dirty_rects.get_mut(chunk_manager_idx) {
-                    if let Some(rect) = rect {
-                        extend_rect_if_needed(rect, &pos)
-                    } else {
-                        *rect = Some(IRect::new(pos.x, pos.y, pos.x, pos.y));
-                    }
+                if let Some(rect) = new_dirty_rects.get_mut(&chunk_pos.chunk) {
+                    extend_rect_if_needed(rect, &chunk_pos.atom)
+                } else {
+                    new_dirty_rects.insert(
+                        chunk_pos.chunk,
+                        URect::new(
+                            chunk_pos.atom.x,
+                            chunk_pos.atom.y,
+                            chunk_pos.atom.x,
+                            chunk_pos.atom.y,
+                        ),
+                    );
                 }
             }
         }
+    //}
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ChunkPos {
+    pub atom: UVec2,
+    pub chunk: IVec2,
+}
+
+impl ChunkPos {
+    pub fn new(atom: UVec2, chunk: IVec2) -> Self {
+        Self { atom, chunk }
     }
 }
 
-#[derive(Default)]
-pub struct MutableReferences<'a> {
-    pub centers: Vec<Option<[&'a mut Atom; CHUNK_LEN]>>,
-    pub sides: [Vec<Option<[&'a mut Atom; HALF_CHUNK_LEN]>>; 4],
-    pub corners: [Vec<Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>>; 4],
+pub enum ChunkReference<'a> {
+    Center([&'a mut Atom; CHUNK_LEN]),
+    Sides([Option<[&'a mut Atom; HALF_CHUNK_LEN]>; 2]),
+    Corners([Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>; 4]),
 }
 
 /// A deferred update message.
 /// Indicates that an image or dirty rect should udpate.
 #[derive(Debug)]
 pub struct DeferredDirtyRectUpdate {
-    pub chunk_idx: usize,
-    pub pos: IVec2,
-    pub global_pos: IVec2,
-    pub center_idx: i32,
+    pub chunk_pos: ChunkPos,
 }
