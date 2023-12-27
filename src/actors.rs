@@ -13,7 +13,7 @@ pub fn add_actor(chunk_manager: &mut ChunkManager, actor: &Actor) {
     for x_off in 0..actor.width as i32 {
         for y_off in 0..actor.height as i32 {
             let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
-            chunk_manager[pos].actor = true;
+            chunk_manager.colliders.add_one(pos);
         }
     }
 }
@@ -102,8 +102,8 @@ pub fn move_x(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
 
         let chunk_pos1 = global_to_chunk(pos1);
         let chunk_pos2 = global_to_chunk(pos2);
-        chunk_manager[chunk_pos1].actor = true;
-        chunk_manager[chunk_pos2].actor = false;
+        chunk_manager.colliders.add_one(chunk_pos1);
+        chunk_manager.colliders.remove_one(chunk_pos2);
     }
     actor.pos.x += dir;
 
@@ -160,8 +160,8 @@ pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
 
         let chunk_pos1 = global_to_chunk(pos1);
         let chunk_pos2 = global_to_chunk(pos2);
-        chunk_manager[chunk_pos1].actor = true;
-        chunk_manager[chunk_pos2].actor = false;
+        chunk_manager.colliders.add_one(chunk_pos1);
+        chunk_manager.colliders.remove_one(chunk_pos2);
     }
 
     actor.pos.y += dir;

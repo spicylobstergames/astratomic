@@ -9,6 +9,7 @@ use crate::prelude::*;
 
 pub struct UpdateChunksType<'a> {
     pub group: ChunkGroup<'a>,
+    pub colliders: &'a ChunkColliders,
     pub dirty_update_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
     pub dirty_render_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
 }
@@ -51,7 +52,10 @@ pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
     }
 
     let (chunk_x, chunk_y) = (pos.x / CHUNK_LENGHT as i32, pos.y / CHUNK_LENGHT as i32);
-    let (x, y) = (pos.x as u32 % CHUNK_LENGHT as u32, pos.y as u32 % CHUNK_LENGHT as u32);
+    let (x, y) = (
+        pos.x as u32 % CHUNK_LENGHT as u32,
+        pos.y as u32 % CHUNK_LENGHT as u32,
+    );
 
     ChunkPos::new(uvec2(x, y), ivec2(chunk_x, chunk_y))
 }
@@ -116,12 +120,17 @@ pub fn swapable(
     dt: u8,
     state: State,
 ) -> bool {
+    let local_pos = global_to_local(pos);
+    let collidable = chunks
+        .colliders
+        .get_collider(&ChunkPos::new(local_pos.0.as_uvec2(), chunks.group.center_pos)).is_some();
+
     if let Some(atom) = chunks.group.get_global(pos) {
         (atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
                 state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
             }) && atom.updated_at != dt))
-            && (!atom.actor || state == State::Liquid)
+            && (!collidable || state == State::Liquid)
     } else {
         false
     }
@@ -463,28 +472,28 @@ pub fn update_dirty_rects(new_dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos
             new_dirty_rects.insert(chunk, URect::new(atom.x - 1, y, atom.x + 1, y));
         }
     } else {*/
-        // Case where the 3x3 position are is in the corner of a chunk
-        for y in -1..=1 {
-            for x in -1..=1 {
-                let mut global = chunk_to_global(chunk_pos);
-                global += ivec2(x, y);
-                let chunk_pos = global_to_chunk(global);
+    // Case where the 3x3 position are is in the corner of a chunk
+    for y in -1..=1 {
+        for x in -1..=1 {
+            let mut global = chunk_to_global(chunk_pos);
+            global += ivec2(x, y);
+            let chunk_pos = global_to_chunk(global);
 
-                if let Some(rect) = new_dirty_rects.get_mut(&chunk_pos.chunk) {
-                    extend_rect_if_needed(rect, &chunk_pos.atom)
-                } else {
-                    new_dirty_rects.insert(
-                        chunk_pos.chunk,
-                        URect::new(
-                            chunk_pos.atom.x,
-                            chunk_pos.atom.y,
-                            chunk_pos.atom.x,
-                            chunk_pos.atom.y,
-                        ),
-                    );
-                }
+            if let Some(rect) = new_dirty_rects.get_mut(&chunk_pos.chunk) {
+                extend_rect_if_needed(rect, &chunk_pos.atom)
+            } else {
+                new_dirty_rects.insert(
+                    chunk_pos.chunk,
+                    URect::new(
+                        chunk_pos.atom.x,
+                        chunk_pos.atom.y,
+                        chunk_pos.atom.x,
+                        chunk_pos.atom.y,
+                    ),
+                );
             }
         }
+    }
     //}
 }
 

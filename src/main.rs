@@ -18,7 +18,7 @@ mod prelude {
         actors::*, animation::*, atom::State, atom::*, chunk::*, chunk_group::*, chunk_manager::*,
         consts::*, debug::*, geom_tools::*, manager_api::*, player::*,
     };
-    pub use bevy::math::{ivec2, ivec3, vec2, vec3, uvec2, uvec3};
+    pub use bevy::math::{ivec2, ivec3, uvec2, uvec3, vec2, vec3};
     pub use bevy::prelude::*;
     pub use std::collections::{HashMap, HashSet};
 }
@@ -47,6 +47,8 @@ fn main() {
 fn setup(mut commands: Commands) {
     let mut camera = Camera2dBundle::default();
     camera.camera.hdr = true;
+    //camera.transform.scale.x = 0.67;
+    //camera.transform.scale.y = 0.67;
 
     commands.spawn(camera);
     commands.spawn(PreviousMousePos(None));

@@ -14,8 +14,6 @@ pub struct Atom {
     pub velocity: (i8, i8),
     // Frames idle
     pub f_idle: u8,
-    // Tells if there is an actor on the atom, will have an id on the future
-    pub actor: bool,
 }
 
 impl Atom {
@@ -27,7 +25,6 @@ impl Atom {
             fall_speed: 0,
             velocity: (0, 0),
             f_idle: 0,
-            actor: false,
         }
     }
 }

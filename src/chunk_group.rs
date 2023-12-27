@@ -22,15 +22,14 @@ impl<'a> ChunkGroup<'a> {
     }
 
     pub fn group_to_chunk(center_pos: IVec2, group_idx: i32) -> IVec2 {
-            let x_diff = group_idx % 3 - 1;
-            let y_diff = group_idx / 3 - 1;
+        let x_diff = group_idx % 3 - 1;
+        let y_diff = group_idx / 3 - 1;
 
-            let mut pos = center_pos;
-            pos.x += x_diff;
-            pos.y += y_diff;
+        let mut pos = center_pos;
+        pos.x += x_diff;
+        pos.y += y_diff;
 
-            pos
-        
+        pos
     }
 
     #[inline]

@@ -11,5 +11,5 @@ pub const CAMERA_SPEED: f32 = 10.;
 pub const GRAVITY: u8 = 1;
 pub const TERM_VEL: u8 = 10;
 pub const FRAMES_SLEEP: u8 = 4;
-pub const CHUNKS_WIDTH: usize = 16;
-pub const CHUNKS_HEIGHT: usize = 8;
+pub const CHUNKS_WIDTH: usize = 8;
+pub const CHUNKS_HEIGHT: usize = 6;

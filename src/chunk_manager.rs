@@ -12,6 +12,7 @@ use crate::prelude::*;
 #[derive(Component)]
 pub struct ChunkManager {
     pub chunks: HashMap<IVec2, Chunk>,
+    pub colliders: ChunkColliders,
     pub textures_hmap: HashMap<AssetId<Image>, IVec2>,
     pub dt: u8,
 }
@@ -45,6 +46,74 @@ impl std::ops::IndexMut<ChunkPos> for ChunkManager {
     #[track_caller]
     fn index_mut(&mut self, pos: ChunkPos) -> &mut Self::Output {
         self.get_mut_atom(pos).expect("Invalid index position.")
+    }
+}
+
+#[derive(Clone)]
+pub struct ChunkColliders {
+    data: HashMap<IVec2, HashMap<UVec2, u8>>,
+}
+
+impl ChunkColliders {
+    pub fn new() -> Self {
+        Self {
+            data: HashMap::new(),
+        }
+    }
+
+    pub fn get_collider(&self, pos: &ChunkPos) -> Option<&u8> {
+        if let Some(chunk) = self.data.get(&pos.chunk) {
+            chunk.get(&pos.atom)
+        } else {
+            None
+        }
+    }
+
+    pub fn get_mut_collider(&mut self, pos: ChunkPos) -> Option<&mut u8> {
+        if let Some(chunk) = self.data.get_mut(&pos.chunk) {
+            chunk.get_mut(&pos.atom)
+        } else {
+            None
+        }
+    }
+
+    pub fn add_one(&mut self, pos: ChunkPos) {
+        if let Some (chunk) = self.data.get_mut(&pos.chunk) {
+            if let Some(collider) = chunk.get_mut(&pos.atom) {
+                *collider += 1
+            } else {
+                chunk.insert(pos.atom, 1);
+            }
+        } else {
+            let mut chunk_hash = HashMap::new();
+            chunk_hash.insert(pos.atom, 1);
+            self.data.insert(pos.chunk, chunk_hash);
+        }
+    }
+
+    pub fn remove_one(&mut self, pos: ChunkPos) {
+        if self[pos] == 1 {
+            self.data.get_mut(&pos.chunk).unwrap().remove(&pos.atom);
+            if self.data.get_mut(&pos.chunk).unwrap().is_empty() {
+                self.data.remove(&pos.chunk);
+            }
+        } else {
+            self[pos] -= 1;
+        }
+    }
+}
+
+impl std::ops::Index<ChunkPos> for ChunkColliders {
+    type Output = u8;
+    #[track_caller]
+    fn index(&self, pos: ChunkPos) -> &Self::Output {
+        self.get_collider(&pos).expect("Invalid index position.")
+    }
+}
+impl std::ops::IndexMut<ChunkPos> for ChunkColliders {
+    #[track_caller]
+    fn index_mut(&mut self, pos: ChunkPos) -> &mut Self::Output {
+        self.get_mut_collider(pos).expect("Invalid index position.")
     }
 }
 
@@ -125,6 +194,7 @@ pub fn manager_setup(
 
     let mut chunk_manager = ChunkManager {
         chunks,
+        colliders: ChunkColliders::new(),
         dt: 0,
         textures_hmap,
     };
@@ -171,6 +241,7 @@ pub fn chunk_manager_update(
     mut dirty_rects: Query<&mut DirtyRects>,
 ) {
     let mut chunk_manager = chunk_manager.single_mut();
+    let colliders = &chunk_manager.colliders.clone();
 
     chunk_manager.dt = chunk_manager.dt.wrapping_add(1);
     let dt = chunk_manager.dt;
@@ -215,6 +286,14 @@ pub fn chunk_manager_update(
         deferred_scope.spawn(async move {
             // Clear the previous render rects
             *render_dirty_rects = HashMap::new();
+
+            //Update all rendering
+            for x in 0..CHUNKS_WIDTH {
+                for y in 0..CHUNKS_HEIGHT {
+                    render_dirty_rects
+                        .insert(IVec2::new(x as i32, y as i32), URect::new(0, 0, 63, 63));
+                }
+            }
 
             // Loop through deferred tasks
             while let Ok(update) = dirty_render_rects_recv.recv().await {
@@ -320,6 +399,7 @@ pub fn chunk_manager_update(
                                             group: chunk_group,
                                             dirty_update_rect_send,
                                             dirty_render_rect_send,
+                                            colliders
                                         },
                                         dt,
                                         rect,

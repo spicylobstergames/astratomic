@@ -67,12 +67,8 @@ fn brush(
         ) {
             let pos = transform_to_chunk(v.as_vec2());
 
-            //Checks if there is a atom at the pos and if we can draw on it
-            if let Some(atom) = chunk_manager.get_atom(&pos) {
-                if atom.actor {
-                    continue;
-                }
-            } else {
+            //Checks if there is a atom at the pos and if the pos is collidable, therefore not drawable
+            if chunk_manager.get_atom(&pos).is_none() || chunk_manager.colliders.get_collider(&pos).is_some() {
                 continue;
             }
 
@@ -184,6 +180,7 @@ impl Plugin for DebugPlugin {
                 render_dirty_rects.after(chunk_manager_update),
                 brush.after(chunk_manager_update),
                 prev_mpos.after(brush),
+                //_camera 
             ),
         );
     }
