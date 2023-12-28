@@ -68,7 +68,9 @@ fn brush(
             let pos = transform_to_chunk(v.as_vec2());
 
             //Checks if there is a atom at the pos and if the pos is collidable, therefore not drawable
-            if chunk_manager.get_atom(&pos).is_none() || chunk_manager.colliders.get_collider(&pos).is_some() {
+            if chunk_manager.get_atom(&pos).is_none()
+                || chunk_manager.colliders.get_collider(&pos).is_some()
+            {
                 continue;
             }
 
@@ -168,6 +170,42 @@ pub fn render_dirty_rects(
     }
 }
 
+fn render_actors(
+    mut commands: Commands,
+    actors: Query<&Actor>,
+    actor_images: Query<Entity, With<ActorImage>>,
+) {
+    for actor in actor_images.iter() {
+        commands.entity(actor).despawn();
+    }
+
+    for actor in actors.iter() {
+        // Rectangle
+        commands
+            .spawn(SpriteBundle {
+                sprite: Sprite {
+                    color: Color::rgba(0.75, 0.25, 0.25, 0.2),
+                    custom_size: Some(Vec2::new(
+                        actor.width as f32 * ATOM_SIZE as f32,
+                        actor.height as f32 * ATOM_SIZE as f32,
+                    )),
+                    anchor: Anchor::TopLeft,
+                    ..default()
+                },
+                transform: Transform::from_translation(Vec3::new(
+                    actor.pos.x as f32 * ATOM_SIZE as f32,
+                    -actor.pos.y as f32 * ATOM_SIZE as f32,
+                    1.,
+                )),
+                ..default()
+            })
+            .insert(DirtyRect);
+    }
+}
+
+#[derive(Component)]
+pub struct ActorImage;
+
 #[derive(Component)]
 pub struct DirtyRect;
 
@@ -179,8 +217,9 @@ impl Plugin for DebugPlugin {
             (
                 render_dirty_rects.after(chunk_manager_update),
                 brush.after(chunk_manager_update),
+                render_actors.after(update_actors),
                 prev_mpos.after(brush),
-                //_camera 
+                //_camera
             ),
         );
     }

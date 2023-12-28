@@ -123,7 +123,11 @@ pub fn swapable(
     let local_pos = global_to_local(pos);
     let collidable = chunks
         .colliders
-        .get_collider(&ChunkPos::new(local_pos.0.as_uvec2(), chunks.group.center_pos)).is_some();
+        .get_collider(&ChunkPos::new(
+            local_pos.0.as_uvec2(),
+            chunks.group.center_pos,
+        ))
+        .is_some();
 
     if let Some(atom) = chunks.group.get_global(pos) {
         (atom.state == State::Void

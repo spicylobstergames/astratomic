@@ -6,6 +6,7 @@ pub const CHUNK_LEN: usize = CHUNK_LENGHT * CHUNK_LENGHT;
 pub const HALF_CHUNK_LEN: usize = CHUNK_LEN / 2;
 pub const QUARTER_CHUNK_LEN: usize = CHUNK_LEN / 4;
 
+pub const STAIR_WALK_HEIGHT: usize = 3;
 pub const ATOM_SIZE: usize = 3;
 pub const CAMERA_SPEED: f32 = 10.;
 pub const GRAVITY: u8 = 1;

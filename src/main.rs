@@ -47,8 +47,8 @@ fn main() {
 fn setup(mut commands: Commands) {
     let mut camera = Camera2dBundle::default();
     camera.camera.hdr = true;
-    //camera.transform.scale.x = 0.67;
-    //camera.transform.scale.y = 0.67;
+    camera.transform.scale.x = 0.67;
+    camera.transform.scale.y = 0.67;
 
     commands.spawn(camera);
     commands.spawn(PreviousMousePos(None));

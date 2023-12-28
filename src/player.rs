@@ -50,11 +50,12 @@ pub fn update_player(
     let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
     actor.vel.x = x * RUN_SPEED;
 
-    // Jump and Jetpack
+    // Refuel
     if on_ground {
         player.fuel = (player.fuel + FUEL_REGEN).clamp(0., Player::default().fuel);
     }
 
+    // Jump and Jetpack
     if keys.just_pressed(KeyCode::Space) {
         if on_ground {
             actor.vel.y -= JUMP_MAG;

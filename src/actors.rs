@@ -39,16 +39,50 @@ pub fn update_actors(mut chunk_manager: Query<&mut ChunkManager>, mut actors: Qu
 
     for mut actor in actors.iter_mut() {
         let mut prev = actor.pos;
-        for v in Line::new(actor.pos, actor.vel.as_ivec2()) {
-            if prev.x != v.x {
-                if !move_x(&mut chunk_manager, &mut actor, v.x - prev.x) {
-                    break;
-                }
-            } else if !move_y(&mut chunk_manager, &mut actor, v.y - prev.y) {
-                break;
+        'pos: for v in Line::new(actor.pos, actor.vel.as_ivec2()) {
+            let move_hor;
+            match (prev.x != v.x, prev.y != v.y) {
+                (true, false) => move_hor = true,
+                (false, true) => move_hor = false,
+                (true, true) => move_hor = fastrand::bool(),
+                _ => unreachable!(),
             }
+
+            if move_hor {
+                if !move_x(&mut chunk_manager, &mut actor, v.x - prev.x) {
+                    //If we can't move to the left or right
+                    //Check if we can get up a stair-like structure
+                    //TODO for now we only can get up a atom, maybe it is good to smoothly go down a atom too
+                    let starting_y = actor.pos.y;
+                    for i in 0..STAIR_WALK_HEIGHT {
+                        if move_y(&mut chunk_manager, &mut actor, -1) {
+                            if i == STAIR_WALK_HEIGHT - 1 {
+                                //Walk horizontaly after height adjustments on the last step
+                                if move_x(&mut chunk_manager, &mut actor, v.x - prev.x) {
+                                    //We climbed up or down a stair!
+                                    break 'pos;
+                                }
+                                abort_stair(&mut chunk_manager, &mut actor, starting_y);
+                                break;
+                            }
+                        } else {
+                            abort_stair(&mut chunk_manager, &mut actor, starting_y);
+                            break;
+                        }
+                    }
+                }
+            } else {
+                move_y(&mut chunk_manager, &mut actor, v.y - prev.y);
+            }
+
             prev = v;
         }
+    }
+}
+
+pub fn abort_stair(chunk_manager: &mut ChunkManager, actor: &mut Actor, starting_y: i32) {
+    for _ in 0..(starting_y - actor.pos.y) {
+        move_y(chunk_manager, actor, 1);
     }
 }
 

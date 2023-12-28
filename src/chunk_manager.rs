@@ -78,7 +78,7 @@ impl ChunkColliders {
     }
 
     pub fn add_one(&mut self, pos: ChunkPos) {
-        if let Some (chunk) = self.data.get_mut(&pos.chunk) {
+        if let Some(chunk) = self.data.get_mut(&pos.chunk) {
             if let Some(collider) = chunk.get_mut(&pos.atom) {
                 *collider += 1
             } else {
@@ -399,7 +399,7 @@ pub fn chunk_manager_update(
                                             group: chunk_group,
                                             dirty_update_rect_send,
                                             dirty_render_rect_send,
-                                            colliders
+                                            colliders,
                                         },
                                         dt,
                                         rect,
