@@ -76,7 +76,10 @@ pub fn update_player(
     //Animation
     if player.jetpack {
         anim_idxs.first = 24;
-        anim_idxs.last = 24;
+        anim_idxs.last = 26;
+    } else if !on_ground && player.fuel < FUEL_MAX {
+        anim_idxs.first = 32;
+        anim_idxs.last = 32;
     } else if just_jumped {
         anim_idxs.first = 16;
         anim_idxs.last = 23;

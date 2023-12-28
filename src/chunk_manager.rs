@@ -209,7 +209,7 @@ pub fn manager_setup(
 
     let texture_handle = asset_server.load("player/player_sheet.png");
     let texture_atlas =
-        TextureAtlas::from_grid(texture_handle, Vec2::new(24.0, 24.0), 8, 4, None, None);
+        TextureAtlas::from_grid(texture_handle, Vec2::new(24.0, 24.0), 8, 5, None, None);
     let texture_atlas_handle = texture_atlases.add(texture_atlas);
     let animation_indices = AnimationIndices { first: 0, last: 1 };
     let mut transform = Transform::from_scale(Vec3::splat(3.0));
