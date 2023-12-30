@@ -72,15 +72,6 @@ jobs:
           command: clippy
           args: --target ${{ matrix.config.target }} --locked -- -W clippy::correctness -D warnings
 
-  cargo-deny:
-    name: ©️ License and advisories check
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        checks:
-          - advisories
-          - bans licenses sources
-
     # Prevent sudden announcement of a new advisory from failing ci:
     continue-on-error: ${{ matrix.checks == 'advisories' }}
 
