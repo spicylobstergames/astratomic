@@ -1,6 +1,7 @@
 use std::ops::Range;
 use std::panic;
 
+use itertools::Itertools;
 use rand::Rng;
 
 use async_channel::Sender;
@@ -34,7 +35,7 @@ pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
 
         chunks
             .dirty_render_rect_send
-            .send_blocking(DeferredDirtyRectUpdate {
+            .try_send(DeferredDirtyRectUpdate {
                 chunk_pos: ChunkPos::new(pos.try_into().unwrap(), chunk),
             })
             .unwrap();
@@ -318,6 +319,11 @@ pub fn updown_to_leftright(
     (left.try_into().unwrap(), right.try_into().unwrap())
 }
 
+//This splits up our chunks for the update step, while also mutably borrowing them, making a `ChunkReference`
+//Some chunks are not chopped others are chopped up/down, left/right, and also in four corners.
+//We do this because each center chunk needs half of the adjacent chunks
+//So it needs up/down/left/right halves, and also four corners
+//TODO Remove HashMap iter; Decrease individual atoms iterations to get a &mut Atom;
 pub fn get_mutable_references<'a>(
     chunks: &'a mut HashMap<IVec2, Chunk>,
     mutable_references: &mut HashMap<IVec2, ChunkReference<'a>>,
@@ -329,24 +335,14 @@ pub fn get_mutable_references<'a>(
 
         match (same_x, same_y) {
             (true, true) => {
-                mutable_references.insert(
-                    *chunk_pos,
-                    ChunkReference::Center(
-                        chunk
-                            .atoms
-                            .iter_mut()
-                            .collect::<Vec<_>>()
-                            .try_into()
-                            .unwrap(),
-                    ),
-                );
+                mutable_references.insert(*chunk_pos, ChunkReference::Center(&mut chunk.atoms));
             }
             (true, false) => {
                 let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
 
                 mutable_references.insert(
                     *chunk_pos,
-                    ChunkReference::Sides([
+                    ChunkReference::Side([
                         Some(up.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
                         Some(down.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
                     ]),
@@ -356,7 +352,7 @@ pub fn get_mutable_references<'a>(
                 let (left, right) = split_left_right(&mut chunk.atoms);
 
                 mutable_references
-                    .insert(*chunk_pos, ChunkReference::Sides([Some(left), Some(right)]));
+                    .insert(*chunk_pos, ChunkReference::Side([Some(left), Some(right)]));
             }
 
             (false, false) => {
@@ -367,7 +363,7 @@ pub fn get_mutable_references<'a>(
 
                 mutable_references.insert(
                     *chunk_pos,
-                    ChunkReference::Corners([
+                    ChunkReference::Corner([
                         Some(up_left),
                         Some(up_right),
                         Some(down_left),
@@ -379,40 +375,35 @@ pub fn get_mutable_references<'a>(
     });
 }
 
-// TODO make function less verbose
-pub fn update_dirty_rects(new_dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos: ChunkPos) {
+//This function gets a single ChunkPos and makes sure that we update the 3x3 surrounding atoms
+pub fn update_dirty_rects(dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos: ChunkPos) {
     let atom = chunk_pos.atom;
     let mut chunk = chunk_pos.chunk;
 
-    /*if (1..62).contains(&atom.x) && (1..62).contains(&atom.y) {
+    if (1..62).contains(&atom.x) && (1..62).contains(&atom.y) {
         // Case where the 3x3 position area is within a chunk
-        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
+        if let Some(rect) = dirty_rects.get_mut(&chunk) {
             extend_rect_if_needed(rect, &(atom + UVec2::ONE));
             extend_rect_if_needed(rect, &(atom - UVec2::ONE));
         } else {
-            new_dirty_rects.insert(
+            dirty_rects.insert(
                 chunk,
                 URect::new(atom.x - 1, atom.y - 1, atom.x + 1, atom.y + 1),
             );
         }
     } else if (atom.x == 0 || atom.x == 63) && (1..62).contains(&atom.y) {
         // Case where the 3x3 position area is in another chunk into the left or right
-        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
+        if let Some(rect) = dirty_rects.get_mut(&chunk) {
             extend_rect_if_needed(
                 rect,
-                &(atom
-                    - if atom.x == 0 {
-                        UVec2::Y
-                    } else {
-                        UVec2::ONE
-                    }),
+                &(atom - if atom.x == 0 { UVec2::Y } else { UVec2::ONE }),
             );
             extend_rect_if_needed(
                 rect,
                 &(atom + if atom.x == 0 { UVec2::ONE } else { UVec2::Y }),
             );
         } else {
-            new_dirty_rects.insert(
+            dirty_rects.insert(
                 chunk,
                 URect::new(
                     atom.x - if atom.x == 0 { 0 } else { 1 },
@@ -429,30 +420,25 @@ pub fn update_dirty_rects(new_dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos
         } else {
             chunk.x += 1
         }
-        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
+        if let Some(rect) = dirty_rects.get_mut(&chunk) {
             extend_rect_if_needed(rect, &(uvec2(x, atom.y + 1)));
             extend_rect_if_needed(rect, &(uvec2(x, atom.y - 1)));
         } else {
-            new_dirty_rects.insert(chunk, URect::new(x, atom.y - 1, x, atom.y + 1));
+            dirty_rects.insert(chunk, URect::new(x, atom.y - 1, x, atom.y + 1));
         }
     } else if (atom.y == 0 || atom.y == 63) && (1..62).contains(&atom.x) {
         // Case where the 3x3 position area is in another chunk into the up or down
-        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
+        if let Some(rect) = dirty_rects.get_mut(&chunk) {
             extend_rect_if_needed(
                 rect,
-                &(atom
-                    - if atom.y == 0 {
-                        UVec2::X
-                    } else {
-                        UVec2::ONE
-                    }),
+                &(atom - if atom.y == 0 { UVec2::X } else { UVec2::ONE }),
             );
             extend_rect_if_needed(
                 rect,
                 &(atom + if atom.y == 0 { UVec2::ONE } else { UVec2::X }),
             );
         } else {
-            new_dirty_rects.insert(
+            dirty_rects.insert(
                 chunk,
                 URect::new(
                     atom.x - 1,
@@ -469,24 +455,23 @@ pub fn update_dirty_rects(new_dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos
         } else {
             chunk.y += 1
         }
-        if let Some(rect) = new_dirty_rects.get_mut(&chunk) {
+        if let Some(rect) = dirty_rects.get_mut(&chunk) {
             extend_rect_if_needed(rect, &(uvec2(atom.x + 1, y)));
             extend_rect_if_needed(rect, &(uvec2(atom.x - 1, y)));
         } else {
-            new_dirty_rects.insert(chunk, URect::new(atom.x - 1, y, atom.x + 1, y));
+            dirty_rects.insert(chunk, URect::new(atom.x - 1, y, atom.x + 1, y));
         }
-    } else {*/
-    // Case where the 3x3 position are is in the corner of a chunk
-    for y in -1..=1 {
-        for x in -1..=1 {
+    } else {
+        // Case where the 3x3 position is in the corner of a chunk
+        for (x, y) in (-1..=1).cartesian_product(-1..=1) {
             let mut global = chunk_to_global(chunk_pos);
             global += ivec2(x, y);
             let chunk_pos = global_to_chunk(global);
 
-            if let Some(rect) = new_dirty_rects.get_mut(&chunk_pos.chunk) {
+            if let Some(rect) = dirty_rects.get_mut(&chunk_pos.chunk) {
                 extend_rect_if_needed(rect, &chunk_pos.atom)
             } else {
-                new_dirty_rects.insert(
+                dirty_rects.insert(
                     chunk_pos.chunk,
                     URect::new(
                         chunk_pos.atom.x,
@@ -498,7 +483,6 @@ pub fn update_dirty_rects(new_dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos
             }
         }
     }
-    //}
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -514,9 +498,12 @@ impl ChunkPos {
 }
 
 pub enum ChunkReference<'a> {
-    Center([&'a mut Atom; CHUNK_LEN]),
-    Sides([Option<[&'a mut Atom; HALF_CHUNK_LEN]>; 2]),
-    Corners([Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>; 4]),
+    //Not chopped
+    Center(&'a mut [Atom; CHUNK_LEN]),
+    //Chopped in two
+    Side([Option<[&'a mut Atom; HALF_CHUNK_LEN]>; 2]),
+    //Chopped in four
+    Corner([Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>; 4]),
 }
 
 /// A deferred update message.

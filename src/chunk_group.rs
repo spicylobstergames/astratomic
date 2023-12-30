@@ -12,7 +12,7 @@ pub struct ChunkGroup<'a> {
 }
 
 impl<'a> ChunkGroup<'a> {
-    pub fn new(center: [&'a mut Atom; CHUNK_LEN], center_pos: IVec2) -> Self {
+    pub fn new(center: &'a mut [Atom; CHUNK_LEN], center_pos: IVec2) -> Self {
         Self {
             center,
             corners: [None, None, None, None],

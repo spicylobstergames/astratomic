@@ -3,13 +3,6 @@ use bevy::sprite::Anchor;
 use rand::Rng;
 
 //TODO add a debug mode
-fn _camera(keys: Res<Input<KeyCode>>, mut camera_q: Query<&mut Transform, With<Camera>>) {
-    let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
-    let y = -(keys.pressed(KeyCode::S) as u8 as f32) + keys.pressed(KeyCode::W) as u8 as f32;
-
-    let v = Vec2::new(x, y).normalize_or_zero().extend(0.);
-    camera_q.single_mut().translation += v * CAMERA_SPEED;
-}
 
 fn brush(
     window: Query<&Window>,
@@ -61,9 +54,8 @@ fn brush(
         let prev_mpos = prev_mpos.single().0.unwrap();
 
         for v in Line::new(
-            IVec2::new(prev_mpos.x as i32, prev_mpos.y as i32),
-            IVec2::new(world_position.x as i32, world_position.y as i32)
-                - IVec2::new(prev_mpos.x as i32, prev_mpos.y as i32),
+            prev_mpos.as_ivec2(),
+            world_position.as_ivec2() - prev_mpos.as_ivec2(),
         ) {
             let pos = transform_to_chunk(v.as_vec2());
 
@@ -127,60 +119,49 @@ fn prev_mpos(
     }
 }
 
-pub fn render_dirty_rects(
-    mut commands: Commands,
-    dirty_rects: Query<&DirtyRects>,
-    rects: Query<Entity, With<DirtyRect>>,
-) {
-    let dirty_rects = &dirty_rects.single().current;
+//Debug Render systems
 
-    for rect in rects.iter() {
-        commands.entity(rect).despawn();
-    }
+pub fn render_dirty_rects(mut commands: Commands, dirty_rects: Query<&DirtyRects>) {
+    let dirty_rects = dirty_rects.single();
+    let (dirty_update, render_update) = (&dirty_rects.new, &dirty_rects.render);
 
-    for (chunk_pos, rect) in dirty_rects {
-        // Rectangle
-        commands
-            .spawn(SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(0.25, 0.25, 0.75, 0.2),
-                    custom_size: Some(
-                        UVec2::new(
-                            (rect.max.x - rect.min.x + 1) * ATOM_SIZE as u32,
-                            (rect.max.y - rect.min.y + 1) * ATOM_SIZE as u32,
+    let mut i = 0.;
+    for rect in [dirty_update, render_update] {
+        for (chunk_pos, rect) in rect {
+            commands
+                .spawn(SpriteBundle {
+                    sprite: Sprite {
+                        color: Color::rgba(i, 0.25, if i == 0. { 1. } else { 0. }, 0.1),
+                        custom_size: Some(
+                            UVec2::new(
+                                (rect.max.x - rect.min.x + 1) * ATOM_SIZE as u32,
+                                (rect.max.y - rect.min.y + 1) * ATOM_SIZE as u32,
+                            )
+                            .as_vec2(),
+                        ),
+                        anchor: Anchor::TopLeft,
+                        ..default()
+                    },
+                    transform: Transform::from_translation(
+                        IVec3::new(
+                            chunk_pos.x * (CHUNK_LENGHT * ATOM_SIZE) as i32
+                                + (rect.min.x as i32 * ATOM_SIZE as i32),
+                            -(chunk_pos.y * (CHUNK_LENGHT * ATOM_SIZE) as i32)
+                                - (rect.min.y as i32 * ATOM_SIZE as i32),
+                            1,
                         )
-                        .as_vec2(),
+                        .as_vec3(),
                     ),
-                    anchor: Anchor::TopLeft,
                     ..default()
-                },
-                transform: Transform::from_translation(
-                    IVec3::new(
-                        chunk_pos.x * (CHUNK_LENGHT * ATOM_SIZE) as i32
-                            + (rect.min.x as i32 * ATOM_SIZE as i32),
-                        -(chunk_pos.y * (CHUNK_LENGHT * ATOM_SIZE) as i32)
-                            - (rect.min.y as i32 * ATOM_SIZE as i32),
-                        1,
-                    )
-                    .as_vec3(),
-                ),
-                ..default()
-            })
-            .insert(DirtyRect);
+                })
+                .insert(DeleteImage);
+        }
+        i += 1.;
     }
 }
 
-fn render_actors(
-    mut commands: Commands,
-    actors: Query<&Actor>,
-    actor_images: Query<Entity, With<ActorImage>>,
-) {
-    for actor in actor_images.iter() {
-        commands.entity(actor).despawn();
-    }
-
+fn render_actors(mut commands: Commands, actors: Query<&Actor>) {
     for actor in actors.iter() {
-        // Rectangle
         commands
             .spawn(SpriteBundle {
                 sprite: Sprite {
@@ -199,15 +180,26 @@ fn render_actors(
                 )),
                 ..default()
             })
-            .insert(DirtyRect);
+            .insert(DeleteImage);
+    }
+}
+
+pub fn delete_image(mut commands: Commands, debug_images: Query<Entity, With<DeleteImage>>) {
+    for image in debug_images.iter() {
+        commands.entity(image).despawn();
     }
 }
 
 #[derive(Component)]
-pub struct ActorImage;
+pub struct DeleteImage;
 
-#[derive(Component)]
-pub struct DirtyRect;
+fn _camera(keys: Res<Input<KeyCode>>, mut camera_q: Query<&mut Transform, With<Camera>>) {
+    let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
+    let y = -(keys.pressed(KeyCode::S) as u8 as f32) + keys.pressed(KeyCode::W) as u8 as f32;
+
+    let v = Vec2::new(x, y).normalize_or_zero().extend(0.);
+    camera_q.single_mut().translation += v * CAMERA_SPEED;
+}
 
 pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
@@ -215,12 +207,13 @@ impl Plugin for DebugPlugin {
         app.add_systems(
             Update,
             (
-                render_dirty_rects.after(chunk_manager_update),
+                render_dirty_rects.after(update_actors),
                 brush.after(chunk_manager_update),
                 render_actors.after(update_actors),
                 prev_mpos.after(brush),
                 //_camera
             ),
-        );
+        )
+        .add_systems(PreUpdate, delete_image);
     }
 }

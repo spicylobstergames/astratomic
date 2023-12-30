@@ -1,3 +1,6 @@
+use bevy::sprite::Anchor;
+
+use crate::atom::State;
 use crate::prelude::*;
 
 #[derive(Component)]
@@ -15,6 +18,11 @@ impl Default for Player {
     }
 }
 
+#[derive(Component, Default)]
+pub struct Tool {
+    atoms: Vec<Atom>,
+}
+
 // Player consts
 const FUEL_MAX: f32 = 50.;
 const FUEL_REGEN: f32 = 1.;
@@ -24,21 +32,79 @@ const JETPACK_FORCE: f32 = 1.5;
 const JETPACK_MAX: f32 = 3.;
 const RUN_SPEED: f32 = 5.;
 
+pub fn player_setup(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut chunk_manager: Query<&mut ChunkManager>,
+) {
+    let mut chunk_manager = chunk_manager.single_mut();
+    let player_actor = Actor {
+        height: 17,
+        width: 10,
+        pos: ivec2(0, 0),
+        vel: vec2(0., 0.),
+    };
+    add_actor(&mut chunk_manager, &player_actor);
+
+    let player_handle = asset_server.load("player/player_sheet.png");
+    let player_atlas =
+        TextureAtlas::from_grid(player_handle, Vec2::new(24.0, 24.0), 8, 5, None, None);
+    let player_atlas_handle = texture_atlases.add(player_atlas);
+    let animation_indices = AnimationIndices { first: 0, last: 1 };
+    let mut player_transform = Transform::from_scale(Vec3::splat(3.0));
+    player_transform.translation = vec2(5. * 3., -8. * 3.).extend(2.);
+
+    let tool_handle = asset_server.load("player/player_tool.png");
+    let tool_bundle = SpriteBundle {
+        texture: tool_handle,
+        sprite: Sprite {
+            anchor: Anchor::CenterLeft,
+            ..Default::default()
+        },
+        transform: Transform::from_translation(Vec3::new(-3., -3.5, 1.)),
+        ..Default::default()
+    };
+    let tool_ent = commands.spawn(tool_bundle).insert(Tool::default()).id();
+
+    commands
+        .spawn((
+            player_actor,
+            Player::default(),
+            SpriteSheetBundle {
+                texture_atlas: player_atlas_handle,
+                sprite: TextureAtlasSprite::new(animation_indices.first),
+                transform: player_transform,
+                ..default()
+            },
+            animation_indices,
+            AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
+        ))
+        .add_child(tool_ent);
+}
+
 /// Updates player
 pub fn update_player(
+    mouse: Res<Input<MouseButton>>,
     keys: ResMut<Input<KeyCode>>,
-    mut query: Query<(
+    window: Query<&Window>,
+    mut player: Query<(
         &mut Actor,
         &mut Player,
         &mut TextureAtlasSprite,
         &mut AnimationIndices,
     )>,
-    chunk_manager: Query<&ChunkManager>,
+    mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
+    camera_q: Query<(&Camera, &GlobalTransform)>,
+    mut chunk_manager: Query<&mut ChunkManager>,
+    mut dirty_rects: Query<&mut DirtyRects>,
 ) {
-    let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = query.single_mut();
-    let chunk_manager = chunk_manager.single();
+    let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = player.single_mut();
+    let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
 
-    let on_ground = on_ground(chunk_manager, &actor);
+    let mut chunk_manager = chunk_manager.single_mut();
+
+    let on_ground = on_ground(&chunk_manager, &actor);
     let mut just_jumped = false;
 
     // Gravity
@@ -92,17 +158,107 @@ pub fn update_player(
             anim_idxs.last = 1;
         }
     }
-    if x.abs() > 0. {
-        textatlas_sprite.flip_x = x < 0.;
-    }
 
-    // Weapon
-    let top_corner_vec = vec3(
-        actor.pos.x as f32 * ATOM_SIZE as f32,
-        -actor.pos.y as f32 * ATOM_SIZE as f32,
-        2.,
-    );
-    //let center_vec = top_corner_vec + vec3(actor.width as f32 / 2., actor.height as f32 / 2., 0.);
+    // Tool
+    let (camera, camera_transform) = camera_q.single();
+    let window = window.single();
+    if let Some(world_position) = window
+        .cursor_position()
+        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+        .map(|ray| ray.origin.truncate())
+    {
+        //Rotate and move sprite
+        let center_vec = tool_gtransform.compute_transform().translation.xy();
+        let tool_vec = world_position - center_vec;
+        let angle = tool_vec.y.atan2(tool_vec.x);
+        tool_transform.rotation = Quat::from_rotation_z(angle);
+
+        let flip_bool = angle.abs() > std::f32::consts::FRAC_PI_2;
+        textatlas_sprite.flip_x = flip_bool;
+        tool_sprite.flip_y = flip_bool;
+        tool_transform.translation.x =
+            tool_transform.translation.x.abs() * (flip_bool as i8 * 2 - 1) as f32;
+
+        const TOOL_DISTANCE: f32 = 32.;
+        const TOOL_RANGE: f32 = 12.;
+
+        let mut center_vec_y_flipped = center_vec;
+        center_vec_y_flipped.y *= -1.;
+        center_vec_y_flipped /= ATOM_SIZE as f32;
+
+        let tool_slope = Vec2::new(angle.cos(), -angle.sin());
+        let tool_front = center_vec_y_flipped + tool_slope * 8.;
+
+        let bound_slope = Vec2::new((angle + std::f32::consts::FRAC_PI_2).cos(), -(angle).cos());
+
+        let mut pos_to_update = vec![];
+
+        if mouse.pressed(MouseButton::Right) {
+            let new_tool_front = tool_front + tool_slope * 6.;
+            for i in 0..3 {
+                for vec in Line::new(
+                    (new_tool_front - bound_slope * 3. + tool_slope * i as f32 * 2.).as_ivec2(),
+                    (bound_slope * 3.).as_ivec2(),
+                ) {
+                    let chunk_pos = global_to_chunk(vec);
+                    if let (Some(atom), Some(mut tool_atom)) =
+                        (chunk_manager.get_mut_atom(chunk_pos), tool.atoms.pop())
+                    {
+                        if atom.state == State::Void {
+                            let vel = tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8);
+
+                            tool_atom.velocity = (vel.x as i8, vel.y as i8);
+                            chunk_manager[chunk_pos] = tool_atom;
+
+                            pos_to_update.push(chunk_pos);
+                        }
+                    }
+                }
+            }
+        } else if mouse.pressed(MouseButton::Left) {
+            let center_bound = tool_front + tool_slope * TOOL_DISTANCE;
+
+            let bound1 = (center_bound + bound_slope * TOOL_RANGE).as_ivec2();
+            let bound2 = (center_bound + -bound_slope * TOOL_RANGE).as_ivec2();
+
+            for bound_vec in Line::new(bound1, bound2 - bound1) {
+                for vec in Line::new(tool_front.as_ivec2(), bound_vec - tool_front.as_ivec2()) {
+                    let chunk_pos = global_to_chunk(vec);
+                    if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
+                        if atom.state != State::Void {
+                            tool.atoms.push(atom.clone());
+                            *atom = Atom::new();
+                            pos_to_update.push(chunk_pos);
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        let mut dirty_rects = dirty_rects.single_mut();
+        for pos in pos_to_update {
+            // Update simultation rect
+            if let Some(dirty_rect) = dirty_rects.current.get_mut(&pos.chunk) {
+                extend_rect_if_needed(dirty_rect, &pos.atom)
+            } else {
+                dirty_rects.current.insert(
+                    pos.chunk,
+                    URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
+                );
+            }
+
+            // Update render rect
+            if let Some(dirty_rect) = dirty_rects.render.get_mut(&pos.chunk) {
+                extend_rect_if_needed(dirty_rect, &pos.atom)
+            } else {
+                dirty_rects.render.insert(
+                    pos.chunk,
+                    URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
+                );
+            }
+        }
+    }
 }
 
 pub fn update_player_sprite(
@@ -136,6 +292,7 @@ impl Plugin for PlayerPlugin {
                 update_player.before(update_actors),
                 update_player_sprite.after(update_actors),
             ),
-        );
+        )
+        .add_systems(PostStartup, player_setup.after(manager_setup));
     }
 }

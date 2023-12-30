@@ -1,4 +1,6 @@
 use bevy::render::render_resource::*;
+use rand::Rng;
+use std::cmp::Ordering;
 use std::collections::HashSet;
 
 use crate::prelude::*;
@@ -11,8 +13,25 @@ pub struct Chunk {
 
 impl Chunk {
     pub fn new(texture: Handle<Image>, index: IVec2) -> Chunk {
+        let mut atoms = [Atom::new(); CHUNK_LEN];
+
+        match index.y.cmp(&2) {
+            Ordering::Less => {}
+            _ => {
+                for atom in &mut atoms {
+                    atom.state = crate::prelude::State::Powder;
+                    atom.color = [
+                        (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                        (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                        (92 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                        255,
+                    ];
+                }
+            }
+        }
+
         Chunk {
-            atoms: [Atom::new(); CHUNK_LEN],
+            atoms,
             texture,
             index,
         }
