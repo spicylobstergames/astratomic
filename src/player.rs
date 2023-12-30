@@ -23,15 +23,6 @@ pub struct Tool {
     atoms: Vec<Atom>,
 }
 
-// Player consts
-const FUEL_MAX: f32 = 50.;
-const FUEL_REGEN: f32 = 1.;
-const FUEL_COMSUMPTON: f32 = 0.48;
-const JUMP_MAG: f32 = 13.;
-const JETPACK_FORCE: f32 = 1.5;
-const JETPACK_MAX: f32 = 3.;
-const RUN_SPEED: f32 = 5.;
-
 pub fn player_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -39,6 +30,7 @@ pub fn player_setup(
     mut chunk_manager: Query<&mut ChunkManager>,
 ) {
     let mut chunk_manager = chunk_manager.single_mut();
+
     let player_actor = Actor {
         height: 17,
         width: 10,
@@ -101,11 +93,7 @@ pub fn update_player(
     let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = player.single_mut();
     let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
     let (mouse, keys) = input;
-
     let mut chunk_manager = chunk_manager.single_mut();
-
-    let on_ground = on_ground(&chunk_manager, &actor);
-    let mut just_jumped = false;
 
     // Gravity
     if actor.vel.y < TERM_VEL as f32 {
@@ -117,11 +105,13 @@ pub fn update_player(
     actor.vel.x = x * RUN_SPEED;
 
     // Refuel
+    let on_ground = on_ground(&chunk_manager, &actor);
     if on_ground {
         player.fuel = (player.fuel + FUEL_REGEN).clamp(0., Player::default().fuel);
     }
 
     // Jump and Jetpack
+    let mut just_jumped = false;
     if keys.just_pressed(KeyCode::Space) {
         if on_ground {
             actor.vel.y -= JUMP_MAG;
@@ -179,20 +169,16 @@ pub fn update_player(
         tool_transform.translation.x =
             tool_transform.translation.x.abs() * (flip_bool as i8 * 2 - 1) as f32;
 
-        const TOOL_DISTANCE: f32 = 32.;
-        const TOOL_RANGE: f32 = 12.;
-
+        //Tool shooting and sucking atoms
         let mut center_vec_y_flipped = center_vec;
         center_vec_y_flipped.y *= -1.;
         center_vec_y_flipped /= ATOM_SIZE as f32;
 
         let tool_slope = Vec2::new(angle.cos(), -angle.sin());
+        let bound_slope = Vec2::new((angle + std::f32::consts::FRAC_PI_2).cos(), -(angle).cos());
         let tool_front = center_vec_y_flipped + tool_slope * 8.;
 
-        let bound_slope = Vec2::new((angle + std::f32::consts::FRAC_PI_2).cos(), -(angle).cos());
-
         let mut pos_to_update = vec![];
-
         if mouse.pressed(MouseButton::Right) {
             let new_tool_front = tool_front + tool_slope * 6.;
             for i in 0..3 {

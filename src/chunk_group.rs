@@ -7,7 +7,7 @@ pub struct ChunkGroup<'a> {
     pub center: &'a mut [Atom; CHUNK_LEN],
     pub corners: ChunkCorners<'a>,
     pub sides: ChunkSides<'a>,
-    // The pos of the center chunk on the chunk manager vec
+    /// Position of the center chunk.
     pub center_pos: IVec2,
 }
 

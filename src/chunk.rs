@@ -19,7 +19,7 @@ impl Chunk {
             Ordering::Less => {}
             _ => {
                 for atom in &mut atoms {
-                    atom.state = crate::prelude::State::Powder;
+                    atom.state = State::Powder;
                     atom.color = [
                         (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
                         (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
@@ -50,6 +50,7 @@ impl Chunk {
         )
     }
 
+    //This uses the CPU and is not used in-game anymore
     pub fn update_image_positions(&self, image: &mut Image, positions: &HashSet<IVec2>) {
         for pos in positions {
             let pixel_index = (pos.y as usize * CHUNK_LENGHT + pos.x as usize) * 4;
