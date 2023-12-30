@@ -51,6 +51,7 @@ jobs:
         if: matrix.config.target == 'wasm32-unknown-unknown'
         uses: actions-rs/toolchain@v1
         with:
+          toolchain: stable
           target: ${{ matrix.config.target }}
           components: clippy
 
@@ -58,6 +59,7 @@ jobs:
         if: matrix.config.target != 'wasm32-unknown-unknown'
         uses: actions-rs/toolchain@v1
         with:
+          toolchain: stable
           components: clippy
 
       - name: ♻️ Cache Cargo
