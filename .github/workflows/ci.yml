@@ -18,6 +18,7 @@ jobs:
       - name: 🦀 Install Rustfmt
         uses: actions-rs/toolchain@v1
         with:
+          toolchain: stable
           components: rustfmt
 
       - name: 🔧 Check
