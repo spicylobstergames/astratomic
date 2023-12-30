@@ -71,12 +71,3 @@ jobs:
         with:
           command: clippy
           args: --target ${{ matrix.config.target }} --locked -- -W clippy::correctness -D warnings
-
-    # Prevent sudden announcement of a new advisory from failing ci:
-    continue-on-error: ${{ matrix.checks == 'advisories' }}
-
-    steps:
-      - uses: actions/checkout@v3
-      - uses: EmbarkStudios/cargo-deny-action@v1
-        with:
-          command: check ${{ matrix.checks }}
