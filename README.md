@@ -24,3 +24,7 @@ Powered by a similar engine as Noita, made from scratch with Rust.
   - Procedurally generated worlds
   
 In the bigger picture we also aim to achieve intergalactic travel like Starbound, procedurally generated animations inspired by Rainworld, all the cool mechanics you see in Noita, multiplayer and modding, the last two made possible by a future engine migration to [Bones](https://github.com/fishfolk/bones/).
+
+#
+
+The player assets are from Penzilla, https://penzilla.itch.io/protagonist-character.

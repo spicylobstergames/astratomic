@@ -29,6 +29,7 @@ impl Atom {
     }
 }
 
+// TODO Change this to a Material type
 #[derive(Default, Clone, Copy, PartialEq, Debug)]
 pub enum State {
     Solid,
@@ -42,12 +43,7 @@ pub enum State {
 // Update different types of atoms
 
 /// Updates powder and returns atoms awakened
-pub fn update_powder(
-    chunks: &mut UpdateChunksType,
-    pos: IVec2,
-    dt: u8,
-    _actors: &[(Actor, Transform)],
-) -> HashSet<IVec2> {
+pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
 
     let mut cur_pos = pos;
@@ -60,7 +56,8 @@ pub fn update_powder(
     }
 
     for _ in 0..fall_speed {
-        let neigh = down_neigh(chunks, cur_pos, &[(State::Liquid, 0.2)], dt);
+        let state = get_state(chunks, cur_pos);
+        let neigh = down_neigh(chunks, cur_pos, &[(State::Liquid, 0.2)], state, dt);
         let mut swapped = false;
         for neigh in neigh {
             if neigh.0 {
@@ -95,12 +92,7 @@ pub fn update_powder(
 }
 
 /// Updates liquid and returns atoms awakened
-pub fn update_liquid(
-    chunks: &mut UpdateChunksType,
-    pos: IVec2,
-    dt: u8,
-    _actors: &[(Actor, Transform)],
-) -> HashSet<IVec2> {
+pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 
@@ -113,7 +105,8 @@ pub fn update_liquid(
 
     let mut swapped = false;
     for _ in 0..fall_speed {
-        let neigh = down_neigh(chunks, cur_pos, &[], dt);
+        let state = get_state(chunks, cur_pos);
+        let neigh = down_neigh(chunks, cur_pos, &[], state, dt);
         for neigh in neigh {
             if neigh.0 {
                 swap(chunks, cur_pos, cur_pos + neigh.1, dt);
@@ -129,8 +122,8 @@ pub fn update_liquid(
 
     if !swapped {
         set_fspeed(chunks, cur_pos, 0);
-
-        let neigh = side_neigh(chunks, cur_pos, &[], dt);
+        let state = get_state(chunks, cur_pos);
+        let neigh = side_neigh(chunks, cur_pos, &[], state, dt);
         let side = if neigh[0].0 {
             Some(neigh[0].1.x)
         } else if neigh[1].0 {
@@ -141,7 +134,8 @@ pub fn update_liquid(
 
         if let Some(side) = side {
             for _ in 0..5 {
-                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], dt) {
+                let state = get_state(chunks, cur_pos);
+                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], dt, state) {
                     break;
                 }
 
@@ -157,12 +151,7 @@ pub fn update_liquid(
 }
 
 /// Updates particle and returns atoms awakened
-pub fn update_particle(
-    chunks: &mut UpdateChunksType,
-    pos: IVec2,
-    dt: u8,
-    _actors: &[(Actor, Transform)],
-) -> HashSet<IVec2> {
+pub fn update_particle(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 
@@ -176,7 +165,8 @@ pub fn update_particle(
     // Move
     for pos in Line::new(cur_pos, vel) {
         awakened.insert(cur_pos);
-        if swapable(chunks, pos, &[], dt) {
+        let state = get_state(chunks, cur_pos);
+        if swapable(chunks, pos, &[], dt, state) {
             swap(chunks, cur_pos, pos, dt);
             cur_pos = pos;
             awakened.insert(cur_pos);
