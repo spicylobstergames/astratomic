@@ -243,7 +243,7 @@ pub fn chunk_manager_update(
 
             // Loop through deferred tasks
             while let Ok(update) = dirty_update_rects_recv.recv().await {
-                update_dirty_rects(new_dirty_rects, update.chunk_pos);
+                update_dirty_rects_3x3(new_dirty_rects, update.chunk_pos);
             }
         });
 
@@ -264,15 +264,7 @@ pub fn chunk_manager_update(
 
             // Loop through deferred tasks
             while let Ok(update) = dirty_render_rects_recv.recv().await {
-                let pos = update.chunk_pos;
-                if let Some(rect) = render_dirty_rects.get_mut(&pos.chunk) {
-                    extend_rect_if_needed(rect, &pos.atom)
-                } else {
-                    render_dirty_rects.insert(
-                        pos.chunk,
-                        URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
-                    );
-                }
+                update_dirty_rects(render_dirty_rects, update.chunk_pos);
             }
         });
 
@@ -526,15 +518,10 @@ impl Plugin for ChunkManagerPlugin {
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .init_resource::<ExtractedTextureUpdates>()
-                .add_systems(
-                    ExtractSchedule,
-                    extract_chunk_texture_updates.after(chunk_manager_update),
-                );
+                .add_systems(ExtractSchedule, extract_chunk_texture_updates);
             Image::register_system(
                 render_app,
-                prepare_chunk_gpu_textures
-                    .in_set(RenderSet::PrepareAssets)
-                    .after(extract_chunk_texture_updates),
+                prepare_chunk_gpu_textures.in_set(RenderSet::PrepareAssets),
             )
         }
     }
