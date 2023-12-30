@@ -29,6 +29,18 @@ In the bigger picture we also aim to achieve intergalactic travel like Starbound
 ## Controls
 Left Mouse button to suck atoms, Right Mouse button to shoot atoms.
 
+## Last Update Changelog
+
+We added:
+- Actors
+  - AABB colliders that interact with the atom world.
+- Player
+  - The player is pretty cool! It has some animations, a jetpack and a pretty nice tool!
+ - Player tool
+   - The tool can suck atoms(Left Mouse Button), and also shoot(Right Mouse Button) the atoms you sucked!
+- Engine Changes
+  - We changed the Chunk Manager approach to store Chunks in a Vec to storing them in a HashMap, this lays the ground for future updates, like Save/Load worlds, and big explorable worlds. It was needed to simplify addind the other additions and unfortunately took some time to do.
+
 #
 
 The player assets are from Penzilla, https://penzilla.itch.io/protagonist-character.
