@@ -2,6 +2,9 @@ use crate::prelude::*;
 use bevy::sprite::Anchor;
 use rand::Rng;
 
+use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
+
 //TODO add a debug mode
 
 fn brush(
@@ -214,6 +217,9 @@ impl Plugin for DebugPlugin {
                 //_camera
             ),
         )
-        .add_systems(PreUpdate, delete_image);
+        .add_systems(PreUpdate, delete_image)
+        .add_plugins(WorldInspectorPlugin::new())
+        //Frame on console
+        .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin));
     }
 }

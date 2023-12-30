@@ -1,6 +1,4 @@
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy::prelude::*;
-use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 mod actors;
 mod animation;
@@ -29,7 +27,6 @@ use prelude::*;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
-        .add_plugins(WorldInspectorPlugin::new())
         //local plugins
         .add_plugins((
             ChunkManagerPlugin,
@@ -39,8 +36,6 @@ fn main() {
             AnimationPlugin,
         ))
         .add_systems(Startup, setup)
-        //Frame on console
-        .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
         .run();
 }
 
