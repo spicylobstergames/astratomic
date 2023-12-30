@@ -198,7 +198,7 @@ fn _camera(keys: Res<Input<KeyCode>>, mut camera_q: Query<&mut Transform, With<C
     let y = -(keys.pressed(KeyCode::S) as u8 as f32) + keys.pressed(KeyCode::W) as u8 as f32;
 
     let v = Vec2::new(x, y).normalize_or_zero().extend(0.);
-    camera_q.single_mut().translation += v * CAMERA_SPEED;
+    camera_q.single_mut().translation += v * _CAMERA_SPEED;
 }
 
 pub struct DebugPlugin;

@@ -375,10 +375,21 @@ pub fn get_mutable_references<'a>(
     });
 }
 
+pub fn update_dirty_rects(dirty_rects: &mut HashMap<IVec2, URect>, pos: ChunkPos) {
+    if let Some(dirty_rects) = dirty_rects.get_mut(&pos.chunk) {
+        extend_rect_if_needed(dirty_rects, &pos.atom)
+    } else {
+        dirty_rects.insert(
+            pos.chunk,
+            URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
+        );
+    }
+}
+
 //This function gets a single ChunkPos and makes sure that we update the 3x3 surrounding atoms
-pub fn update_dirty_rects(dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos: ChunkPos) {
-    let atom = chunk_pos.atom;
-    let mut chunk = chunk_pos.chunk;
+pub fn update_dirty_rects_3x3(dirty_rects: &mut HashMap<IVec2, URect>, pos: ChunkPos) {
+    let atom = pos.atom;
+    let mut chunk = pos.chunk;
 
     if (1..62).contains(&atom.x) && (1..62).contains(&atom.y) {
         // Case where the 3x3 position area is within a chunk
@@ -464,21 +475,16 @@ pub fn update_dirty_rects(dirty_rects: &mut HashMap<IVec2, URect>, chunk_pos: Ch
     } else {
         // Case where the 3x3 position is in the corner of a chunk
         for (x, y) in (-1..=1).cartesian_product(-1..=1) {
-            let mut global = chunk_to_global(chunk_pos);
+            let mut global = chunk_to_global(pos);
             global += ivec2(x, y);
-            let chunk_pos = global_to_chunk(global);
+            let pos = global_to_chunk(global);
 
-            if let Some(rect) = dirty_rects.get_mut(&chunk_pos.chunk) {
-                extend_rect_if_needed(rect, &chunk_pos.atom)
+            if let Some(rect) = dirty_rects.get_mut(&pos.chunk) {
+                extend_rect_if_needed(rect, &pos.atom)
             } else {
                 dirty_rects.insert(
-                    chunk_pos.chunk,
-                    URect::new(
-                        chunk_pos.atom.x,
-                        chunk_pos.atom.y,
-                        chunk_pos.atom.x,
-                        chunk_pos.atom.y,
-                    ),
+                    pos.chunk,
+                    URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
                 );
             }
         }

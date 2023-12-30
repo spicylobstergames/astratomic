@@ -85,8 +85,7 @@ pub fn player_setup(
 
 /// Updates player
 pub fn update_player(
-    mouse: Res<Input<MouseButton>>,
-    keys: ResMut<Input<KeyCode>>,
+    input: (Res<Input<MouseButton>>, ResMut<Input<KeyCode>>),
     window: Query<&Window>,
     mut player: Query<(
         &mut Actor,
@@ -101,6 +100,7 @@ pub fn update_player(
 ) {
     let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = player.single_mut();
     let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
+    let (mouse, keys) = input;
 
     let mut chunk_manager = chunk_manager.single_mut();
 
@@ -226,7 +226,7 @@ pub fn update_player(
                     let chunk_pos = global_to_chunk(vec);
                     if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
                         if atom.state != State::Void {
-                            tool.atoms.push(atom.clone());
+                            tool.atoms.push(*atom);
                             *atom = Atom::new();
                             pos_to_update.push(chunk_pos);
                             break;
@@ -238,25 +238,8 @@ pub fn update_player(
 
         let mut dirty_rects = dirty_rects.single_mut();
         for pos in pos_to_update {
-            // Update simultation rect
-            if let Some(dirty_rect) = dirty_rects.current.get_mut(&pos.chunk) {
-                extend_rect_if_needed(dirty_rect, &pos.atom)
-            } else {
-                dirty_rects.current.insert(
-                    pos.chunk,
-                    URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
-                );
-            }
-
-            // Update render rect
-            if let Some(dirty_rect) = dirty_rects.render.get_mut(&pos.chunk) {
-                extend_rect_if_needed(dirty_rect, &pos.atom)
-            } else {
-                dirty_rects.render.insert(
-                    pos.chunk,
-                    URect::new(pos.atom.x, pos.atom.y, pos.atom.x, pos.atom.y),
-                );
-            }
+            update_dirty_rects_3x3(&mut dirty_rects.current, pos);
+            update_dirty_rects(&mut dirty_rects.render, pos);
         }
     }
 }
