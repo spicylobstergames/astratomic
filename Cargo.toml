@@ -3,6 +3,7 @@ name = "astratomic"
 description = "A 2D survival game"
 version = "0.0.1"
 edition = "2021"
+default-run = "jumpy"
 
 [dependencies]
 bevy = "0.12"
