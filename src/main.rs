@@ -19,7 +19,7 @@ mod prelude {
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
-    pub use bevy::math::{ivec2, ivec3, uvec2, uvec3, vec2, vec3};
+    pub use bevy::math::{ivec2, uvec2, vec2, vec3};
     pub use bevy::prelude::*;
     pub use std::collections::{HashMap, HashSet};
 }
