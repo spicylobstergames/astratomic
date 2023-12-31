@@ -13,18 +13,15 @@ jobs:
     name: 🗒 Check Rust formatting
     steps:
       - name: ⬇️ Checkout Source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 🦀 Install Rustfmt
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
 
       - name: 🔧 Check
-        uses: actions-rs/cargo@v1
-        with:
-          command: fmt
-          args: --all -- --check
+        run: cargo fmt --all -- --check
 
   clippy_correctness_checks:
     runs-on: ubuntu-latest
@@ -36,7 +33,7 @@ jobs:
           - { target: "x86_64-unknown-linux-gnu", target_dir: "target" }
     steps:
       - name: ⬇️ Checkout Source
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: 🧰 Install dependencies
         run: |
@@ -47,7 +44,7 @@ jobs:
 
       - name: 🧰 Install Clippy
         if: matrix.config.target != 'wasm32-unknown-unknown'
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
 
@@ -65,9 +62,6 @@ jobs:
             ci-${{ matrix.config.target }}-
 
       - name: 🔧 Check
-        uses: actions-rs/cargo@v1
         env:
           CARGO_TARGET_DIR: ${{ matrix.config.target_dir }}
-        with:
-          command: clippy
-          args: --target ${{ matrix.config.target }} --locked -- -W clippy::correctness -D warnings
+        run: cargo clippy --target ${{ matrix.config.target }} --locked -- -W clippy::correctness -D warnings
