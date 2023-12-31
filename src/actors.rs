@@ -214,6 +214,6 @@ pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
 pub struct ActorsPlugin;
 impl Plugin for ActorsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_actors.after(update_player));
+        app.add_systems(Update, update_actors.before(chunk_manager_update));
     }
 }
