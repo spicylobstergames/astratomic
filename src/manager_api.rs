@@ -44,7 +44,7 @@ pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
 
 /// Transforms a global manager pos to a chunk pos
 pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
-    //This makes sure we dont have double 0 chunks
+    // This makes sure we don't have double 0 chunks.
     if pos.x < 0 {
         pos.x -= CHUNK_LENGHT as i32;
     }
@@ -252,7 +252,7 @@ pub fn rand_range(vec: Range<usize>) -> Vec<usize> {
 
 // Transform pos to chunk coords
 pub fn transform_to_chunk(mut pos: Vec2) -> ChunkPos {
-    //This makes sure we dont have double 0 chunks
+    // This makes sure we don't have double 0 chunks.
     if pos.x < 0. {
         pos.x -= (CHUNK_LENGHT * ATOM_SIZE) as f32;
     }
@@ -538,7 +538,7 @@ pub enum ChunkReference<'a> {
 }
 
 /// A deferred update message.
-/// Indicates that an image or dirty rect should udpate.
+/// Indicates that an image or dirty rect should update.
 #[derive(Debug)]
 pub struct DeferredDirtyRectUpdate {
     pub chunk_pos: ChunkPos,

@@ -1,5 +1,5 @@
-// Chunk Lenght consts
-// Chunk lenght MUST be divisible by 4
+// Chunk Length consts
+// Chunk length MUST be divisible by 4
 pub const CHUNK_LENGHT: usize = 64;
 pub const HALF_CHUNK_LENGHT: usize = CHUNK_LENGHT / 2;
 
