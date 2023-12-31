@@ -323,56 +323,81 @@ pub fn updown_to_leftright(
 //Some chunks are not chopped others are chopped up/down, left/right, and also in four corners.
 //We do this because each center chunk needs half of the adjacent chunks
 //So it needs up/down/left/right halves, and also four corners
-//TODO Remove HashMap iter; Decrease individual atoms iterations to get a &mut Atom;
+//TODO Decrease individual atoms iterations to get a &mut Atom;
 pub fn get_mutable_references<'a>(
     chunks: &'a mut HashMap<IVec2, Chunk>,
     mutable_references: &mut HashMap<IVec2, ChunkReference<'a>>,
-    thread_off: (usize, usize),
+    (x_toff, y_toff): (usize, usize),
+    dirty_rects: &HashMap<IVec2, URect>,
 ) {
-    chunks.iter_mut().for_each(|(chunk_pos, chunk)| {
-        let same_x = (chunk_pos.x as usize + thread_off.0) % 2 == 0;
-        let same_y = (chunk_pos.y as usize + thread_off.1) % 2 == 0;
-
-        match (same_x, same_y) {
-            (true, true) => {
-                mutable_references.insert(*chunk_pos, ChunkReference::Center(&mut chunk.atoms));
-            }
-            (true, false) => {
-                let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
-
-                mutable_references.insert(
-                    *chunk_pos,
-                    ChunkReference::Side([
-                        Some(up.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
-                        Some(down.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
-                    ]),
-                );
-            }
-            (false, true) => {
-                let (left, right) = split_left_right(&mut chunk.atoms);
-
-                mutable_references
-                    .insert(*chunk_pos, ChunkReference::Side([Some(left), Some(right)]));
+    chunks
+        .iter_mut()
+        .filter(|(chunk_pos, _)| {
+            let same_x = chunk_pos.x % 2 == x_toff as i32;
+            let same_y = chunk_pos.y % 2 == y_toff as i32;
+            let step_as_center = same_x && same_y;
+            if step_as_center && dirty_rects.contains_key(*chunk_pos) {
+                return true;
+            } else if !step_as_center {
+                let to_check = match (same_x, same_y) {
+                    (false, false) => vec![ivec2(-1, -1), ivec2(-1, 1), ivec2(1, -1), ivec2(1, 1)],
+                    (true, false) => vec![ivec2(0, -1), ivec2(0, 1)],
+                    (false, true) => vec![ivec2(-1, 0), ivec2(1, 0)],
+                    _ => unreachable!(),
+                };
+                for vec in to_check {
+                    if dirty_rects.contains_key(&(**chunk_pos + vec)) {
+                        return true;
+                    }
+                }
             }
 
-            (false, false) => {
-                let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
+            false
+        })
+        .for_each(|(chunk_pos, chunk)| {
+            let same_x = (chunk_pos.x as usize + x_toff) % 2 == 0;
+            let same_y = (chunk_pos.y as usize + y_toff) % 2 == 0;
 
-                let (up_left, up_right) = updown_to_leftright(up);
-                let (down_left, down_right) = updown_to_leftright(down);
+            match (same_x, same_y) {
+                (true, true) => {
+                    mutable_references.insert(*chunk_pos, ChunkReference::Center(&mut chunk.atoms));
+                }
+                (true, false) => {
+                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
 
-                mutable_references.insert(
-                    *chunk_pos,
-                    ChunkReference::Corner([
-                        Some(up_left),
-                        Some(up_right),
-                        Some(down_left),
-                        Some(down_right),
-                    ]),
-                );
+                    mutable_references.insert(
+                        *chunk_pos,
+                        ChunkReference::Side([
+                            Some(up.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
+                            Some(down.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
+                        ]),
+                    );
+                }
+                (false, true) => {
+                    let (left, right) = split_left_right(&mut chunk.atoms);
+
+                    mutable_references
+                        .insert(*chunk_pos, ChunkReference::Side([Some(left), Some(right)]));
+                }
+
+                (false, false) => {
+                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
+
+                    let (up_left, up_right) = updown_to_leftright(up);
+                    let (down_left, down_right) = updown_to_leftright(down);
+
+                    mutable_references.insert(
+                        *chunk_pos,
+                        ChunkReference::Corner([
+                            Some(up_left),
+                            Some(up_right),
+                            Some(down_left),
+                            Some(down_right),
+                        ]),
+                    );
+                }
             }
-        }
-    });
+        });
 }
 
 pub fn update_dirty_rects(dirty_rects: &mut HashMap<IVec2, URect>, pos: ChunkPos) {

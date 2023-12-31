@@ -11,7 +11,6 @@ bevy = "0.12"
 bevy-inspector-egui = "0.22"
 rand = { version = "0.8.5", features = ["small_rng"] }
 fastrand = "2.0.1"
-atomicell = "0.2.0"
 async-channel = "2.1.0"
 smallvec = "1.11.2"
 itertools = "0.12.0"
