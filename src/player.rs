@@ -77,7 +77,11 @@ pub fn player_setup(
 
 /// Updates player
 pub fn update_player(
-    input: (Res<Input<MouseButton>>, ResMut<Input<KeyCode>>, EventReader<MouseWheel>,),
+    input: (
+        Res<Input<MouseButton>>,
+        ResMut<Input<KeyCode>>,
+        EventReader<MouseWheel>,
+    ),
     window: Query<&Window>,
     mut player: Query<(
         &mut Actor,
@@ -230,11 +234,8 @@ pub fn update_player(
     }
 
     for ev in scroll_evr.read() {
-        match ev.unit {
-            MouseScrollUnit::Line => {
-                camera_transform.scale *= 0.9_f32.powi(ev.y as i32);
-            }
-            _ => {}
+        if ev.unit == MouseScrollUnit::Line {
+            camera_transform.scale *= 0.9_f32.powi(ev.y as i32);
         }
     }
 }
