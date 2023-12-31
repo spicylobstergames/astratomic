@@ -30,7 +30,7 @@ pub const ATOM_SIZE: usize = 3;
 pub const GRAVITY: u8 = 1;
 pub const TERM_VEL: u8 = 10;
 pub const FRAMES_SLEEP: u8 = 4;
-pub const CHUNKS_WIDTH: usize = 8;
-pub const CHUNKS_HEIGHT: usize = 6;
+pub const CHUNKS_WIDTH: usize = 32;
+pub const CHUNKS_HEIGHT: usize = 32;
 
 pub const _CAMERA_SPEED: f32 = 10.;

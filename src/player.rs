@@ -77,7 +77,11 @@ pub fn player_setup(
 
 /// Updates player
 pub fn update_player(
-    input: (Res<Input<MouseButton>>, ResMut<Input<KeyCode>>),
+    input: (
+        Res<Input<MouseButton>>,
+        ResMut<Input<KeyCode>>,
+        EventReader<MouseWheel>,
+    ),
     window: Query<&Window>,
     mut player: Query<(
         &mut Actor,
@@ -86,13 +90,13 @@ pub fn update_player(
         &mut AnimationIndices,
     )>,
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
-    camera_q: Query<(&Camera, &GlobalTransform)>,
+    mut camera_q: Query<(&Camera, &GlobalTransform, &mut Transform), Without<Tool>>,
     mut chunk_manager: Query<&mut ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
 ) {
     let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = player.single_mut();
     let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
-    let (mouse, keys) = input;
+    let (mouse, keys, mut scroll_evr) = input;
     let mut chunk_manager = chunk_manager.single_mut();
 
     // Gravity
@@ -150,11 +154,11 @@ pub fn update_player(
     }
 
     // Tool
-    let (camera, camera_transform) = camera_q.single();
+    let (camera, camera_gtransform, mut camera_transform) = camera_q.single_mut();
     let window = window.single();
     if let Some(world_position) = window
         .cursor_position()
-        .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+        .and_then(|cursor| camera.viewport_to_world(camera_gtransform, cursor))
         .map(|ray| ray.origin.truncate())
     {
         //Rotate and move sprite
@@ -228,6 +232,12 @@ pub fn update_player(
             update_dirty_rects(&mut dirty_rects.render, pos);
         }
     }
+
+    for ev in scroll_evr.read() {
+        if ev.unit == MouseScrollUnit::Line {
+            camera_transform.scale *= 0.9_f32.powi(ev.y as i32);
+        }
+    }
 }
 
 pub fn update_player_sprite(
@@ -258,7 +268,7 @@ impl Plugin for PlayerPlugin {
         app.add_systems(
             Update,
             (
-                update_player.before(chunk_manager_update),
+                update_player.after(chunk_manager_update),
                 update_player_sprite.after(update_actors),
             ),
         )
