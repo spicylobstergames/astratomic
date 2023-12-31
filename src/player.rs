@@ -258,7 +258,7 @@ impl Plugin for PlayerPlugin {
         app.add_systems(
             Update,
             (
-                update_player.before(update_actors),
+                update_player.before(chunk_manager_update),
                 update_player_sprite.after(update_actors),
             ),
         )

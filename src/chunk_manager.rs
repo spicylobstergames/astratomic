@@ -280,6 +280,7 @@ pub fn chunk_manager_update(
                     &mut chunk_manager.chunks,
                     &mut mutable_references,
                     (x_toff, y_toff),
+                    dirty_rects,
                 );
 
                 //Iterate through the center chunks
