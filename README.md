@@ -28,6 +28,7 @@ In the bigger picture we also aim to achieve intergalactic travel like Starbound
 
 ## Controls
 Left Mouse button to suck atoms, Right Mouse button to shoot atoms.
+Mouse wheel to zoom in/out.
 
 ## Last Update Changelog
 
