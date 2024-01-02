@@ -7,6 +7,8 @@ pub const CHUNK_LEN: usize = CHUNK_LENGHT * CHUNK_LENGHT;
 pub const HALF_CHUNK_LEN: usize = CHUNK_LEN / 2;
 pub const QUARTER_CHUNK_LEN: usize = CHUNK_LEN / 4;
 
+pub const SIDE_LENGHT: f32 = (CHUNK_LENGHT * ATOM_SIZE) as f32;
+
 // Actor consts
 
 pub const UP_WALK_HEIGHT: usize = 3;

@@ -14,7 +14,6 @@ use crate::prelude::*;
 pub struct ChunkManager {
     pub chunks: HashMap<IVec2, Chunk>,
     pub colliders: ChunkColliders,
-    pub textures_hmap: HashMap<AssetId<Image>, IVec2>,
     pub dt: u8,
 }
 
@@ -134,48 +133,25 @@ impl DirtyRects {
     }
 }
 
+#[derive(Component)]
+pub struct ChunkTextures;
+
 pub fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
-    let side_length = (CHUNK_LENGHT * ATOM_SIZE) as f32;
     let (width, height) = (CHUNKS_WIDTH, CHUNKS_HEIGHT);
 
     let mut images_vec = vec![];
-    let mut chunks = HashMap::new();
-    let mut textures_hmap = HashMap::new();
+    let mut chunk_manager = ChunkManager {
+        chunks: HashMap::new(),
+        colliders: ChunkColliders::new(),
+        dt: 0,
+    };
+
     for (x, y) in (0..width).cartesian_product(0..height) {
-        let pos = Vec2::new(x as f32 * side_length, -(y as f32) * side_length);
         let index = ivec2(x as i32, y as i32);
+        let chunk = Chunk::new(Handle::default(), index);
 
-        //Get and spawn texture/chunk image
-        let texture = images.add(Chunk::new_image());
-        images_vec.push(
-            commands
-                .spawn(SpriteBundle {
-                    texture: texture.clone(),
-                    sprite: Sprite {
-                        anchor: Anchor::TopLeft,
-                        ..Default::default()
-                    },
-                    transform: Transform::from_xyz(pos.x, pos.y, 0.).with_scale(vec3(
-                        ATOM_SIZE as f32,
-                        ATOM_SIZE as f32,
-                        1.,
-                    )),
-                    ..Default::default()
-                })
-                .id(),
-        );
-
-        //Add texture to chunks manager HashMap
-        textures_hmap.insert(texture.id(), index);
-
-        //Create chunk
-        let chunk = Chunk::new(texture, index);
-
-        //Update chunk image
-        let image = images.get_mut(&chunk.texture).unwrap();
-        chunk.update_all(image);
-
-        chunks.insert(index, chunk);
+        let ent = add_chunk(&mut commands, &mut images, &mut chunk_manager, chunk, index);
+        images_vec.push(ent);
     }
 
     commands
@@ -183,15 +159,9 @@ pub fn manager_setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) 
             Name::new("Chunks textures"),
             VisibilityBundle::default(),
             TransformBundle::default(),
+            ChunkTextures,
         ))
         .push_children(&images_vec);
-
-    let chunk_manager = ChunkManager {
-        chunks,
-        colliders: ChunkColliders::new(),
-        dt: 0,
-        textures_hmap,
-    };
 
     commands.spawn(DirtyRects {
         current: HashMap::new(),
@@ -510,11 +480,106 @@ fn prepare_chunk_gpu_textures(
     }
 }
 
+pub fn save_to_file(chunk_manager: Query<&ChunkManager>, input: Res<Input<KeyCode>>) {
+    if input.just_pressed(KeyCode::K) {
+        let chunk_manager = chunk_manager.single();
+
+        let mut f = BufWriter::new(File::create("world").unwrap());
+        serialize_into(&mut f, &chunk_manager.chunks).unwrap();
+    }
+}
+
+pub fn load_from_file(
+    mut commands: Commands,
+    mut chunk_manager: Query<&mut ChunkManager>,
+    chunk_textures: Query<Entity, With<ChunkTextures>>,
+    input: Res<Input<KeyCode>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    if input.just_pressed(KeyCode::L) {
+        let mut chunk_manager = chunk_manager.single_mut();
+        for chunk in chunk_manager.chunks.values() {
+            images.remove(chunk.texture.clone());
+        }
+        chunk_manager.chunks = HashMap::new();
+
+        chunk_manager.chunks = HashMap::new();
+        let file = File::open("world").unwrap();
+        let file_chunks: HashMap<IVec2, Chunk> =
+            bincode::deserialize_from(BufReader::new(file)).unwrap();
+
+        //Add new chunks to world
+        let mut images_vec = vec![];
+        for (pos, chunk) in &file_chunks {
+            let ent = add_chunk(
+                &mut commands,
+                &mut images,
+                &mut chunk_manager,
+                chunk.clone(),
+                *pos,
+            );
+            images_vec.push(ent);
+        }
+
+        //Clean current chunks
+
+        //Delete old and add new textures entities
+        let mut chunk_textures = commands.get_entity(chunk_textures.single()).unwrap();
+        chunk_textures
+            .clear_children()
+            .insert_children(0, &images_vec);
+    }
+}
+
+//Still needs to add the return entity to a parent
+pub fn add_chunk(
+    commands: &mut Commands,
+    images: &mut ResMut<Assets<Image>>,
+    chunk_manager: &mut ChunkManager,
+    mut chunk: Chunk,
+    index: IVec2,
+) -> Entity {
+    let pos = Vec2::new(
+        index.x as f32 * SIDE_LENGHT,
+        -(index.y as f32) * SIDE_LENGHT,
+    );
+
+    //Add texture
+    chunk.texture = images.add(Chunk::new_image());
+    let texture_copy = chunk.texture.clone();
+
+    //Update chunk image
+    let image = images.get_mut(&chunk.texture).unwrap();
+    chunk.update_all(image);
+    chunk_manager.chunks.insert(index, chunk);
+
+    //Spawn Image
+    commands
+        .spawn(SpriteBundle {
+            texture: texture_copy,
+            sprite: Sprite {
+                anchor: Anchor::TopLeft,
+                ..Default::default()
+            },
+            transform: Transform::from_xyz(pos.x, pos.y, 0.).with_scale(vec3(
+                ATOM_SIZE as f32,
+                ATOM_SIZE as f32,
+                1.,
+            )),
+            ..Default::default()
+        })
+        .id()
+}
+
 pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, manager_setup)
-            .add_systems(Update, chunk_manager_update);
+            .add_systems(Update, chunk_manager_update)
+            .add_systems(
+                PreUpdate,
+                (save_to_file, load_from_file.after(save_to_file)),
+            );
 
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app

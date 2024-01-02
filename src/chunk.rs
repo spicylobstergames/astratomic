@@ -5,10 +5,13 @@ use std::collections::HashSet;
 
 use crate::prelude::*;
 
+#[derive(Clone, Serialize, Deserialize)]
 pub struct Chunk {
+    #[serde(with = "BigArray")]
     pub atoms: [Atom; CHUNK_LEN],
+
+    #[serde(skip)]
     pub texture: Handle<Image>,
-    pub index: IVec2,
 }
 
 impl Chunk {
@@ -30,11 +33,7 @@ impl Chunk {
             }
         }
 
-        Chunk {
-            atoms,
-            texture,
-            index,
-        }
+        Chunk { atoms, texture }
     }
 
     pub fn new_image() -> Image {
