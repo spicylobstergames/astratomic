@@ -270,7 +270,6 @@ impl Plugin for PlayerPlugin {
             (
                 update_player.after(chunk_manager_update),
                 update_player_sprite.after(update_actors),
-                update_manager_pos,
             ),
         )
         .insert_resource(SavingTask::default())

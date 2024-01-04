@@ -18,6 +18,7 @@ pub struct ChunkManager {
 }
 
 //If true the direction is 1, if false the direction is -1
+#[derive(Debug)]
 pub enum MoveDir {
     X(i32),
     Y(i32),
@@ -108,6 +109,29 @@ impl ChunkManager {
         }
         let mut chunk_textures = commands.get_entity(*chunk_textures).unwrap();
         chunk_textures.insert_children(0, &images_vec);
+    }
+}
+
+impl Drop for ChunkManager {
+    fn drop(&mut self) {
+        let file = fs::read("assets/worlds/world").unwrap_or_default();
+        let mut file_chunks: HashMap<IVec2, Chunk> =
+            bincode::deserialize(&file).unwrap_or_default();
+
+        for (pos, chunk) in &self.chunks {
+            if let Some(file_chunk) = file_chunks.get_mut(pos) {
+                *file_chunk = chunk.clone();
+            } else {
+                file_chunks.insert(*pos, chunk.clone());
+            }
+        }
+
+        let data = bincode::serialize(&file_chunks).unwrap();
+        //Save file
+        let _ = File::create("assets/worlds/world")
+            .unwrap()
+            .write(&data)
+            .unwrap();
     }
 }
 
@@ -215,11 +239,20 @@ pub fn manager_setup(
 
     let mut images_vec = vec![];
     chunk_manager.pos = ivec2(-16, -16);
+
+    let file = fs::read("assets/worlds/world").unwrap_or_default();
+    let file_chunks: HashMap<IVec2, Chunk> = bincode::deserialize(&file).unwrap_or_default();
+
     for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + width)
         .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + height)
     {
         let index = ivec2(x, y);
-        let chunk = Chunk::new(Handle::default(), index);
+        let chunk;
+        if let Some(file_chunk) = file_chunks.get(&index) {
+            chunk = file_chunk.clone();
+        } else {
+            chunk = Chunk::new(Handle::default(), index);
+        }
 
         let ent = add_chunk(&mut commands, &mut images, &mut chunk_manager, chunk, index);
         images_vec.push(ent);
