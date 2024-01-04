@@ -9,7 +9,6 @@ use crate::prelude::*;
 
 pub struct UpdateChunksType<'a> {
     pub group: ChunkGroup<'a>,
-    pub colliders: &'a ChunkColliders,
     pub dirty_update_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
     pub dirty_render_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
 }
@@ -51,12 +50,20 @@ pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
         pos.y -= CHUNK_LENGHT as i32;
     }
 
-    let (chunk_x, chunk_y) = (pos.x / CHUNK_LENGHT as i32, pos.y / CHUNK_LENGHT as i32);
+    let (mut chunk_x, mut chunk_y) = (pos.x / CHUNK_LENGHT as i32, pos.y / CHUNK_LENGHT as i32);
 
+    //Hacky stuff for neg coords, but it works
     let (x_off, y_off) = (
-        (CHUNK_LENGHT as i32 - 1) - (pos.x % CHUNK_LENGHT as i32).abs(),
-        (CHUNK_LENGHT as i32 - 1) - (pos.y % CHUNK_LENGHT as i32).abs(),
+        (pos.x % CHUNK_LENGHT as i32 + CHUNK_LENGHT as i32) % CHUNK_LENGHT as i32,
+        (pos.y % CHUNK_LENGHT as i32 + CHUNK_LENGHT as i32) % CHUNK_LENGHT as i32,
     );
+
+    if pos.x < 0 && x_off == 0 {
+        chunk_x += 1
+    }
+    if pos.y < 0 && y_off == 0 {
+        chunk_y += 1
+    }
 
     let (x, y) = (
         if pos.x >= 0 {
@@ -85,28 +92,12 @@ pub fn chunk_to_global(pos: ChunkPos) -> IVec2 {
 
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
-pub fn swapable(
-    chunks: &UpdateChunksType,
-    pos: IVec2,
-    states: &[(State, f32)],
-    dt: u8,
-    state: State,
-) -> bool {
-    let local_pos = global_to_local(pos);
-    let collidable = chunks
-        .colliders
-        .get_collider(&ChunkPos::new(
-            local_pos.0.as_uvec2(),
-            chunks.group.center_pos,
-        ))
-        .is_some();
-
+pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: u8) -> bool {
     if let Some(atom) = chunks.group.get_global(pos) {
-        (atom.state == State::Void
+        atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
                 state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
-            }) && atom.updated_at != dt))
-            && (!collidable || state == State::Liquid)
+            }) && atom.updated_at != dt)
     } else {
         false
     }
@@ -117,13 +108,12 @@ pub fn down_neigh(
     chunks: &UpdateChunksType,
     pos: IVec2,
     states: &[(State, f32)],
-    state: State,
     dt: u8,
 ) -> [(bool, IVec2); 3] {
     let mut neigh = [(false, IVec2::ZERO); 3];
 
     for (neigh, x) in neigh.iter_mut().zip([0, -1, 1]) {
-        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), states, dt, state);
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), states, dt);
         neigh.1 = IVec2::new(x, 1);
     }
 
@@ -139,13 +129,12 @@ pub fn side_neigh(
     chunks: &UpdateChunksType,
     pos: IVec2,
     states: &[(State, f32)],
-    state: State,
     dt: u8,
 ) -> [(bool, IVec2); 2] {
     let mut neigh = [(false, IVec2::ZERO); 2];
 
     for (neigh, x) in neigh.iter_mut().zip([-1, 1]) {
-        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), states, dt, state);
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), states, dt);
         neigh.1 = IVec2::new(x, 0);
     }
 
@@ -182,7 +171,7 @@ pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
 }
 
 /// Gets state from a global pos
-pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
+pub fn _get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
     chunks.group[pos].state
 }
 

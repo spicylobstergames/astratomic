@@ -22,14 +22,11 @@ pub struct Atom {
 }
 
 impl Atom {
-    pub fn new() -> Self {
+    pub fn object() -> Self {
         Atom {
-            color: [55, 55, 55, 255],
-            state: State::Void,
-            updated_at: 0,
-            fall_speed: 0,
-            velocity: (0, 0),
-            f_idle: 0,
+            state: State::Object,
+            color: [255, 255, 255, 255],
+            ..Default::default()
         }
     }
 }
@@ -41,6 +38,7 @@ pub enum State {
     Powder,
     Liquid,
     Gas,
+    Object,
     #[default]
     Void,
 }
@@ -61,8 +59,7 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
     }
 
     for _ in 0..fall_speed {
-        let state = get_state(chunks, cur_pos);
-        let neigh = down_neigh(chunks, cur_pos, &[(State::Liquid, 0.2)], state, dt);
+        let neigh = down_neigh(chunks, cur_pos, &[(State::Liquid, 0.2)], dt);
         let mut swapped = false;
         for neigh in neigh {
             if neigh.0 {
@@ -110,8 +107,7 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
 
     let mut swapped = false;
     for _ in 0..fall_speed {
-        let state = get_state(chunks, cur_pos);
-        let neigh = down_neigh(chunks, cur_pos, &[], state, dt);
+        let neigh = down_neigh(chunks, cur_pos, &[], dt);
         for neigh in neigh {
             if neigh.0 {
                 swap(chunks, cur_pos, cur_pos + neigh.1, dt);
@@ -127,8 +123,7 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
 
     if !swapped {
         set_fspeed(chunks, cur_pos, 0);
-        let state = get_state(chunks, cur_pos);
-        let neigh = side_neigh(chunks, cur_pos, &[], state, dt);
+        let neigh = side_neigh(chunks, cur_pos, &[], dt);
         let side = if neigh[0].0 {
             Some(neigh[0].1.x)
         } else if neigh[1].0 {
@@ -139,8 +134,7 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
 
         if let Some(side) = side {
             for _ in 0..5 {
-                let state = get_state(chunks, cur_pos);
-                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], dt, state) {
+                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], dt) {
                     break;
                 }
 
@@ -170,8 +164,7 @@ pub fn update_particle(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> Has
     // Move
     for pos in Line::new(cur_pos, vel) {
         awakened.insert(cur_pos);
-        let state = get_state(chunks, cur_pos);
-        if swapable(chunks, pos, &[], dt, state) {
+        if swapable(chunks, pos, &[], dt) {
             swap(chunks, cur_pos, pos, dt);
             cur_pos = pos;
             awakened.insert(cur_pos);

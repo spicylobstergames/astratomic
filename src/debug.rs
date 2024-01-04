@@ -62,10 +62,8 @@ fn brush(
             let pos = v / ATOM_SIZE as i32;
             let pos = global_to_chunk(pos);
 
-            //Checks if there is a atom at the pos and if the pos is collidable, therefore not drawable
-            if chunk_manager.get_atom(&pos).is_none()
-                || chunk_manager.colliders.get_collider(&pos).is_some()
-            {
+            //Checks if there is a atom at the pos
+            if chunk_manager.get_atom(&pos).is_none() {
                 continue;
             }
 

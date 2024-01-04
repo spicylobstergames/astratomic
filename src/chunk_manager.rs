@@ -12,7 +12,6 @@ use crate::prelude::*;
 #[derive(Default, Resource)]
 pub struct ChunkManager {
     pub chunks: HashMap<IVec2, Chunk>,
-    pub colliders: ChunkColliders,
     pub pos: IVec2,
     pub dt: u8,
 }
@@ -149,68 +148,6 @@ impl std::ops::IndexMut<ChunkPos> for ChunkManager {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct ChunkColliders {
-    data: HashMap<IVec2, HashMap<UVec2, u8>>,
-}
-
-impl ChunkColliders {
-    pub fn get_collider(&self, pos: &ChunkPos) -> Option<&u8> {
-        if let Some(chunk) = self.data.get(&pos.chunk) {
-            chunk.get(&pos.atom)
-        } else {
-            None
-        }
-    }
-
-    pub fn get_mut_collider(&mut self, pos: ChunkPos) -> Option<&mut u8> {
-        if let Some(chunk) = self.data.get_mut(&pos.chunk) {
-            chunk.get_mut(&pos.atom)
-        } else {
-            None
-        }
-    }
-
-    pub fn add_one(&mut self, pos: ChunkPos) {
-        if let Some(chunk) = self.data.get_mut(&pos.chunk) {
-            if let Some(collider) = chunk.get_mut(&pos.atom) {
-                *collider += 1
-            } else {
-                chunk.insert(pos.atom, 1);
-            }
-        } else {
-            let mut chunk_hash = HashMap::new();
-            chunk_hash.insert(pos.atom, 1);
-            self.data.insert(pos.chunk, chunk_hash);
-        }
-    }
-
-    pub fn remove_one(&mut self, pos: ChunkPos) {
-        if self[pos] == 1 {
-            self.data.get_mut(&pos.chunk).unwrap().remove(&pos.atom);
-            if self.data.get_mut(&pos.chunk).unwrap().is_empty() {
-                self.data.remove(&pos.chunk);
-            }
-        } else {
-            self[pos] -= 1;
-        }
-    }
-}
-
-impl std::ops::Index<ChunkPos> for ChunkColliders {
-    type Output = u8;
-    #[track_caller]
-    fn index(&self, pos: ChunkPos) -> &Self::Output {
-        self.get_collider(&pos).expect("Invalid index position.")
-    }
-}
-impl std::ops::IndexMut<ChunkPos> for ChunkColliders {
-    #[track_caller]
-    fn index_mut(&mut self, pos: ChunkPos) -> &mut Self::Output {
-        self.get_mut_collider(pos).expect("Invalid index position.")
-    }
-}
-
 #[derive(Component)]
 pub struct DirtyRects {
     /// The current chunk update dirty rects
@@ -278,8 +215,6 @@ pub fn chunk_manager_update(
     mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
 ) {
-    let colliders = &chunk_manager.colliders.clone();
-
     chunk_manager.dt = chunk_manager.dt.wrapping_add(1);
     let dt = chunk_manager.dt;
 
@@ -434,7 +369,6 @@ pub fn chunk_manager_update(
                                 group: chunk_group,
                                 dirty_update_rect_send,
                                 dirty_render_rect_send,
-                                colliders,
                             },
                             dt,
                             rect,

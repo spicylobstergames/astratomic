@@ -27,7 +27,6 @@ pub fn player_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    mut chunk_manager: ResMut<ChunkManager>,
 ) {
     let player_actor = Actor {
         height: 17,
@@ -35,7 +34,6 @@ pub fn player_setup(
         pos: ivec2(0, 0),
         vel: vec2(0., 0.),
     };
-    add_actor(&mut chunk_manager, &player_actor);
 
     let player_handle = asset_server.load("player/player_sheet.png");
     let player_atlas =
@@ -181,6 +179,7 @@ pub fn update_player(
 
         let mut pos_to_update = vec![];
         if mouse.pressed(MouseButton::Right) {
+            println!("lol");
             let new_tool_front = tool_front + tool_slope * 6.;
             for i in 0..3 {
                 for vec in Line::new(
@@ -212,9 +211,9 @@ pub fn update_player(
                 for vec in Line::new(tool_front.as_ivec2(), bound_vec - tool_front.as_ivec2()) {
                     let chunk_pos = global_to_chunk(vec);
                     if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                        if atom.state != State::Void {
+                        if atom.state != State::Void && atom.state != State::Object {
                             tool.atoms.push(*atom);
-                            *atom = Atom::new();
+                            *atom = Atom::default();
                             pos_to_update.push(chunk_pos);
                             break;
                         }
