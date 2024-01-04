@@ -23,7 +23,6 @@ mod prelude {
     pub use bevy::prelude::*;
     pub use bevy::tasks::*;
     pub use bevy_async_task::*;
-    pub use futures_lite::future::{block_on, poll_once};
 
     pub use bincode::serialize_into;
     pub use serde::{Deserialize, Serialize};

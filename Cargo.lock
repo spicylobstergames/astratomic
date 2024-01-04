@@ -247,7 +247,6 @@ dependencies = [
  "bevy_dylib",
  "bincode",
  "fastrand 2.0.1",
- "futures-lite 2.1.0",
  "itertools",
  "rand",
  "serde",
