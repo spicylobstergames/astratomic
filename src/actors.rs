@@ -8,11 +8,34 @@ pub struct Actor {
     pub vel: Vec2,
 }
 
-pub fn add_actor(chunk_manager: &mut ChunkManager, actor: &Actor) {
-    for x_off in 0..actor.width as i32 {
-        for y_off in 0..actor.height as i32 {
-            let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
-            chunk_manager.colliders.add_one(pos);
+//Called before simulations
+pub fn add_actors(mut chunk_manager: ResMut<ChunkManager>, actors: Query<&Actor>) {
+    for actor in actors.iter() {
+        for x_off in 0..actor.width as i32 {
+            for y_off in 0..actor.height as i32 {
+                let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
+                if let Some(atom) = chunk_manager.get_mut_atom(pos) {
+                    if atom.state == State::Void {
+                        *atom = Atom::object();
+                    }
+                }
+            }
+        }
+    }
+}
+
+//Called after simulation, before actor update
+pub fn remove_actors(mut chunk_manager: ResMut<ChunkManager>, actors: Query<&Actor>) {
+    for actor in actors.iter() {
+        for x_off in 0..actor.width as i32 {
+            for y_off in 0..actor.height as i32 {
+                let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
+                if let Some(atom) = chunk_manager.get_mut_atom(pos) {
+                    if atom.state == State::Object {
+                        *atom = Atom::default();
+                    }
+                }
+            }
         }
     }
 }
@@ -45,7 +68,7 @@ pub fn update_actors(mut chunk_manager: ResMut<ChunkManager>, mut actors: Query<
             };
 
             if move_hor {
-                let moved_x = move_x(&mut chunk_manager, &mut actor, v.x - prev.x);
+                let moved_x = move_x(&mut chunk_manager, &mut actor, (v.x - prev.x).signum());
                 if on_ground(&chunk_manager, &actor) {
                     let starting_y = actor.pos.y;
                     match moved_x {
@@ -57,7 +80,11 @@ pub fn update_actors(mut chunk_manager: ResMut<ChunkManager>, mut actors: Query<
                                 //Abort if we couldn't move up, or if we moved up but couldn't move sideways on the last step
                                 if !moved_y
                                     || i == UP_WALK_HEIGHT
-                                        && !move_x(&mut chunk_manager, &mut actor, v.x - prev.x)
+                                        && !move_x(
+                                            &mut chunk_manager,
+                                            &mut actor,
+                                            (v.x - prev.x).signum(),
+                                        )
                                 {
                                     abort_stair(&mut chunk_manager, &mut actor, starting_y, 1);
                                     break;
@@ -78,7 +105,7 @@ pub fn update_actors(mut chunk_manager: ResMut<ChunkManager>, mut actors: Query<
                     }
                 }
             } else {
-                move_y(&mut chunk_manager, &mut actor, v.y - prev.y);
+                move_y(&mut chunk_manager, &mut actor, (v.y - prev.y).signum());
             }
 
             prev = v;
@@ -120,31 +147,6 @@ pub fn move_x(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
         }
     }
 
-    //Move
-    for y_off in 0..actor.height as i32 {
-        let pos1 = actor.pos
-            + if dir > 0 {
-                // Moving right
-                ivec2(actor.width as i32, y_off)
-            } else {
-                // Moving left
-                ivec2(-1, y_off)
-            };
-
-        let pos2 = actor.pos
-            + if dir > 0 {
-                // Moving right
-                ivec2(0, y_off)
-            } else {
-                // Moving left
-                ivec2(actor.width as i32 - 1, y_off)
-            };
-
-        let chunk_pos1 = global_to_chunk(pos1);
-        let chunk_pos2 = global_to_chunk(pos2);
-        chunk_manager.colliders.add_one(chunk_pos1);
-        chunk_manager.colliders.remove_one(chunk_pos2);
-    }
     actor.pos.x += dir;
 
     true
@@ -178,32 +180,6 @@ pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
         }
     }
 
-    //Move
-    for x_off in 0..actor.width as i32 {
-        let pos1 = actor.pos
-            + if dir > 0 {
-                // Moving down
-                ivec2(x_off, actor.height as i32)
-            } else {
-                // Moving up
-                ivec2(x_off, -1)
-            };
-
-        let pos2 = actor.pos
-            + if dir > 0 {
-                // Moving down
-                ivec2(x_off, 0)
-            } else {
-                // Moving up
-                ivec2(x_off, actor.height as i32 - 1)
-            };
-
-        let chunk_pos1 = global_to_chunk(pos1);
-        let chunk_pos2 = global_to_chunk(pos2);
-        chunk_manager.colliders.add_one(chunk_pos1);
-        chunk_manager.colliders.remove_one(chunk_pos2);
-    }
-
     actor.pos.y += dir;
 
     true
@@ -212,6 +188,22 @@ pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
 pub struct ActorsPlugin;
 impl Plugin for ActorsPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_actors.before(chunk_manager_update));
+        app.add_systems(
+            Update,
+            (
+                add_actors
+                    .before(chunk_manager_update)
+                    .before(remove_actors)
+                    .before(update_actors),
+                remove_actors
+                    .after(chunk_manager_update)
+                    .after(add_actors)
+                    .before(update_actors),
+                update_actors
+                    .after(remove_actors)
+                    .after(add_actors)
+                    .after(chunk_manager_update),
+            ),
+        );
     }
 }

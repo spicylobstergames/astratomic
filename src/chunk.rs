@@ -25,7 +25,7 @@ impl Default for Chunk {
 
 impl Chunk {
     pub fn new(texture: Handle<Image>, index: IVec2) -> Chunk {
-        let mut atoms = [Atom::new(); CHUNK_LEN];
+        let mut atoms = [Atom::default(); CHUNK_LEN];
 
         match index.y.cmp(&2) {
             Ordering::Less => {}
