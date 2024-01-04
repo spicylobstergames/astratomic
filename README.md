@@ -44,8 +44,14 @@ We added:
 
 ## Licensing
 
-In the future we aim to separate the engine code from the game code, making the former licensed under MIT and the latter under PolyForm NonCommercial v1.0.
+In the future we aim to separate the engine code from the game code, making the former licensed under Apache v2.0 and the latter under PolyForm NonCommercial v1.0.
 
-#
+### Contributor License Compromise
+
+Independent contributions (i.e. individual pull requests) from anyone other than 'Isaac Turci @Zac8668' are dual-licensed as [Polyform NonCommercial](https://polyformproject.org/licenses/noncommercial/1.0.0/) (granted to Spicy Lobster & Isaac Turci as the _licensor_) and [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0), meaning all independent contributors retain ownership of their own contributions, albeit non-exclusively.
+
+More specifics soon to come in [CONTRIBUTING.md](/CONTRIBUTING.md).
+
+### Assets
 
 The player assets are from Penzilla, https://penzilla.itch.io/protagonist-character.
