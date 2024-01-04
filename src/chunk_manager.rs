@@ -476,6 +476,130 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
     }
 }
 
+//Still needs to add the return entity to a parent
+pub fn add_chunk(
+    commands: &mut Commands,
+    images: &mut ResMut<Assets<Image>>,
+    chunk_manager: &mut ChunkManager,
+    mut chunk: Chunk,
+    index: IVec2,
+) -> Entity {
+    let pos = Vec2::new(
+        index.x as f32 * SIDE_LENGHT,
+        (-index.y as f32) * SIDE_LENGHT,
+    );
+
+    //Add texture
+    chunk.texture = images.add(Chunk::new_image());
+    let texture_copy = chunk.texture.clone();
+
+    //Update chunk image
+    let image = images.get_mut(&chunk.texture).unwrap();
+    chunk.update_all(image);
+    chunk_manager.chunks.insert(index, chunk);
+
+    //Spawn Image
+    commands
+        .spawn(SpriteBundle {
+            texture: texture_copy,
+            sprite: Sprite {
+                anchor: Anchor::TopLeft,
+                ..Default::default()
+            },
+            transform: Transform::from_xyz(pos.x, pos.y, 0.).with_scale(vec3(
+                ATOM_SIZE as f32,
+                ATOM_SIZE as f32,
+                1.,
+            )),
+            ..Default::default()
+        })
+        .id()
+}
+
+pub fn update_manager_pos(
+    mut commands: Commands,
+    chunk_textures: Query<Entity, With<ChunkTextures>>,
+    image_entities: Query<(&Parent, Entity, &Handle<Image>)>,
+    player: Query<&Actor, With<Player>>,
+    resources: (
+        ResMut<SavingTask>,
+        ResMut<ChunkManager>,
+        ResMut<Assets<Image>>,
+    ),
+    mut task_executor: AsyncTaskRunner<(HashMap<IVec2, Chunk>, IVec2)>,
+) {
+    let (mut saving_task, mut chunk_manager, mut images) = resources;
+
+    let mut player_pos = player.single().pos;
+    if player_pos.x < 0 {
+        player_pos.x -= CHUNK_LENGHT as i32
+    }
+    if player_pos.y < 0 {
+        player_pos.y -= CHUNK_LENGHT as i32
+    }
+    player_pos /= CHUNK_LENGHT as i32;
+
+    let diff_x = player_pos.x - chunk_manager.pos.x - LOAD_WIDTH / 2;
+    let diff_y = player_pos.y - chunk_manager.pos.y - LOAD_HEIGHT / 2;
+    let new_diff = ivec2(diff_x, diff_y);
+
+    match task_executor.poll() {
+        AsyncTaskStatus::Idle => {
+            if let Some(task) = &saving_task.0 {
+                if task.is_finished() {
+                    saving_task.0 = None;
+                } else {
+                    return;
+                }
+            }
+
+            if new_diff != IVec2::ZERO {
+                task_executor.start(async move {
+                    let file = fs::read("assets/worlds/world").unwrap_or_default();
+                    let chunks: HashMap<IVec2, Chunk> =
+                        bincode::deserialize(&file).unwrap_or_default();
+                    (chunks, new_diff)
+                });
+            }
+        }
+        AsyncTaskStatus::Finished((mut file, diff)) => {
+            let chunk_textures = chunk_textures.single();
+            for _ in 0..diff.x.abs() {
+                chunk_manager.move_manager(
+                    &mut commands,
+                    &mut images,
+                    &chunk_textures,
+                    &image_entities,
+                    &mut file,
+                    MoveDir::X(diff.x.signum()),
+                );
+            }
+
+            for _ in 0..diff.y.abs() {
+                chunk_manager.move_manager(
+                    &mut commands,
+                    &mut images,
+                    &chunk_textures,
+                    &image_entities,
+                    &mut file,
+                    MoveDir::Y(diff.y.signum()),
+                );
+            }
+
+            let pool = AsyncComputeTaskPool::get();
+            saving_task.0 = Some(pool.spawn(async move {
+                let data = bincode::serialize(&file).unwrap();
+                //Save file
+                let _ = File::create("assets/worlds/world")
+                    .unwrap()
+                    .write(&data)
+                    .unwrap();
+            }));
+        }
+        AsyncTaskStatus::Pending => {}
+    }
+}
+
 #[derive(Resource, Default, Deref, DerefMut)]
 struct ExtractedTextureUpdates(Vec<ExtractedTextureUpdate>);
 
@@ -555,114 +679,11 @@ fn prepare_chunk_gpu_textures(
     }
 }
 
-pub fn save_to_file(chunk_manager: Res<ChunkManager>, input: Res<Input<KeyCode>>) {
-    if input.just_pressed(KeyCode::K) {
-        let file = File::open("assets/worlds/world")
-            .unwrap_or(File::create("assets/worlds/world").unwrap());
-        let mut file_chunks: HashMap<IVec2, Chunk> =
-            bincode::deserialize_from(BufReader::new(file)).unwrap_or_default();
-
-        for (pos, chunk) in &chunk_manager.chunks {
-            if let Some(file_chunk) = file_chunks.get_mut(pos) {
-                *file_chunk = chunk.clone();
-            } else {
-                file_chunks.insert(*pos, chunk.clone());
-            }
-        }
-
-        let mut f = BufWriter::new(File::open("assets/worlds/world").unwrap());
-        serialize_into(&mut f, &file_chunks).unwrap();
-    }
-}
-
-pub fn load_from_file(
-    mut commands: Commands,
-    mut chunk_manager: ResMut<ChunkManager>,
-    chunk_textures: Query<Entity, With<ChunkTextures>>,
-    input: Res<Input<KeyCode>>,
-    mut images: ResMut<Assets<Image>>,
-) {
-    if input.just_pressed(KeyCode::L) {
-        for chunk in chunk_manager.chunks.values() {
-            images.remove(chunk.texture.clone());
-        }
-        chunk_manager.chunks = HashMap::new();
-
-        chunk_manager.chunks = HashMap::new();
-        let file = File::open("assets/worlds/world").unwrap();
-        let file_chunks: HashMap<IVec2, Chunk> =
-            bincode::deserialize_from(BufReader::new(file)).unwrap();
-
-        //Add new chunks to world
-        let mut images_vec = vec![];
-        for (pos, chunk) in &file_chunks {
-            let ent = add_chunk(
-                &mut commands,
-                &mut images,
-                &mut chunk_manager,
-                chunk.clone(),
-                *pos,
-            );
-            images_vec.push(ent);
-        }
-
-        //Delete old and add new textures entities
-        let mut chunk_textures = commands.get_entity(chunk_textures.single()).unwrap();
-        chunk_textures
-            .clear_children()
-            .insert_children(0, &images_vec);
-    }
-}
-
-//Still needs to add the return entity to a parent
-pub fn add_chunk(
-    commands: &mut Commands,
-    images: &mut ResMut<Assets<Image>>,
-    chunk_manager: &mut ChunkManager,
-    mut chunk: Chunk,
-    index: IVec2,
-) -> Entity {
-    let pos = Vec2::new(
-        index.x as f32 * SIDE_LENGHT,
-        (-index.y as f32) * SIDE_LENGHT,
-    );
-
-    //Add texture
-    chunk.texture = images.add(Chunk::new_image());
-    let texture_copy = chunk.texture.clone();
-
-    //Update chunk image
-    let image = images.get_mut(&chunk.texture).unwrap();
-    chunk.update_all(image);
-    chunk_manager.chunks.insert(index, chunk);
-
-    //Spawn Image
-    commands
-        .spawn(SpriteBundle {
-            texture: texture_copy,
-            sprite: Sprite {
-                anchor: Anchor::TopLeft,
-                ..Default::default()
-            },
-            transform: Transform::from_xyz(pos.x, pos.y, 0.).with_scale(vec3(
-                ATOM_SIZE as f32,
-                ATOM_SIZE as f32,
-                1.,
-            )),
-            ..Default::default()
-        })
-        .id()
-}
-
 pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, manager_setup)
-            .add_systems(Update, chunk_manager_update)
-            .add_systems(
-                PreUpdate,
-                (save_to_file, load_from_file.after(save_to_file)),
-            )
+            .add_systems(Update, (chunk_manager_update, update_manager_pos))
             .init_resource::<ChunkManager>();
 
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
