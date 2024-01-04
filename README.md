@@ -17,11 +17,11 @@ Powered by a similar engine as Noita, made from scratch with Rust.
   - GPU rendering optimizations of the sim
   - AABB colliders for the player and mobs
   - Player with special gun to shoot and suck atoms, and also a jetpack
+  - Bigger map, with saving/loading
 
 **What's next:**
   - More types of atoms! Like lava, acid, seeds, ...
   - Rapier2d rigidbodies (with simulated pixels) for things you can throw!
-  - Bigger map, with saving/loading
   - Procedurally generated worlds
   
 In the bigger picture we also aim to achieve intergalactic travel like Starbound, procedurally generated animations inspired by Rainworld, all the cool mechanics you see in Noita, multiplayer and modding, the last two made possible by a future engine migration to [Bones](https://github.com/fishfolk/bones/).
