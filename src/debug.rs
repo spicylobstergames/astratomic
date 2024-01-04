@@ -10,7 +10,7 @@ use bevy_inspector_egui::quick::WorldInspectorPlugin;
 fn brush(
     window: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
-    mut chunk_manager: Query<&mut ChunkManager>,
+    mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
     prev_mpos: Query<&PreviousMousePos>,
     input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
@@ -51,7 +51,6 @@ fn brush(
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
         .map(|ray| ray.origin.truncate())
     {
-        let mut chunk_manager = chunk_manager.single_mut();
         let mut dirty_rects = dirty_rects.single_mut();
         world_position.y *= -1.;
         let prev_mpos = prev_mpos.single().0.unwrap();
@@ -60,7 +59,8 @@ fn brush(
             prev_mpos.as_ivec2(),
             world_position.as_ivec2() - prev_mpos.as_ivec2(),
         ) {
-            let pos = transform_to_chunk(v.as_vec2());
+            let pos = v / ATOM_SIZE as i32;
+            let pos = global_to_chunk(pos);
 
             //Checks if there is a atom at the pos and if the pos is collidable, therefore not drawable
             if chunk_manager.get_atom(&pos).is_none()

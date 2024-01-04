@@ -27,10 +27,8 @@ pub fn player_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    mut chunk_manager: Query<&mut ChunkManager>,
+    mut chunk_manager: ResMut<ChunkManager>,
 ) {
-    let mut chunk_manager = chunk_manager.single_mut();
-
     let player_actor = Actor {
         height: 17,
         width: 10,
@@ -91,13 +89,12 @@ pub fn update_player(
     )>,
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
     mut camera_q: Query<(&Camera, &GlobalTransform, &mut Transform), Without<Tool>>,
-    mut chunk_manager: Query<&mut ChunkManager>,
+    mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
 ) {
     let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = player.single_mut();
     let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
     let (mouse, keys, mut scroll_evr) = input;
-    let mut chunk_manager = chunk_manager.single_mut();
 
     // Gravity
     if actor.vel.y < TERM_VEL as f32 {
@@ -262,6 +259,9 @@ pub fn update_player_sprite(
     camera_transform.translation = center_vec;
 }
 
+#[derive(Resource, Default)]
+pub struct SavingTask(pub Option<Task<()>>);
+
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
@@ -272,6 +272,7 @@ impl Plugin for PlayerPlugin {
                 update_player_sprite.after(update_actors),
             ),
         )
+        .insert_resource(SavingTask::default())
         .add_systems(PostStartup, player_setup.after(manager_setup));
     }
 }

@@ -1,5 +1,4 @@
 use std::ops::Range;
-use std::panic;
 
 use itertools::Itertools;
 use rand::Rng;
@@ -53,9 +52,23 @@ pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
     }
 
     let (chunk_x, chunk_y) = (pos.x / CHUNK_LENGHT as i32, pos.y / CHUNK_LENGHT as i32);
+
+    let (x_off, y_off) = (
+        (CHUNK_LENGHT as i32 - 1) - (pos.x % CHUNK_LENGHT as i32).abs(),
+        (CHUNK_LENGHT as i32 - 1) - (pos.y % CHUNK_LENGHT as i32).abs(),
+    );
+
     let (x, y) = (
-        pos.x as u32 % CHUNK_LENGHT as u32,
-        pos.y as u32 % CHUNK_LENGHT as u32,
+        if pos.x >= 0 {
+            pos.x as u32 % CHUNK_LENGHT as u32
+        } else {
+            x_off as u32
+        },
+        if pos.y >= 0 {
+            pos.y as u32 % CHUNK_LENGHT as u32
+        } else {
+            y_off as u32
+        },
     );
 
     ChunkPos::new(uvec2(x, y), ivec2(chunk_x, chunk_y))
@@ -68,48 +81,6 @@ pub fn chunk_to_global(pos: ChunkPos) -> IVec2 {
     atom.y += pos.chunk.y * CHUNK_LENGHT as i32;
 
     atom
-}
-
-/// Transforms global 3x3 chunk position to local 3x3 chunks position
-/// Used for chunk multithreaded updates
-pub fn global_to_local(pos: IVec2) -> (IVec2, i32) {
-    let range = 0..CHUNK_LENGHT as i32 * 3;
-    if !range.contains(&pos.x) || !range.contains(&pos.y) {
-        panic!("Invalid position on global_to_local.")
-    }
-
-    let chunk_lenght = CHUNK_LENGHT as i32;
-
-    let chunk_x = pos.x % (chunk_lenght * 3) / chunk_lenght;
-    let chunk_y = pos.y / chunk_lenght;
-
-    let local_x = pos.x - chunk_x * chunk_lenght;
-    let local_y = pos.y - chunk_y * chunk_lenght;
-
-    let chunk_index = chunk_y * 3 + chunk_x;
-
-    (IVec2::new(local_x, local_y), chunk_index)
-}
-
-/// Transforms local 3x3 chunk position to global 3x3 chunks position
-/// Used for chunk multithreaded updates
-pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
-    let range = 0..CHUNK_LENGHT as i32;
-    if !range.contains(&pos.0.x) || !range.contains(&pos.0.y) || !(0..9).contains(&pos.1) {
-        panic!("Invalid position on local_to_global.")
-    }
-
-    let chunk_size = CHUNK_LENGHT as i32;
-
-    let chunk_index = pos.1;
-
-    let chunk_x = chunk_index % 3;
-    let chunk_y = chunk_index / 3;
-
-    let global_x = pos.0.x + chunk_size * chunk_x;
-    let global_y = pos.0.y + chunk_size * chunk_y;
-
-    IVec2::new(global_x, global_y)
 }
 
 /// See if position is swapable, that means it sees if the position is a void
@@ -244,33 +215,10 @@ pub fn extend_rect_if_needed(rect: &mut URect, pos: &UVec2) {
 }
 
 // Shuflles range
-pub fn rand_range(vec: Range<usize>) -> Vec<usize> {
-    let mut vec: Vec<usize> = vec.collect();
+pub fn rand_range(vec: Range<i32>) -> Vec<i32> {
+    let mut vec: Vec<i32> = vec.collect();
     fastrand::shuffle(&mut vec);
     vec
-}
-
-// Transform pos to chunk coords
-pub fn transform_to_chunk(mut pos: Vec2) -> ChunkPos {
-    // This makes sure we don't have double 0 chunks.
-    if pos.x < 0. {
-        pos.x -= (CHUNK_LENGHT * ATOM_SIZE) as f32;
-    }
-    if pos.y < 0. {
-        pos.y -= (CHUNK_LENGHT * ATOM_SIZE) as f32;
-    }
-
-    let (chunk_x, chunk_y) = (
-        (pos.x / (CHUNK_LENGHT * ATOM_SIZE) as f32) as i32,
-        (pos.y / (CHUNK_LENGHT * ATOM_SIZE) as f32) as i32,
-    );
-
-    let (x, y) = (
-        ((pos.x / ATOM_SIZE as f32) % CHUNK_LENGHT as f32) as u32,
-        ((pos.y / ATOM_SIZE as f32) % CHUNK_LENGHT as f32) as u32,
-    );
-
-    ChunkPos::new(uvec2(x, y), ivec2(chunk_x, chunk_y))
 }
 
 pub trait D1 {
@@ -289,115 +237,6 @@ impl D1 for UVec2 {
     fn d1(&self) -> usize {
         (self.y * CHUNK_LENGHT as u32 + self.x) as usize
     }
-}
-
-pub fn split_left_right(
-    array: &mut [Atom],
-) -> ([&mut Atom; CHUNK_LEN / 2], [&mut Atom; CHUNK_LEN / 2]) {
-    let (left, right): (Vec<_>, Vec<_>) = array
-        .chunks_mut(CHUNK_LENGHT)
-        .flat_map(|chunk| {
-            let (left, right) = chunk.split_at_mut(HALF_CHUNK_LENGHT);
-            left.iter_mut().zip(right.iter_mut()).collect::<Vec<_>>()
-        })
-        .unzip();
-
-    (left.try_into().unwrap(), right.try_into().unwrap())
-}
-
-pub fn updown_to_leftright(
-    array: &mut [Atom],
-) -> ([&mut Atom; CHUNK_LEN / 4], [&mut Atom; CHUNK_LEN / 4]) {
-    let (left, right): (Vec<_>, Vec<_>) = array
-        .chunks_mut(CHUNK_LENGHT)
-        .flat_map(|chunk| {
-            let (left, right) = chunk.split_at_mut(HALF_CHUNK_LENGHT);
-            left.iter_mut().zip(right.iter_mut()).collect::<Vec<_>>()
-        })
-        .unzip();
-
-    (left.try_into().unwrap(), right.try_into().unwrap())
-}
-
-//This splits up our chunks for the update step, while also mutably borrowing them, making a `ChunkReference`
-//Some chunks are not chopped others are chopped up/down, left/right, and also in four corners.
-//We do this because each center chunk needs half of the adjacent chunks
-//So it needs up/down/left/right halves, and also four corners
-//TODO Decrease individual atoms iterations to get a &mut Atom;
-pub fn get_mutable_references<'a>(
-    chunks: &'a mut HashMap<IVec2, Chunk>,
-    mutable_references: &mut HashMap<IVec2, ChunkReference<'a>>,
-    (x_toff, y_toff): (usize, usize),
-    dirty_rects: &HashMap<IVec2, URect>,
-) {
-    chunks
-        .iter_mut()
-        .filter(|(chunk_pos, _)| {
-            let same_x = chunk_pos.x % 2 == x_toff as i32;
-            let same_y = chunk_pos.y % 2 == y_toff as i32;
-            let step_as_center = same_x && same_y;
-            if step_as_center && dirty_rects.contains_key(*chunk_pos) {
-                return true;
-            } else if !step_as_center {
-                let to_check = match (same_x, same_y) {
-                    (false, false) => vec![ivec2(-1, -1), ivec2(-1, 1), ivec2(1, -1), ivec2(1, 1)],
-                    (true, false) => vec![ivec2(0, -1), ivec2(0, 1)],
-                    (false, true) => vec![ivec2(-1, 0), ivec2(1, 0)],
-                    _ => unreachable!(),
-                };
-                for vec in to_check {
-                    if dirty_rects.contains_key(&(**chunk_pos + vec)) {
-                        return true;
-                    }
-                }
-            }
-
-            false
-        })
-        .for_each(|(chunk_pos, chunk)| {
-            let same_x = (chunk_pos.x as usize + x_toff) % 2 == 0;
-            let same_y = (chunk_pos.y as usize + y_toff) % 2 == 0;
-
-            match (same_x, same_y) {
-                (true, true) => {
-                    mutable_references.insert(*chunk_pos, ChunkReference::Center(&mut chunk.atoms));
-                }
-                (true, false) => {
-                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
-
-                    mutable_references.insert(
-                        *chunk_pos,
-                        ChunkReference::Side([
-                            Some(up.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
-                            Some(down.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
-                        ]),
-                    );
-                }
-                (false, true) => {
-                    let (left, right) = split_left_right(&mut chunk.atoms);
-
-                    mutable_references
-                        .insert(*chunk_pos, ChunkReference::Side([Some(left), Some(right)]));
-                }
-
-                (false, false) => {
-                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
-
-                    let (up_left, up_right) = updown_to_leftright(up);
-                    let (down_left, down_right) = updown_to_leftright(down);
-
-                    mutable_references.insert(
-                        *chunk_pos,
-                        ChunkReference::Corner([
-                            Some(up_left),
-                            Some(up_right),
-                            Some(down_left),
-                            Some(down_right),
-                        ]),
-                    );
-                }
-            }
-        });
 }
 
 pub fn update_dirty_rects(dirty_rects: &mut HashMap<IVec2, URect>, pos: ChunkPos) {
@@ -526,15 +365,6 @@ impl ChunkPos {
     pub fn new(atom: UVec2, chunk: IVec2) -> Self {
         Self { atom, chunk }
     }
-}
-
-pub enum ChunkReference<'a> {
-    //Not chopped
-    Center(&'a mut [Atom; CHUNK_LEN]),
-    //Chopped in two
-    Side([Option<[&'a mut Atom; HALF_CHUNK_LEN]>; 2]),
-    //Chopped in four
-    Corner([Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>; 4]),
 }
 
 /// A deferred update message.

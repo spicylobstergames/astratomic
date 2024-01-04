@@ -21,10 +21,18 @@ mod prelude {
     pub use bevy::input::mouse::MouseWheel;
     pub use bevy::math::{ivec2, uvec2, vec2, vec3};
     pub use bevy::prelude::*;
+    pub use bevy::tasks::*;
+    pub use bevy_async_task::*;
+
+    pub use serde::{Deserialize, Serialize};
+    pub use serde_big_array::BigArray;
+
     pub use std::collections::{HashMap, HashSet};
+    pub use std::fs;
+    pub use std::fs::File;
+    pub use std::io::Write;
 }
 
-use crate::animation::AnimationPlugin;
 use prelude::*;
 
 fn main() {
@@ -33,10 +41,10 @@ fn main() {
         //local plugins
         .add_plugins((
             ChunkManagerPlugin,
-            //DebugPlugin,
+            DebugPlugin,
             ActorsPlugin,
             PlayerPlugin,
-            AnimationPlugin,
+            animation::AnimationPlugin,
         ))
         .add_systems(Startup, setup)
         .run();

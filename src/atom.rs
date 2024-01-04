@@ -4,15 +4,20 @@ use std::{collections::HashSet, f32::consts::PI};
 use crate::prelude::*;
 
 // TODO Make smaller
-#[derive(Clone, Copy, Default, PartialEq, Debug)]
+#[derive(Clone, Copy, Default, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Atom {
     pub color: [u8; 4],
     pub state: State,
+
+    #[serde(skip)]
     pub updated_at: u8,
+    #[serde(skip)]
     pub fall_speed: u8,
     // Used when thrown up, etc
+    #[serde(skip)]
     pub velocity: (i8, i8),
     // Frames idle
+    #[serde(skip)]
     pub f_idle: u8,
 }
 
@@ -30,7 +35,7 @@ impl Atom {
 }
 
 // TODO Change this to a Material type
-#[derive(Default, Clone, Copy, PartialEq, Debug)]
+#[derive(Default, Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub enum State {
     Solid,
     Powder,
