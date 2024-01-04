@@ -333,7 +333,10 @@ pub fn send_manager_task(
             saving_task.0 = Some(pool.spawn(async move {
                 let data = bincode::serialize(&file).unwrap();
                 //Save file
-                let _ = File::create("assets/worlds/world").unwrap().write(&data).unwrap();
+                let _ = File::create("assets/worlds/world")
+                    .unwrap()
+                    .write(&data)
+                    .unwrap();
             }));
         }
         AsyncTaskStatus::Pending => {}

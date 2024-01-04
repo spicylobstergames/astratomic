@@ -557,7 +557,8 @@ fn prepare_chunk_gpu_textures(
 
 pub fn save_to_file(chunk_manager: Res<ChunkManager>, input: Res<Input<KeyCode>>) {
     if input.just_pressed(KeyCode::K) {
-        let file = File::open("assets/worlds/world").unwrap_or(File::create("assets/worlds/world").unwrap());
+        let file = File::open("assets/worlds/world")
+            .unwrap_or(File::create("assets/worlds/world").unwrap());
         let mut file_chunks: HashMap<IVec2, Chunk> =
             bincode::deserialize_from(BufReader::new(file)).unwrap_or_default();
 
