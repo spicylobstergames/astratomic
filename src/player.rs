@@ -261,14 +261,18 @@ pub fn update_player_sprite(
 
 pub fn send_manager_task(
     mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
     chunk_textures: Query<Entity, With<ChunkTextures>>,
     image_entities: Query<(&Parent, Entity, &Handle<Image>)>,
-    mut chunk_manager: ResMut<ChunkManager>,
     player: Query<&Actor, With<Player>>,
+    resources: (
+        ResMut<SavingTask>,
+        ResMut<ChunkManager>,
+        ResMut<Assets<Image>>,
+    ),
     mut task_executor: AsyncTaskRunner<(HashMap<IVec2, Chunk>, IVec2)>,
-    mut saving_task: ResMut<SavingTask>
 ) {
+    let (mut saving_task, mut chunk_manager, mut images) = resources;
+
     let mut player_pos = player.single().pos;
     if player_pos.x < 0 {
         player_pos.x -= CHUNK_LENGHT as i32
@@ -292,28 +296,36 @@ pub fn send_manager_task(
                 }
             }
 
-            if new_diff.x != 0 {
+            if new_diff != IVec2::ZERO {
                 task_executor.start(async move {
-                    let file = fs::read("world").unwrap_or_default();
+                    let file = fs::read("assets/worlds/world").unwrap_or_default();
                     let chunks: HashMap<IVec2, Chunk> =
                         bincode::deserialize(&file).unwrap_or_default();
                     (chunks, new_diff)
                 });
             }
         }
-        AsyncTaskStatus::Pending => {
-            return;
-        }
         AsyncTaskStatus::Finished((mut file, diff)) => {
             let chunk_textures = chunk_textures.single();
             for _ in 0..diff.x.abs() {
-                chunk_manager.move_x(
+                chunk_manager.move_manager(
                     &mut commands,
                     &mut images,
                     &chunk_textures,
                     &image_entities,
                     &mut file,
-                    diff.x.signum(),
+                    MoveDir::X(diff.x.signum()),
+                );
+            }
+
+            for _ in 0..diff.y.abs() {
+                chunk_manager.move_manager(
+                    &mut commands,
+                    &mut images,
+                    &chunk_textures,
+                    &image_entities,
+                    &mut file,
+                    MoveDir::Y(diff.y.signum()),
                 );
             }
 
@@ -321,9 +333,10 @@ pub fn send_manager_task(
             saving_task.0 = Some(pool.spawn(async move {
                 let data = bincode::serialize(&file).unwrap();
                 //Save file
-                let _ = File::create("world").unwrap().write(&data).unwrap();
+                let _ = File::create("assets/worlds/world").unwrap().write(&data).unwrap();
             }));
         }
+        AsyncTaskStatus::Pending => {}
     }
 }
 
@@ -340,7 +353,8 @@ impl Plugin for PlayerPlugin {
                 update_player_sprite.after(update_actors),
                 send_manager_task,
             ),
-        ).insert_resource(SavingTask::default())
+        )
+        .insert_resource(SavingTask::default())
         .add_systems(PostStartup, player_setup.after(manager_setup));
     }
 }
