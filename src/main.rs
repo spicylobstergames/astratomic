@@ -21,6 +21,9 @@ mod prelude {
     pub use bevy::input::mouse::MouseWheel;
     pub use bevy::math::{ivec2, uvec2, vec2, vec3};
     pub use bevy::prelude::*;
+    pub use bevy::tasks::*;
+    pub use bevy_async_task::*;
+    pub use futures_lite::future::{block_on, poll_once};
 
     pub use bincode::serialize_into;
     pub use serde::{Deserialize, Serialize};
@@ -31,6 +34,7 @@ mod prelude {
     pub use std::fs::File;
     pub use std::io::BufReader;
     pub use std::io::BufWriter;
+    pub use std::io::Write;
 }
 
 use prelude::*;
@@ -41,7 +45,7 @@ fn main() {
         //local plugins
         .add_plugins((
             ChunkManagerPlugin,
-            //DebugPlugin,
+            DebugPlugin,
             ActorsPlugin,
             PlayerPlugin,
             animation::AnimationPlugin,

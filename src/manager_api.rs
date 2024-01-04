@@ -53,9 +53,23 @@ pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
     }
 
     let (chunk_x, chunk_y) = (pos.x / CHUNK_LENGHT as i32, pos.y / CHUNK_LENGHT as i32);
+
+    let (x_off, y_off) = (
+        (CHUNK_LENGHT as i32 - 1) - (pos.x % CHUNK_LENGHT as i32).abs(),
+        (CHUNK_LENGHT as i32 - 1) - (pos.y % CHUNK_LENGHT as i32).abs(),
+    );
+
     let (x, y) = (
-        pos.x as u32 % CHUNK_LENGHT as u32,
-        pos.y as u32 % CHUNK_LENGHT as u32,
+        if pos.x >= 0 {
+            pos.x as u32 % CHUNK_LENGHT as u32
+        } else {
+            x_off as u32
+        },
+        if pos.y >= 0 {
+            pos.y as u32 % CHUNK_LENGHT as u32
+        } else {
+            y_off as u32
+        },
     );
 
     ChunkPos::new(uvec2(x, y), ivec2(chunk_x, chunk_y))
@@ -96,7 +110,10 @@ pub fn global_to_local(pos: IVec2) -> (IVec2, i32) {
 pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
     let range = 0..CHUNK_LENGHT as i32;
     if !range.contains(&pos.0.x) || !range.contains(&pos.0.y) || !(0..9).contains(&pos.1) {
-        panic!("Invalid position on local_to_global.")
+        panic!(
+            "Invalid position on local_to_global. {} {} {}",
+            pos.0.x, pos.0.y, pos.1
+        )
     }
 
     let chunk_size = CHUNK_LENGHT as i32;
@@ -244,33 +261,10 @@ pub fn extend_rect_if_needed(rect: &mut URect, pos: &UVec2) {
 }
 
 // Shuflles range
-pub fn rand_range(vec: Range<usize>) -> Vec<usize> {
-    let mut vec: Vec<usize> = vec.collect();
+pub fn rand_range(vec: Range<i32>) -> Vec<i32> {
+    let mut vec: Vec<i32> = vec.collect();
     fastrand::shuffle(&mut vec);
     vec
-}
-
-// Transform pos to chunk coords
-pub fn transform_to_chunk(mut pos: Vec2) -> ChunkPos {
-    // This makes sure we don't have double 0 chunks.
-    if pos.x < 0. {
-        pos.x -= (CHUNK_LENGHT * ATOM_SIZE) as f32;
-    }
-    if pos.y < 0. {
-        pos.y -= (CHUNK_LENGHT * ATOM_SIZE) as f32;
-    }
-
-    let (chunk_x, chunk_y) = (
-        (pos.x / (CHUNK_LENGHT * ATOM_SIZE) as f32) as i32,
-        (pos.y / (CHUNK_LENGHT * ATOM_SIZE) as f32) as i32,
-    );
-
-    let (x, y) = (
-        ((pos.x / ATOM_SIZE as f32) % CHUNK_LENGHT as f32) as u32,
-        ((pos.y / ATOM_SIZE as f32) % CHUNK_LENGHT as f32) as u32,
-    );
-
-    ChunkPos::new(uvec2(x, y), ivec2(chunk_x, chunk_y))
 }
 
 pub trait D1 {
@@ -327,14 +321,15 @@ pub fn updown_to_leftright(
 pub fn get_mutable_references<'a>(
     chunks: &'a mut HashMap<IVec2, Chunk>,
     mutable_references: &mut HashMap<IVec2, ChunkReference<'a>>,
-    (x_toff, y_toff): (usize, usize),
+    (x_toff, y_toff): (i32, i32),
     dirty_rects: &HashMap<IVec2, URect>,
+    manager_pos: IVec2,
 ) {
     chunks
         .iter_mut()
         .filter(|(chunk_pos, _)| {
-            let same_x = chunk_pos.x % 2 == x_toff as i32;
-            let same_y = chunk_pos.y % 2 == y_toff as i32;
+            let same_x = (chunk_pos.x + x_toff + manager_pos.x.abs() % 2) % 2 == 0;
+            let same_y = (chunk_pos.y + y_toff + manager_pos.y.abs() % 2) % 2 == 0;
             let step_as_center = same_x && same_y;
             if step_as_center && dirty_rects.contains_key(*chunk_pos) {
                 return true;
@@ -355,8 +350,8 @@ pub fn get_mutable_references<'a>(
             false
         })
         .for_each(|(chunk_pos, chunk)| {
-            let same_x = (chunk_pos.x as usize + x_toff) % 2 == 0;
-            let same_y = (chunk_pos.y as usize + y_toff) % 2 == 0;
+            let same_x = (chunk_pos.x + x_toff + manager_pos.x.abs() % 2) % 2 == 0;
+            let same_y = (chunk_pos.y + y_toff + manager_pos.y.abs() % 2) % 2 == 0;
 
             match (same_x, same_y) {
                 (true, true) => {

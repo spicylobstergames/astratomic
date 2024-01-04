@@ -27,10 +27,8 @@ pub fn player_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
-    mut chunk_manager: Query<&mut ChunkManager>,
+    mut chunk_manager: ResMut<ChunkManager>,
 ) {
-    let mut chunk_manager = chunk_manager.single_mut();
-
     let player_actor = Actor {
         height: 17,
         width: 10,
@@ -91,13 +89,12 @@ pub fn update_player(
     )>,
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
     mut camera_q: Query<(&Camera, &GlobalTransform, &mut Transform), Without<Tool>>,
-    mut chunk_manager: Query<&mut ChunkManager>,
+    mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: Query<&mut DirtyRects>,
 ) {
     let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = player.single_mut();
     let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
     let (mouse, keys, mut scroll_evr) = input;
-    let mut chunk_manager = chunk_manager.single_mut();
 
     // Gravity
     if actor.vel.y < TERM_VEL as f32 {
@@ -262,6 +259,77 @@ pub fn update_player_sprite(
     camera_transform.translation = center_vec;
 }
 
+pub fn send_manager_task(
+    mut commands: Commands,
+    mut images: ResMut<Assets<Image>>,
+    chunk_textures: Query<Entity, With<ChunkTextures>>,
+    image_entities: Query<(&Parent, Entity, &Handle<Image>)>,
+    mut chunk_manager: ResMut<ChunkManager>,
+    player: Query<&Actor, With<Player>>,
+    mut task_executor: AsyncTaskRunner<(HashMap<IVec2, Chunk>, IVec2)>,
+    mut saving_task: ResMut<SavingTask>
+) {
+    let mut player_pos = player.single().pos;
+    if player_pos.x < 0 {
+        player_pos.x -= CHUNK_LENGHT as i32
+    }
+    if player_pos.y < 0 {
+        player_pos.y -= CHUNK_LENGHT as i32
+    }
+    player_pos /= CHUNK_LENGHT as i32;
+
+    let diff_x = player_pos.x - chunk_manager.pos.x - LOAD_WIDTH / 2;
+    let diff_y = player_pos.y - chunk_manager.pos.y - LOAD_HEIGHT / 2;
+    let new_diff = ivec2(diff_x, diff_y);
+
+    match task_executor.poll() {
+        AsyncTaskStatus::Idle => {
+            if let Some(task) = &saving_task.0 {
+                if task.is_finished() {
+                    saving_task.0 = None;
+                } else {
+                    return;
+                }
+            }
+
+            if new_diff.x != 0 {
+                task_executor.start(async move {
+                    let file = fs::read("world").unwrap_or_default();
+                    let chunks: HashMap<IVec2, Chunk> =
+                        bincode::deserialize(&file).unwrap_or_default();
+                    (chunks, new_diff)
+                });
+            }
+        }
+        AsyncTaskStatus::Pending => {
+            return;
+        }
+        AsyncTaskStatus::Finished((mut file, diff)) => {
+            let chunk_textures = chunk_textures.single();
+            for _ in 0..diff.x.abs() {
+                chunk_manager.move_x(
+                    &mut commands,
+                    &mut images,
+                    &chunk_textures,
+                    &image_entities,
+                    &mut file,
+                    diff.x.signum(),
+                );
+            }
+
+            let pool = AsyncComputeTaskPool::get();
+            saving_task.0 = Some(pool.spawn(async move {
+                let data = bincode::serialize(&file).unwrap();
+                //Save file
+                let _ = File::create("world").unwrap().write(&data).unwrap();
+            }));
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct SavingTask(pub Option<Task<()>>);
+
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
@@ -270,8 +338,9 @@ impl Plugin for PlayerPlugin {
             (
                 update_player.after(chunk_manager_update),
                 update_player_sprite.after(update_actors),
+                send_manager_task,
             ),
-        )
+        ).insert_resource(SavingTask::default())
         .add_systems(PostStartup, player_setup.after(manager_setup));
     }
 }

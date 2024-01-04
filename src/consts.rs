@@ -32,7 +32,8 @@ pub const ATOM_SIZE: usize = 3;
 pub const GRAVITY: u8 = 1;
 pub const TERM_VEL: u8 = 10;
 pub const FRAMES_SLEEP: u8 = 4;
-pub const CHUNKS_WIDTH: usize = 32;
-pub const CHUNKS_HEIGHT: usize = 32;
+//Has to be even
+pub const LOAD_WIDTH: i32 = 32;
+pub const LOAD_HEIGHT: i32 = 20;
 
 pub const _CAMERA_SPEED: f32 = 10.;

@@ -5,13 +5,22 @@ use std::collections::HashSet;
 
 use crate::prelude::*;
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Chunk {
     #[serde(with = "BigArray")]
     pub atoms: [Atom; CHUNK_LEN],
 
     #[serde(skip)]
     pub texture: Handle<Image>,
+}
+
+impl Default for Chunk {
+    fn default() -> Self {
+        Self {
+            atoms: [Atom::default(); CHUNK_LEN],
+            texture: Handle::default(),
+        }
+    }
 }
 
 impl Chunk {

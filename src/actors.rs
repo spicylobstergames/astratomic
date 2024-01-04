@@ -33,9 +33,7 @@ pub fn on_ground(chunk_manager: &ChunkManager, actor: &Actor) -> bool {
     false
 }
 
-pub fn update_actors(mut chunk_manager: Query<&mut ChunkManager>, mut actors: Query<&mut Actor>) {
-    let mut chunk_manager = chunk_manager.single_mut();
-
+pub fn update_actors(mut chunk_manager: ResMut<ChunkManager>, mut actors: Query<&mut Actor>) {
     for mut actor in actors.iter_mut() {
         let mut prev = actor.pos;
         for v in Line::new(actor.pos, actor.vel.as_ivec2()) {
