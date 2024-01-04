@@ -41,7 +41,7 @@ fn main() {
         //local plugins
         .add_plugins((
             ChunkManagerPlugin,
-            DebugPlugin,
+            //DebugPlugin,
             ActorsPlugin,
             PlayerPlugin,
             animation::AnimationPlugin,
