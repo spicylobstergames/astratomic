@@ -35,6 +35,7 @@ pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
             .dirty_render_rect_send
             .try_send(DeferredDirtyRectUpdate {
                 chunk_pos: ChunkPos::new(pos.try_into().unwrap(), chunk),
+                ..Default::default()
             })
             .unwrap();
     }
@@ -92,12 +93,19 @@ pub fn chunk_to_global(pos: ChunkPos) -> IVec2 {
 
 /// See if position is swapable, that means it sees if the position is a void
 /// or if it's a swapable state and has been not updated
-pub fn swapable(chunks: &UpdateChunksType, pos: IVec2, states: &[(State, f32)], dt: u8) -> bool {
+pub fn swapable(
+    chunks: &UpdateChunksType,
+    pos: IVec2,
+    states: &[(State, f32)],
+    state: State,
+    dt: u8,
+) -> bool {
     if let Some(atom) = chunks.group.get_global(pos) {
         atom.state == State::Void
             || (states.iter().any(|&(state, prob)| {
                 state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
             }) && atom.updated_at != dt)
+            || (atom.state == State::Object && state == State::Liquid)
     } else {
         false
     }
@@ -112,8 +120,9 @@ pub fn down_neigh(
 ) -> [(bool, IVec2); 3] {
     let mut neigh = [(false, IVec2::ZERO); 3];
 
+    let state = get_state(chunks, pos);
     for (neigh, x) in neigh.iter_mut().zip([0, -1, 1]) {
-        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), states, dt);
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), states, state, dt);
         neigh.1 = IVec2::new(x, 1);
     }
 
@@ -133,8 +142,9 @@ pub fn side_neigh(
 ) -> [(bool, IVec2); 2] {
     let mut neigh = [(false, IVec2::ZERO); 2];
 
+    let state = get_state(chunks, pos);
     for (neigh, x) in neigh.iter_mut().zip([-1, 1]) {
-        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), states, dt);
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), states, state, dt);
         neigh.1 = IVec2::new(x, 0);
     }
 
@@ -165,19 +175,24 @@ pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
     }
 }
 
+/// Sets mode from a global pos
+pub fn set_mode(chunks: &mut UpdateChunksType, pos: IVec2, mode: bool) {
+    chunks.group[pos].automata_mode = mode
+}
+
 /// Gets fall speed from a global pos
 pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
-    chunks.group[pos].fall_speed
+    chunks.group[pos].velocity.1.try_into().unwrap()
 }
 
 /// Gets state from a global pos
-pub fn _get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
+pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
     chunks.group[pos].state
 }
 
 /// Sets fall speed from a global pos
 pub fn set_fspeed(chunks: &mut UpdateChunksType, pos: IVec2, fall_speed: u8) {
-    chunks.group[pos].fall_speed = fall_speed
+    chunks.group[pos].velocity.1 = fall_speed as i8
 }
 
 /// Checks if atom is able to update this frame from a global pos
@@ -344,7 +359,7 @@ pub fn update_dirty_rects_3x3(dirty_rects: &mut HashMap<IVec2, URect>, pos: Chun
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub struct ChunkPos {
     pub atom: UVec2,
     pub chunk: IVec2,
@@ -358,7 +373,8 @@ impl ChunkPos {
 
 /// A deferred update message.
 /// Indicates that an image or dirty rect should update.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DeferredDirtyRectUpdate {
     pub chunk_pos: ChunkPos,
+    pub awake_surrouding: bool,
 }
