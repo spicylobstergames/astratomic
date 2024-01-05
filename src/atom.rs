@@ -12,7 +12,7 @@ pub struct Atom {
     #[serde(skip)]
     pub updated_at: u8,
     #[serde(skip)]
-    pub fall_speed: u8,
+    pub automata_mode: bool,
     // Used when thrown up, etc
     #[serde(skip)]
     pub velocity: (i8, i8),
@@ -25,7 +25,6 @@ impl Atom {
     pub fn object() -> Self {
         Atom {
             state: State::Object,
-            color: [255, 255, 255, 255],
             ..Default::default()
         }
     }
@@ -134,7 +133,8 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
 
         if let Some(side) = side {
             for _ in 0..5 {
-                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], dt) {
+                let state = get_state(chunks, cur_pos);
+                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], state, dt) {
                     break;
                 }
 
@@ -164,10 +164,18 @@ pub fn update_particle(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> Has
     // Move
     for pos in Line::new(cur_pos, vel) {
         awakened.insert(cur_pos);
-        if swapable(chunks, pos, &[], dt) {
+        let state = get_state(chunks, cur_pos);
+        if swapable(chunks, pos, &[], state, dt) {
             swap(chunks, cur_pos, pos, dt);
             cur_pos = pos;
             awakened.insert(cur_pos);
+        } else if get_state(chunks, pos) == State::Liquid
+            && get_state(chunks, cur_pos) == State::Liquid
+        {
+            awakened.insert(pos);
+            set_vel(chunks, pos, vel * 4 / 5);
+            set_vel(chunks, cur_pos, vel / 5);
+            break;
         } else {
             if vel.abs().x > 4 && vel.abs().y > 4 {
                 set_vel(
@@ -175,8 +183,9 @@ pub fn update_particle(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> Has
                     cur_pos,
                     (Vec2::from_angle(PI).rotate(vel.as_vec2()) * 0.5).as_ivec2(),
                 );
-            } else {
+            } else if !swapable(chunks, cur_pos + IVec2::Y, &[], state, dt) {
                 set_vel(chunks, cur_pos, IVec2::ZERO);
+                set_mode(chunks, cur_pos, true);
             }
             break;
         }

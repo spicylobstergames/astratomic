@@ -148,7 +148,7 @@ impl std::ops::IndexMut<ChunkPos> for ChunkManager {
     }
 }
 
-#[derive(Component)]
+#[derive(Resource, Default)]
 pub struct DirtyRects {
     /// The current chunk update dirty rects
     pub current: HashMap<IVec2, URect>,
@@ -203,23 +203,16 @@ pub fn manager_setup(
             ChunkTextures,
         ))
         .push_children(&images_vec);
-
-    commands.spawn(DirtyRects {
-        current: HashMap::new(),
-        new: HashMap::new(),
-        render: HashMap::new(),
-    });
 }
 
 pub fn chunk_manager_update(
     mut chunk_manager: ResMut<ChunkManager>,
-    mut dirty_rects: Query<&mut DirtyRects>,
+    mut dirty_rects_resource: ResMut<DirtyRects>,
 ) {
     chunk_manager.dt = chunk_manager.dt.wrapping_add(1);
     let dt = chunk_manager.dt;
 
     // Get dirty rects
-    let mut dirty_rects_resource = dirty_rects.single_mut();
     let DirtyRects {
         current: dirty_rects,
         new: new_dirty_rects,
@@ -256,7 +249,11 @@ pub fn chunk_manager_update(
 
             // Loop through deferred tasks
             while let Ok(update) = dirty_update_rects_recv.recv().await {
-                update_dirty_rects_3x3(new_dirty_rects, update.chunk_pos);
+                if update.awake_surrouding {
+                    update_dirty_rects_3x3(new_dirty_rects, update.chunk_pos);
+                } else {
+                    update_dirty_rects(new_dirty_rects, update.chunk_pos)
+                }
             }
         });
 
@@ -400,11 +397,18 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
 
         let mut awake_self = false;
         let state;
-        let vel;
+        let automata_mode;
         {
             let atom = &mut chunks.group[local_pos];
             state = atom.state;
-            vel = atom.velocity != (0, 0);
+
+            if atom.velocity == (0, 0) {
+                atom.automata_mode = true;
+            }
+            automata_mode = atom.automata_mode;
+            if automata_mode {
+                atom.velocity = (0, atom.velocity.1.abs());
+            }
 
             if atom.f_idle < FRAMES_SLEEP && state != State::Void && state != State::Solid {
                 atom.f_idle += 1;
@@ -412,21 +416,27 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
             }
         }
 
-        let mut awakened = if vel {
-            update_particle(chunks, pos, dt)
-        } else {
+        let mut awakened = if automata_mode {
             match state {
                 State::Powder => update_powder(chunks, pos, dt),
                 State::Liquid => update_liquid(chunks, pos, dt),
                 _ => HashSet::new(),
             }
+        } else {
+            update_particle(chunks, pos, dt)
         };
 
+        let mut self_awakened = HashSet::new();
         if awakened.contains(&pos) {
+            let atom = &mut chunks.group[local_pos];
+            atom.f_idle = 0;
+        } else if !automata_mode {
+            awakened.insert(pos);
             let atom = &mut chunks.group[local_pos];
             atom.f_idle = 0;
         } else if awake_self {
             awakened.insert(pos);
+            self_awakened.insert(pos);
         }
 
         for awoke in awakened {
@@ -437,6 +447,7 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
                 .dirty_update_rect_send
                 .try_send(DeferredDirtyRectUpdate {
                     chunk_pos: ChunkPos::new(local.0.try_into().unwrap(), chunk),
+                    awake_surrouding: !self_awakened.contains(&awoke),
                 })
                 .unwrap();
         }
@@ -582,11 +593,9 @@ struct ExtractedTextureUpdate {
 
 fn extract_chunk_texture_updates(
     chunk_manager: Extract<Res<ChunkManager>>,
-    dirty_rects: Extract<Query<&DirtyRects>>,
+    dirty_rects: Extract<Res<DirtyRects>>,
     mut extracted_updates: ResMut<ExtractedTextureUpdates>,
 ) {
-    let dirty_rects = dirty_rects.single();
-
     for (chunk_pos, chunk) in chunk_manager.chunks.iter() {
         if let Some(rect) = dirty_rects.render.get(chunk_pos) {
             let id = chunk.texture.id();
@@ -651,7 +660,8 @@ impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, manager_setup)
             .add_systems(Update, (chunk_manager_update, update_manager_pos))
-            .init_resource::<ChunkManager>();
+            .init_resource::<ChunkManager>()
+            .init_resource::<DirtyRects>();
 
         if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app

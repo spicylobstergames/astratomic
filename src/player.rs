@@ -40,7 +40,7 @@ pub fn player_setup(
         TextureAtlas::from_grid(player_handle, Vec2::new(24.0, 24.0), 8, 5, None, None);
     let player_atlas_handle = texture_atlases.add(player_atlas);
     let animation_indices = AnimationIndices { first: 0, last: 1 };
-    let mut player_transform = Transform::from_scale(Vec3::splat(3.0));
+    let mut player_transform = Transform::from_scale(Vec3::splat(ATOM_SIZE as f32));
     player_transform.translation = vec2(5. * 3., -8. * 3.).extend(2.);
 
     let tool_handle = asset_server.load("player/player_tool.png");
@@ -88,7 +88,7 @@ pub fn update_player(
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
     mut camera_q: Query<(&Camera, &GlobalTransform, &mut Transform), Without<Tool>>,
     mut chunk_manager: ResMut<ChunkManager>,
-    mut dirty_rects: Query<&mut DirtyRects>,
+    mut dirty_rects: ResMut<DirtyRects>,
 ) {
     let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = player.single_mut();
     let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
@@ -179,7 +179,6 @@ pub fn update_player(
 
         let mut pos_to_update = vec![];
         if mouse.pressed(MouseButton::Right) {
-            println!("lol");
             let new_tool_front = tool_front + tool_slope * 6.;
             for i in 0..3 {
                 for vec in Line::new(
@@ -222,7 +221,6 @@ pub fn update_player(
             }
         }
 
-        let mut dirty_rects = dirty_rects.single_mut();
         for pos in pos_to_update {
             update_dirty_rects_3x3(&mut dirty_rects.current, pos);
             update_dirty_rects(&mut dirty_rects.render, pos);

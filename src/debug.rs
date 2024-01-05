@@ -11,7 +11,7 @@ fn brush(
     window: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut chunk_manager: ResMut<ChunkManager>,
-    mut dirty_rects: Query<&mut DirtyRects>,
+    mut dirty_rects: ResMut<DirtyRects>,
     prev_mpos: Query<&PreviousMousePos>,
     input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
 ) {
@@ -51,7 +51,6 @@ fn brush(
         .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
         .map(|ray| ray.origin.truncate())
     {
-        let mut dirty_rects = dirty_rects.single_mut();
         world_position.y *= -1.;
         let prev_mpos = prev_mpos.single().0.unwrap();
 
@@ -122,8 +121,7 @@ fn prev_mpos(
 
 //Debug Render systems
 
-pub fn render_dirty_rects(mut commands: Commands, dirty_rects: Query<&DirtyRects>) {
-    let dirty_rects = dirty_rects.single();
+pub fn render_dirty_rects(mut commands: Commands, dirty_rects: Res<DirtyRects>) {
     let (dirty_update, render_update) = (&dirty_rects.new, &dirty_rects.render);
 
     let mut i = 0.;

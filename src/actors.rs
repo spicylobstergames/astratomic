@@ -9,7 +9,11 @@ pub struct Actor {
 }
 
 //Called before simulations
-pub fn add_actors(mut chunk_manager: ResMut<ChunkManager>, actors: Query<&Actor>) {
+pub fn add_actors(
+    mut chunk_manager: ResMut<ChunkManager>,
+    actors: Query<&Actor>,
+    mut dirty_rects: ResMut<DirtyRects>,
+) {
     for actor in actors.iter() {
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
@@ -17,8 +21,18 @@ pub fn add_actors(mut chunk_manager: ResMut<ChunkManager>, actors: Query<&Actor>
                 if let Some(atom) = chunk_manager.get_mut_atom(pos) {
                     if atom.state == State::Void {
                         *atom = Atom::object();
+                    } else if atom.state == State::Liquid {
+                        let rand_angle = fastrand::f32() - 0.5;
+                        let vel = actor.vel * -4. * vec2(rand_angle.cos(), rand_angle.sin());
+                        //Water splashes
+                        atom.velocity = (
+                            (vel.x).clamp(-126.0, 126.) as i8,
+                            (vel.y).clamp(-126.0, 126.) as i8,
+                        );
+                        atom.automata_mode = false;
                     }
                 }
+                update_dirty_rects_3x3(&mut dirty_rects.current, pos);
             }
         }
     }
@@ -137,9 +151,6 @@ pub fn move_x(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
             if atom.state == State::Powder || atom.state == State::Solid {
                 actor.vel = Vec2::ZERO;
                 return false;
-            } else if atom.state == State::Liquid {
-                //Water splashes
-                atom.velocity = (0, -20)
             }
         } else {
             actor.vel = Vec2::ZERO;
@@ -170,9 +181,6 @@ pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> 
             if atom.state == State::Powder || atom.state == State::Solid {
                 actor.vel = Vec2::ZERO;
                 return false;
-            } else if atom.state == State::Liquid {
-                //Water splashes
-                atom.velocity = (0, -20)
             }
         } else {
             actor.vel = Vec2::ZERO;
