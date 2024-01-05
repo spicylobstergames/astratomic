@@ -25,11 +25,7 @@ pub fn add_actors(
                         let rand_angle = fastrand::f32() - 0.5;
                         let vel = actor.vel * -4. * vec2(rand_angle.cos(), rand_angle.sin());
                         //Water splashes
-                        atom.velocity = (
-                            (vel.x).clamp(-126.0, 126.) as i8,
-                            (vel.y).clamp(-126.0, 126.) as i8,
-                        );
-                        atom.automata_mode = false;
+                        //Add particle
                     }
                 }
                 update_dirty_rects_3x3(&mut dirty_rects.current, pos);

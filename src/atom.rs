@@ -1,5 +1,4 @@
-use rand::Rng;
-use std::{collections::HashSet, f32::consts::PI};
+use std::collections::HashSet;
 
 use crate::prelude::*;
 
@@ -9,16 +8,14 @@ pub struct Atom {
     pub color: [u8; 4],
     pub state: State,
 
+    //Velocity of automata sim particle
     #[serde(skip)]
-    pub updated_at: u8,
-    #[serde(skip)]
-    pub automata_mode: bool,
-    // Used when thrown up, etc
-    #[serde(skip)]
-    pub velocity: (i8, i8),
+    pub speed: u8,
     // Frames idle
     #[serde(skip)]
     pub f_idle: u8,
+    #[serde(skip)]
+    pub updated_at: u8,
 }
 
 impl Atom {
@@ -50,14 +47,14 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
 
     let mut cur_pos = pos;
 
-    // Get fall speed
-    let mut fall_speed = get_fspeed(chunks, cur_pos);
-    if fall_speed < TERM_VEL {
-        fall_speed += GRAVITY;
-        set_fspeed(chunks, cur_pos, fall_speed);
+    // Get atom speed
+    let mut speed = get_speed(chunks, cur_pos);
+    if speed < TERM_VEL {
+        speed += GRAVITY;
+        set_speed(chunks, cur_pos, speed);
     }
 
-    for _ in 0..fall_speed {
+    for _ in 0..speed {
         let neigh = down_neigh(chunks, cur_pos, &[(State::Liquid, 0.2)], dt);
         let mut swapped = false;
         for neigh in neigh {
@@ -73,17 +70,9 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
         }
 
         if !swapped {
-            let new_vel = Vec2::new(0.0, -(fall_speed as f32));
+            let vel = Vec2::new(0.0, -(speed as f32));
 
-            set_vel(
-                chunks,
-                cur_pos,
-                Vec2::from_angle(rand::thread_rng().gen_range(-PI / 2.0..PI / 2.))
-                    .rotate(new_vel * 0.3)
-                    .as_ivec2(),
-            );
-
-            set_fspeed(chunks, cur_pos, 0);
+            //Add particle
 
             break;
         }
@@ -98,14 +87,14 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
     let mut cur_pos = pos;
 
     // Get fall speed
-    let mut fall_speed = get_fspeed(chunks, pos);
-    if fall_speed < TERM_VEL {
-        fall_speed += GRAVITY;
-        set_fspeed(chunks, pos, fall_speed);
+    let mut speed = get_speed(chunks, pos);
+    if speed < TERM_VEL {
+        speed += GRAVITY;
+        set_speed(chunks, pos, speed);
     }
 
     let mut swapped = false;
-    for _ in 0..fall_speed {
+    for _ in 0..speed {
         let neigh = down_neigh(chunks, cur_pos, &[], dt);
         for neigh in neigh {
             if neigh.0 {
@@ -121,7 +110,7 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
     }
 
     if !swapped {
-        set_fspeed(chunks, cur_pos, 0);
+        set_speed(chunks, cur_pos, 0);
         let neigh = side_neigh(chunks, cur_pos, &[], dt);
         let side = if neigh[0].0 {
             Some(neigh[0].1.x)
@@ -143,51 +132,6 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
                 cur_pos += IVec2::new(side, 0);
                 awakened.insert(cur_pos);
             }
-        }
-    }
-
-    awakened
-}
-
-/// Updates particle and returns atoms awakened
-pub fn update_particle(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
-    let mut awakened = HashSet::new();
-    let mut cur_pos = pos;
-
-    // Add gravity
-    let mut vel = get_vel(chunks, cur_pos).unwrap_or(IVec2::ZERO);
-    if vel.y < TERM_VEL as i32 {
-        vel += GRAVITY as i32 * IVec2::Y;
-        set_vel(chunks, cur_pos, vel);
-    }
-
-    // Move
-    for pos in Line::new(cur_pos, vel) {
-        awakened.insert(cur_pos);
-        let state = get_state(chunks, cur_pos);
-        if swapable(chunks, pos, &[], state, dt) {
-            swap(chunks, cur_pos, pos, dt);
-            cur_pos = pos;
-            awakened.insert(cur_pos);
-        } else if get_state(chunks, pos) == State::Liquid
-            && get_state(chunks, cur_pos) == State::Liquid
-        {
-            awakened.insert(pos);
-            set_vel(chunks, pos, vel * 4 / 5);
-            set_vel(chunks, cur_pos, vel / 5);
-            break;
-        } else {
-            if vel.abs().x > 4 && vel.abs().y > 4 {
-                set_vel(
-                    chunks,
-                    cur_pos,
-                    (Vec2::from_angle(PI).rotate(vel.as_vec2()) * 0.5).as_ivec2(),
-                );
-            } else if !swapable(chunks, cur_pos + IVec2::Y, &[], state, dt) {
-                set_vel(chunks, cur_pos, IVec2::ZERO);
-                set_mode(chunks, cur_pos, true);
-            }
-            break;
         }
     }
 

@@ -155,34 +155,9 @@ pub fn side_neigh(
     neigh
 }
 
-/// Gets velocity from a global pos
-pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> Option<IVec2> {
-    let vel = chunks.group[pos].velocity;
-
-    if vel == (0, 0) {
-        None
-    } else {
-        Some(ivec2(vel.0 as i32, vel.1 as i32))
-    }
-}
-
-/// Sets velocity from a global pos
-pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
-    chunks.group[pos].velocity = if velocity == IVec2::ZERO {
-        (0, 0)
-    } else {
-        (velocity.x as i8, velocity.y as i8)
-    }
-}
-
-/// Sets mode from a global pos
-pub fn set_mode(chunks: &mut UpdateChunksType, pos: IVec2, mode: bool) {
-    chunks.group[pos].automata_mode = mode
-}
-
-/// Gets fall speed from a global pos
-pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
-    chunks.group[pos].velocity.1.try_into().unwrap()
+/// Gets speed from a global pos
+pub fn get_speed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
+    chunks.group[pos].speed
 }
 
 /// Gets state from a global pos
@@ -190,9 +165,9 @@ pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
     chunks.group[pos].state
 }
 
-/// Sets fall speed from a global pos
-pub fn set_fspeed(chunks: &mut UpdateChunksType, pos: IVec2, fall_speed: u8) {
-    chunks.group[pos].velocity.1 = fall_speed as i8
+/// Sets speed from a global pos
+pub fn set_speed(chunks: &mut UpdateChunksType, pos: IVec2, speed: u8) {
+    chunks.group[pos].speed = speed
 }
 
 /// Checks if atom is able to update this frame from a global pos

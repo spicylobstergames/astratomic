@@ -397,18 +397,9 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
 
         let mut awake_self = false;
         let state;
-        let automata_mode;
         {
             let atom = &mut chunks.group[local_pos];
             state = atom.state;
-
-            if atom.velocity == (0, 0) {
-                atom.automata_mode = true;
-            }
-            automata_mode = atom.automata_mode;
-            if automata_mode {
-                atom.velocity = (0, atom.velocity.1.abs());
-            }
 
             if atom.f_idle < FRAMES_SLEEP && state != State::Void && state != State::Solid {
                 atom.f_idle += 1;
@@ -416,22 +407,14 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
             }
         }
 
-        let mut awakened = if automata_mode {
-            match state {
-                State::Powder => update_powder(chunks, pos, dt),
-                State::Liquid => update_liquid(chunks, pos, dt),
-                _ => HashSet::new(),
-            }
-        } else {
-            update_particle(chunks, pos, dt)
+        let mut awakened = match state {
+            State::Powder => update_powder(chunks, pos, dt),
+            State::Liquid => update_liquid(chunks, pos, dt),
+            _ => HashSet::new(),
         };
 
         let mut self_awakened = HashSet::new();
         if awakened.contains(&pos) {
-            let atom = &mut chunks.group[local_pos];
-            atom.f_idle = 0;
-        } else if !automata_mode {
-            awakened.insert(pos);
             let atom = &mut chunks.group[local_pos];
             atom.f_idle = 0;
         } else if awake_self {

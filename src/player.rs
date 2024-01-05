@@ -192,10 +192,7 @@ pub fn update_player(
                         if atom.state == State::Void {
                             let vel = tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8);
 
-                            tool_atom.velocity = (vel.x as i8, vel.y as i8);
-                            chunk_manager[chunk_pos] = tool_atom;
-
-                            pos_to_update.push(chunk_pos);
+                            //Add particle
                         }
                     }
                 }
