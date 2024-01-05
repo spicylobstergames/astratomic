@@ -397,9 +397,11 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
 
         let mut awake_self = false;
         let state;
+        let speed;
         {
             let atom = &mut chunks.group[local_pos];
             state = atom.state;
+            speed = atom.speed;
 
             if atom.f_idle < FRAMES_SLEEP && state != State::Void && state != State::Solid {
                 atom.f_idle += 1;
@@ -407,16 +409,27 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
             }
         }
 
-        let mut awakened = match state {
-            State::Powder => update_powder(chunks, pos, dt),
-            State::Liquid => update_liquid(chunks, pos, dt),
-            _ => HashSet::new(),
+        let (vector, mut awakened) = if speed.0 == 0 && speed.1 >= 0 {
+            (
+                false,
+                match state {
+                    State::Powder => update_powder(chunks, pos, dt),
+                    State::Liquid => update_liquid(chunks, pos, dt),
+                    _ => HashSet::new(),
+                },
+            )
+        } else {
+            (true, update_atom(chunks, pos, dt))
         };
 
         let mut self_awakened = HashSet::new();
         if awakened.contains(&pos) {
             let atom = &mut chunks.group[local_pos];
             atom.f_idle = 0;
+        } else if vector {
+            let atom = &mut chunks.group[local_pos];
+            atom.f_idle = 0;
+            awakened.insert(pos);
         } else if awake_self {
             awakened.insert(pos);
             self_awakened.insert(pos);
@@ -446,8 +459,8 @@ pub fn add_chunk(
     index: IVec2,
 ) -> Entity {
     let pos = Vec2::new(
-        index.x as f32 * SIDE_LENGHT,
-        (-index.y as f32) * SIDE_LENGHT,
+        index.x as f32 * CHUNK_LENGHT as f32,
+        (-index.y as f32) * CHUNK_LENGHT as f32,
     );
 
     //Add texture
@@ -467,11 +480,7 @@ pub fn add_chunk(
                 anchor: Anchor::TopLeft,
                 ..Default::default()
             },
-            transform: Transform::from_xyz(pos.x, pos.y, 0.).with_scale(vec3(
-                ATOM_SIZE as f32,
-                ATOM_SIZE as f32,
-                1.,
-            )),
+            transform: Transform::from_xyz(pos.x, pos.y, 0.),
             ..Default::default()
         })
         .id()

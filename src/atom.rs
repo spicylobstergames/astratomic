@@ -1,4 +1,6 @@
+use rand::Rng;
 use std::collections::HashSet;
+use std::f32::consts::PI;
 
 use crate::prelude::*;
 
@@ -8,9 +10,8 @@ pub struct Atom {
     pub color: [u8; 4],
     pub state: State,
 
-    //Velocity of automata sim particle
     #[serde(skip)]
-    pub speed: u8,
+    pub speed: (i8, i8),
     // Frames idle
     #[serde(skip)]
     pub f_idle: u8,
@@ -72,7 +73,13 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
         if !swapped {
             let vel = Vec2::new(0.0, -(speed as f32));
 
-            //Add particle
+            set_vel(
+                chunks,
+                cur_pos,
+                Vec2::from_angle(rand::thread_rng().gen_range(-PI / 2.0..PI / 2.))
+                    .rotate(vel * 0.3)
+                    .as_ivec2(),
+            );
 
             break;
         }
@@ -132,6 +139,50 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
                 cur_pos += IVec2::new(side, 0);
                 awakened.insert(cur_pos);
             }
+        }
+    }
+
+    awakened
+}
+
+/// This updates the atom with a vector based velocity, not a automata like one
+pub fn update_atom(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
+    let mut awakened = HashSet::new();
+    let mut cur_pos = pos;
+
+    // Add gravity
+    let mut vel = get_vel(chunks, cur_pos);
+    if vel.y < TERM_VEL as i32 {
+        vel += GRAVITY as i32 * IVec2::Y;
+        set_vel(chunks, cur_pos, vel);
+    }
+
+    // Move
+    for pos in Line::new(cur_pos, vel) {
+        awakened.insert(cur_pos);
+        let state = get_state(chunks, cur_pos);
+        if swapable(chunks, pos, &[], state, dt) {
+            swap(chunks, cur_pos, pos, dt);
+            cur_pos = pos;
+            awakened.insert(cur_pos);
+        } else if get_state(chunks, pos) == State::Liquid
+            && get_state(chunks, cur_pos) == State::Liquid
+        {
+            awakened.insert(pos);
+            set_vel(chunks, pos, vel * 4 / 5);
+            set_vel(chunks, cur_pos, vel / 5);
+            break;
+        } else {
+            if vel.abs().x > 4 && vel.abs().y > 4 {
+                set_vel(
+                    chunks,
+                    cur_pos,
+                    (Vec2::from_angle(PI).rotate(vel.as_vec2()) * 0.5).as_ivec2(),
+                );
+            } else if !swapable(chunks, cur_pos + IVec2::Y, &[], state, dt) {
+                set_vel(chunks, cur_pos, IVec2::ZERO);
+            }
+            break;
         }
     }
 

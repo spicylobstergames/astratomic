@@ -40,8 +40,7 @@ pub fn player_setup(
         TextureAtlas::from_grid(player_handle, Vec2::new(24.0, 24.0), 8, 5, None, None);
     let player_atlas_handle = texture_atlases.add(player_atlas);
     let animation_indices = AnimationIndices { first: 0, last: 1 };
-    let mut player_transform = Transform::from_scale(Vec3::splat(ATOM_SIZE as f32));
-    player_transform.translation = vec2(5. * 3., -8. * 3.).extend(2.);
+    let player_transform = Transform::from_translation(vec3(5. * 3., -8. * 3., 2.));
 
     let tool_handle = asset_server.load("player/player_tool.png");
     let tool_bundle = SpriteBundle {
@@ -171,7 +170,6 @@ pub fn update_player(
         //Tool shooting and sucking atoms
         let mut center_vec_y_flipped = center_vec;
         center_vec_y_flipped.y *= -1.;
-        center_vec_y_flipped /= ATOM_SIZE as f32;
 
         let tool_slope = Vec2::new(angle.cos(), -angle.sin());
         let bound_slope = Vec2::new((angle + std::f32::consts::FRAC_PI_2).cos(), -(angle).cos());
@@ -238,17 +236,8 @@ pub fn update_player_sprite(
     let (mut transform, actor) = query.single_mut();
     let mut camera_transform = camera_q.single_mut();
 
-    let top_corner_vec = vec3(
-        actor.pos.x as f32 * ATOM_SIZE as f32,
-        -actor.pos.y as f32 * ATOM_SIZE as f32,
-        2.,
-    );
-    let center_vec = top_corner_vec
-        + vec3(
-            actor.width as f32 / 2. * ATOM_SIZE as f32,
-            -(8. * ATOM_SIZE as f32),
-            0.,
-        );
+    let top_corner_vec = vec3(actor.pos.x as f32, -actor.pos.y as f32, 2.);
+    let center_vec = top_corner_vec + vec3(actor.width as f32 / 2., -8., 0.);
     transform.translation = center_vec;
     camera_transform.translation = center_vec;
 }

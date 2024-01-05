@@ -7,8 +7,6 @@ pub const CHUNK_LEN: usize = CHUNK_LENGHT * CHUNK_LENGHT;
 pub const HALF_CHUNK_LEN: usize = CHUNK_LEN / 2;
 pub const QUARTER_CHUNK_LEN: usize = CHUNK_LEN / 4;
 
-pub const SIDE_LENGHT: f32 = (CHUNK_LENGHT * ATOM_SIZE) as f32;
-
 // Actor consts
 
 pub const UP_WALK_HEIGHT: usize = 3;
@@ -28,7 +26,11 @@ pub const TOOL_DISTANCE: f32 = 32.;
 pub const TOOL_RANGE: f32 = 12.;
 
 // Engine consts
-pub const ATOM_SIZE: usize = 3;
+
+//This was a "scale" const for the atoms, but we can just zoom in, so it was removed
+//Made the code less verbose and simpler, we can readd if it makes sense
+//pub const ATOM_SIZE: usize = 3;
+
 pub const GRAVITY: u8 = 1;
 pub const TERM_VEL: u8 = 10;
 pub const FRAMES_SLEEP: u8 = 4;

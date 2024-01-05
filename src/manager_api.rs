@@ -157,17 +157,31 @@ pub fn side_neigh(
 
 /// Gets speed from a global pos
 pub fn get_speed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
-    chunks.group[pos].speed
+    chunks.group[pos].speed.1 as u8
+}
+
+/// Sets speed from a global pos
+pub fn set_speed(chunks: &mut UpdateChunksType, pos: IVec2, speed: u8) {
+    chunks.group[pos].speed.1 = speed as i8
+}
+
+/// Gets velocity from a global pos
+pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> IVec2 {
+    ivec2(
+        chunks.group[pos].speed.0 as i32,
+        chunks.group[pos].speed.1 as i32,
+    )
+}
+
+/// Sets speed from a global pos
+pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, vel: IVec2) {
+    chunks.group[pos].speed.0 = vel.x as i8;
+    chunks.group[pos].speed.1 = vel.y as i8;
 }
 
 /// Gets state from a global pos
 pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
     chunks.group[pos].state
-}
-
-/// Sets speed from a global pos
-pub fn set_speed(chunks: &mut UpdateChunksType, pos: IVec2, speed: u8) {
-    chunks.group[pos].speed = speed
 }
 
 /// Checks if atom is able to update this frame from a global pos
