@@ -35,7 +35,6 @@ pub fn hydrate_particles(
         } else {
             0.8
         };
-
         commands
             .entity(ent)
             .insert(SpriteBundle {
