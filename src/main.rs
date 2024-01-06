@@ -10,12 +10,22 @@ mod consts;
 mod debug;
 mod geom_tools;
 mod manager_api;
+mod particles;
 mod player;
 mod prelude {
     pub use crate::atom::State;
     pub use crate::{
-        actors::*, animation::*, atom::*, chunk::*, chunk_group::*, chunk_manager::*, consts::*,
-        debug::*, geom_tools::*, manager_api::*, player::*,
+        actors::*,
+        animation::*,
+        atom::*,
+        chunk::*,
+        chunk_group::*,
+        chunk_manager::*,
+        consts::*,
+        geom_tools::*,
+        manager_api::*,
+        particles::*,
+        player::*, //debug::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -45,17 +55,17 @@ fn main() {
             ActorsPlugin,
             PlayerPlugin,
             animation::AnimationPlugin,
+            ParticlesPlugin,
         ))
-        .add_systems(Startup, setup)
+        .add_systems(Startup, setup_camera)
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup_camera(mut commands: Commands) {
     let mut camera = Camera2dBundle::default();
     camera.camera.hdr = true;
-    camera.transform.scale.x = 0.67;
-    camera.transform.scale.y = 0.67;
+    camera.transform.scale.x = 0.23;
+    camera.transform.scale.y = 0.23;
 
     commands.spawn(camera);
-    commands.spawn(PreviousMousePos(None));
 }

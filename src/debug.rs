@@ -12,7 +12,7 @@ fn brush(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: ResMut<DirtyRects>,
-    prev_mpos: Query<&PreviousMousePos>,
+    prev_mpos: Res<PreviousMousePos>,
     input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
 ) {
     let (state, color);
@@ -34,7 +34,7 @@ fn brush(
             (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             (125 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             (204 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-            255,
+            150,
         ];
     } else if input.1.pressed(KeyCode::ShiftLeft) {
         state = State::Solid;
@@ -52,14 +52,12 @@ fn brush(
         .map(|ray| ray.origin.truncate())
     {
         world_position.y *= -1.;
-        let prev_mpos = prev_mpos.single().0.unwrap();
 
         for v in Line::new(
-            prev_mpos.as_ivec2(),
-            world_position.as_ivec2() - prev_mpos.as_ivec2(),
+            prev_mpos.0.unwrap().as_ivec2(),
+            world_position.as_ivec2() - prev_mpos.0.unwrap().as_ivec2(),
         ) {
-            let pos = v / ATOM_SIZE as i32;
-            let pos = global_to_chunk(pos);
+            let pos = global_to_chunk(v);
 
             //Checks if there is a atom at the pos
             if chunk_manager.get_atom(&pos).is_none() {
@@ -97,13 +95,13 @@ fn brush(
     }
 }
 
-#[derive(Component)]
+#[derive(Resource, Default)]
 pub struct PreviousMousePos(pub Option<Vec2>);
 
 fn prev_mpos(
     window: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
-    mut prev_mpos: Query<&mut PreviousMousePos>,
+    mut prev_mpos: ResMut<PreviousMousePos>,
 ) {
     let (camera, camera_transform) = camera_q.single();
     let window = window.single();
@@ -115,7 +113,7 @@ fn prev_mpos(
     {
         world_position.y *= -1.;
 
-        prev_mpos.single_mut().0 = Some(world_position);
+        prev_mpos.0 = Some(world_position);
     }
 }
 
@@ -132,21 +130,16 @@ pub fn render_dirty_rects(mut commands: Commands, dirty_rects: Res<DirtyRects>) 
                     sprite: Sprite {
                         color: Color::rgba(i, 0.25, if i == 0. { 1. } else { 0. }, 0.1),
                         custom_size: Some(
-                            UVec2::new(
-                                (rect.max.x - rect.min.x + 1) * ATOM_SIZE as u32,
-                                (rect.max.y - rect.min.y + 1) * ATOM_SIZE as u32,
-                            )
-                            .as_vec2(),
+                            UVec2::new(rect.max.x - rect.min.x + 1, rect.max.y - rect.min.y + 1)
+                                .as_vec2(),
                         ),
                         anchor: Anchor::TopLeft,
                         ..default()
                     },
                     transform: Transform::from_translation(
                         IVec3::new(
-                            chunk_pos.x * (CHUNK_LENGHT * ATOM_SIZE) as i32
-                                + (rect.min.x as i32 * ATOM_SIZE as i32),
-                            -(chunk_pos.y * (CHUNK_LENGHT * ATOM_SIZE) as i32)
-                                - (rect.min.y as i32 * ATOM_SIZE as i32),
+                            chunk_pos.x * CHUNK_LENGHT as i32 + rect.min.x as i32,
+                            -(chunk_pos.y * CHUNK_LENGHT as i32) - rect.min.y as i32,
                             1,
                         )
                         .as_vec3(),
@@ -165,16 +158,13 @@ fn render_actors(mut commands: Commands, actors: Query<&Actor>) {
             .spawn(SpriteBundle {
                 sprite: Sprite {
                     color: Color::rgba(0.75, 0.25, 0.25, 0.2),
-                    custom_size: Some(Vec2::new(
-                        actor.width as f32 * ATOM_SIZE as f32,
-                        actor.height as f32 * ATOM_SIZE as f32,
-                    )),
+                    custom_size: Some(Vec2::new(actor.width as f32, actor.height as f32)),
                     anchor: Anchor::TopLeft,
                     ..default()
                 },
                 transform: Transform::from_translation(Vec3::new(
-                    actor.pos.x as f32 * ATOM_SIZE as f32,
-                    -actor.pos.y as f32 * ATOM_SIZE as f32,
+                    actor.pos.x as f32,
+                    -actor.pos.y as f32,
                     1.,
                 )),
                 ..default()
@@ -216,6 +206,7 @@ impl Plugin for DebugPlugin {
         .add_systems(PreUpdate, delete_image)
         .add_plugins(WorldInspectorPlugin::new())
         //Frame on console
-        .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin));
+        .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
+        .init_resource::<PreviousMousePos>();
     }
 }

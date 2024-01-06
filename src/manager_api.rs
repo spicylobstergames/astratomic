@@ -15,11 +15,20 @@ pub struct UpdateChunksType<'a> {
 
 /// Swap two atoms from global 3x3 chunks positions
 pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
+    let states = [get_state(chunks, pos1), get_state(chunks, pos2)];
     let chunk_group = &mut chunks.group;
     {
         let temp = chunk_group[pos1];
-        chunk_group[pos1] = chunk_group[pos2];
-        chunk_group[pos2] = temp;
+        chunk_group[pos1] = if states[1] == State::Object {
+            Atom::default()
+        } else {
+            chunk_group[pos2]
+        };
+        chunk_group[pos2] = if states[0] == State::Object {
+            Atom::default()
+        } else {
+            temp
+        };
 
         chunk_group[pos1].updated_at = dt;
         chunk_group[pos2].updated_at = dt;
@@ -41,6 +50,7 @@ pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
     }
 }
 
+// If you are getting this from a transform, make sure to flip the y value
 /// Transforms a global manager pos to a chunk pos
 pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
     // This makes sure we don't have double 0 chunks.
@@ -80,15 +90,6 @@ pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
     );
 
     ChunkPos::new(uvec2(x, y), ivec2(chunk_x, chunk_y))
-}
-
-/// Transforms a chunk pos to a global manager pos
-pub fn chunk_to_global(pos: ChunkPos) -> IVec2 {
-    let mut atom = pos.atom.as_ivec2();
-    atom.x += pos.chunk.x * CHUNK_LENGHT as i32;
-    atom.y += pos.chunk.y * CHUNK_LENGHT as i32;
-
-    atom
 }
 
 /// See if position is swapable, that means it sees if the position is a void
@@ -155,44 +156,33 @@ pub fn side_neigh(
     neigh
 }
 
+/// Gets speed from a global pos
+pub fn get_speed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
+    chunks.group[pos].speed.1 as u8
+}
+
+/// Sets speed from a global pos
+pub fn set_speed(chunks: &mut UpdateChunksType, pos: IVec2, speed: u8) {
+    chunks.group[pos].speed.1 = speed as i8
+}
+
 /// Gets velocity from a global pos
-pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> Option<IVec2> {
-    let vel = chunks.group[pos].velocity;
-
-    if vel == (0, 0) {
-        None
-    } else {
-        Some(ivec2(vel.0 as i32, vel.1 as i32))
-    }
+pub fn get_vel(chunks: &UpdateChunksType, pos: IVec2) -> IVec2 {
+    ivec2(
+        chunks.group[pos].speed.0 as i32,
+        chunks.group[pos].speed.1 as i32,
+    )
 }
 
-/// Sets velocity from a global pos
-pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, velocity: IVec2) {
-    chunks.group[pos].velocity = if velocity == IVec2::ZERO {
-        (0, 0)
-    } else {
-        (velocity.x as i8, velocity.y as i8)
-    }
-}
-
-/// Sets mode from a global pos
-pub fn set_mode(chunks: &mut UpdateChunksType, pos: IVec2, mode: bool) {
-    chunks.group[pos].automata_mode = mode
-}
-
-/// Gets fall speed from a global pos
-pub fn get_fspeed(chunks: &UpdateChunksType, pos: IVec2) -> u8 {
-    chunks.group[pos].velocity.1.try_into().unwrap()
+/// Sets speed from a global pos
+pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, vel: IVec2) {
+    chunks.group[pos].speed.0 = vel.x as i8;
+    chunks.group[pos].speed.1 = vel.y as i8;
 }
 
 /// Gets state from a global pos
 pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
     chunks.group[pos].state
-}
-
-/// Sets fall speed from a global pos
-pub fn set_fspeed(chunks: &mut UpdateChunksType, pos: IVec2, fall_speed: u8) {
-    chunks.group[pos].velocity.1 = fall_speed as i8
 }
 
 /// Checks if atom is able to update this frame from a global pos
@@ -343,7 +333,7 @@ pub fn update_dirty_rects_3x3(dirty_rects: &mut HashMap<IVec2, URect>, pos: Chun
     } else {
         // Case where the 3x3 position is in the corner of a chunk
         for (x, y) in (-1..=1).cartesian_product(-1..=1) {
-            let mut global = chunk_to_global(pos);
+            let mut global = pos.to_global();
             global += ivec2(x, y);
             let pos = global_to_chunk(global);
 
@@ -359,7 +349,7 @@ pub fn update_dirty_rects_3x3(dirty_rects: &mut HashMap<IVec2, URect>, pos: Chun
     }
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct ChunkPos {
     pub atom: UVec2,
     pub chunk: IVec2,
@@ -368,6 +358,14 @@ pub struct ChunkPos {
 impl ChunkPos {
     pub fn new(atom: UVec2, chunk: IVec2) -> Self {
         Self { atom, chunk }
+    }
+
+    pub fn to_global(self) -> IVec2 {
+        let mut atom = self.atom.as_ivec2();
+        atom.x += self.chunk.x * CHUNK_LENGHT as i32;
+        atom.y += self.chunk.y * CHUNK_LENGHT as i32;
+
+        atom
     }
 }
 
