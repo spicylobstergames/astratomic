@@ -30,14 +30,20 @@ pub fn hydrate_particles(
 ) {
     //Spawn particle sprite
     for (particle, ent) in particles.iter() {
+        let mult = if particle.state == PartState::Normal {
+            1.2
+        } else {
+            0.8
+        };
+
         commands
             .entity(ent)
             .insert(SpriteBundle {
                 sprite: Sprite {
                     color: Color::rgba(
-                        particle.atom.color[0] as f32 / 255.,
-                        particle.atom.color[1] as f32 / 255.,
-                        particle.atom.color[2] as f32 / 255.,
+                        particle.atom.color[0] as f32 / 255. * mult,
+                        particle.atom.color[1] as f32 / 255. * mult,
+                        particle.atom.color[2] as f32 / 255. * mult,
                         particle.atom.color[3] as f32 / 255.,
                     ),
                     custom_size: Some(Vec2::new(1.0, 1.0)),
