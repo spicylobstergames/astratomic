@@ -22,6 +22,8 @@ impl Default for Player {
 pub struct Tool {
     atoms: Vec<Atom>,
 }
+#[derive(Component)]
+pub struct ToolFront;
 
 pub fn player_setup(
     mut commands: Commands,
@@ -40,7 +42,7 @@ pub fn player_setup(
         TextureAtlas::from_grid(player_handle, Vec2::new(24.0, 24.0), 8, 5, None, None);
     let player_atlas_handle = texture_atlases.add(player_atlas);
     let animation_indices = AnimationIndices { first: 0, last: 1 };
-    let player_transform = Transform::from_translation(vec3(5. * 3., -8. * 3., 2.));
+    let player_transform = GlobalTransform::from_xyz(5. * 3., -8. * 3., PLAYER_LAYER);
 
     let tool_handle = asset_server.load("player/player_tool.png");
     let tool_bundle = SpriteBundle {
@@ -49,10 +51,20 @@ pub fn player_setup(
             anchor: Anchor::CenterLeft,
             ..Default::default()
         },
-        transform: Transform::from_translation(Vec3::new(-3., -3.5, 1.)),
+        transform: Transform::from_translation(Vec3::new(-3., -3.5, 0.1)),
         ..Default::default()
     };
-    let tool_ent = commands.spawn(tool_bundle).insert(Tool::default()).id();
+    let tool_front_ent = commands
+        .spawn((
+            TransformBundle::from_transform(Transform::from_translation(vec3(8., 0., 0.))),
+            ToolFront,
+        ))
+        .id();
+    let tool_ent = commands
+        .spawn(tool_bundle)
+        .insert(Tool::default())
+        .insert_children(0, &[tool_front_ent])
+        .id();
 
     commands
         .spawn((
@@ -61,7 +73,7 @@ pub fn player_setup(
             SpriteSheetBundle {
                 texture_atlas: player_atlas_handle,
                 sprite: TextureAtlasSprite::new(animation_indices.first),
-                transform: player_transform,
+                global_transform: player_transform,
                 ..default()
             },
             animation_indices,
@@ -72,26 +84,14 @@ pub fn player_setup(
 
 /// Updates player
 pub fn update_player(
-    input: (
-        Res<Input<MouseButton>>,
-        ResMut<Input<KeyCode>>,
-        EventReader<MouseWheel>,
-    ),
-    window: Query<&Window>,
-    mut player: Query<(
-        &mut Actor,
-        &mut Player,
-        &mut TextureAtlasSprite,
-        &mut AnimationIndices,
-    )>,
-    mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
-    mut camera_q: Query<(&Camera, &GlobalTransform, &mut Transform), Without<Tool>>,
-    mut chunk_manager: ResMut<ChunkManager>,
-    mut dirty_rects: ResMut<DirtyRects>,
+    input: (ResMut<Input<KeyCode>>, EventReader<MouseWheel>),
+    mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices)>,
+    chunk_manager: ResMut<ChunkManager>,
+    mut camera: Query<&mut Transform, (Without<Tool>, With<Camera>)>,
 ) {
-    let (mut actor, mut player, mut textatlas_sprite, mut anim_idxs) = player.single_mut();
-    let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
-    let (mouse, keys, mut scroll_evr) = input;
+    let (mut actor, mut player, mut anim_idxs) = player.single_mut();
+    let (keys, mut scroll_evr) = input;
+    let mut camera_transform = camera.single_mut();
 
     // Gravity
     if actor.vel.y < TERM_VEL as f32 {
@@ -147,9 +147,32 @@ pub fn update_player(
         }
     }
 
-    // Tool
-    let (camera, camera_gtransform, mut camera_transform) = camera_q.single_mut();
+    for ev in scroll_evr.read() {
+        if ev.unit == MouseScrollUnit::Line {
+            camera_transform.scale *= 0.9_f32.powi(ev.y as i32);
+        }
+    }
+}
+
+pub fn tool_system(
+    mut commands: Commands,
+    mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
+    window: Query<&Window>,
+    mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
+    tool_front_ent: Query<Entity, With<ToolFront>>,
+    mut player: Query<&mut TextureAtlasSprite, With<Player>>,
+    resources: (
+        ResMut<ChunkManager>,
+        ResMut<DirtyRects>,
+        Res<Input<MouseButton>>,
+    ),
+) {
+    let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
+    let (camera, camera_gtransform) = camera.single_mut();
     let window = window.single();
+    let mut textatlas_sprite = player.single_mut();
+    let (mut chunk_manager, mut dirty_rects, mouse) = resources;
+
     if let Some(world_position) = window
         .cursor_position()
         .and_then(|cursor| camera.viewport_to_world(camera_gtransform, cursor))
@@ -177,21 +200,29 @@ pub fn update_player(
 
         let mut pos_to_update = vec![];
         if mouse.pressed(MouseButton::Right) {
-            let new_tool_front = tool_front + tool_slope * 6.;
-            for i in 0..3 {
-                for vec in Line::new(
-                    (new_tool_front - bound_slope * 3. + tool_slope * i as f32 * 2.).as_ivec2(),
-                    (bound_slope * 3.).as_ivec2(),
-                ) {
-                    let chunk_pos = global_to_chunk(vec);
-                    if let (Some(atom), Some(mut tool_atom)) =
-                        (chunk_manager.get_mut_atom(chunk_pos), tool.atoms.pop())
-                    {
-                        if atom.state == State::Void {
-                            let vel = tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8);
+            let new_tool_front = tool_front + tool_slope * 2.;
+            let n = 12;
 
-                            //Add particle
-                        }
+            for i in 0..=n {
+                let angle = fastrand::f32() * std::f32::consts::TAU;
+
+                let vec = new_tool_front - bound_slope * 2.
+                    + bound_slope * 2.5 * i as f32 / n as f32
+                    + vec2(angle.cos(), angle.sin());
+                let chunk_pos = global_to_chunk(vec.as_ivec2());
+                if let (Some(atom), Some(tool_atom)) =
+                    (chunk_manager.get_mut_atom(chunk_pos), tool.atoms.pop())
+                {
+                    if atom.state == State::Void || atom.state == State::Object {
+                        let angle = fastrand::f32() * 0.5 - 0.25;
+                        let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
+                            .rotate(vec2(angle.cos(), angle.sin()));
+                        commands.spawn(Particle {
+                            atom: tool_atom,
+                            velocity: vel,
+                            pos: vec,
+                            ..Default::default()
+                        });
                     }
                 }
             }
@@ -206,9 +237,16 @@ pub fn update_player(
                     let chunk_pos = global_to_chunk(vec);
                     if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
                         if atom.state != State::Void && atom.state != State::Object {
+                            commands.spawn(Particle {
+                                atom: *atom,
+                                pos: chunk_pos.to_global().as_vec2(),
+                                state: PartState::Follow(tool_front_ent.single()),
+                                ..Default::default()
+                            });
+
+                            pos_to_update.push(chunk_pos);
                             tool.atoms.push(*atom);
                             *atom = Atom::default();
-                            pos_to_update.push(chunk_pos);
                             break;
                         }
                     }
@@ -219,12 +257,6 @@ pub fn update_player(
         for pos in pos_to_update {
             update_dirty_rects_3x3(&mut dirty_rects.current, pos);
             update_dirty_rects(&mut dirty_rects.render, pos);
-        }
-    }
-
-    for ev in scroll_evr.read() {
-        if ev.unit == MouseScrollUnit::Line {
-            camera_transform.scale *= 0.9_f32.powi(ev.y as i32);
         }
     }
 }
@@ -252,6 +284,7 @@ impl Plugin for PlayerPlugin {
             Update,
             (
                 update_player.after(chunk_manager_update),
+                tool_system.after(update_player),
                 update_player_sprite.after(update_actors),
             ),
         )

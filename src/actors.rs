@@ -21,11 +21,6 @@ pub fn add_actors(
                 if let Some(atom) = chunk_manager.get_mut_atom(pos) {
                     if atom.state == State::Void {
                         *atom = Atom::object();
-                    } else if atom.state == State::Liquid {
-                        let rand_angle = fastrand::f32() - 0.5;
-                        let vel = actor.vel * -4. * vec2(rand_angle.cos(), rand_angle.sin());
-                        //Water splashes
-                        //Add particle
                     }
                 }
                 update_dirty_rects_3x3(&mut dirty_rects.current, pos);

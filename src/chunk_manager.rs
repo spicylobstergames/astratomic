@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use crate::prelude::*;
 
 /// Updates and do the chunks logic
-#[derive(Default, Resource)]
+#[derive(Default, Resource, Clone)]
 pub struct ChunkManager {
     pub chunks: HashMap<IVec2, Chunk>,
     pub pos: IVec2,
@@ -199,7 +199,11 @@ pub fn manager_setup(
         .spawn((
             Name::new("Chunks textures"),
             VisibilityBundle::default(),
-            TransformBundle::default(),
+            TransformBundle::from_transform(Transform::from_translation(vec3(
+                0.,
+                0.,
+                AUTOMATA_LAYER,
+            ))),
             ChunkTextures,
         ))
         .push_children(&images_vec);

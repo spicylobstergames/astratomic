@@ -23,6 +23,7 @@ impl Atom {
     pub fn object() -> Self {
         Atom {
             state: State::Object,
+            color: [255, 255, 255, 255],
             ..Default::default()
         }
     }

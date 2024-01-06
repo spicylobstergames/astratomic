@@ -12,7 +12,7 @@ fn brush(
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: ResMut<DirtyRects>,
-    prev_mpos: Query<&PreviousMousePos>,
+    prev_mpos: Res<PreviousMousePos>,
     input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
 ) {
     let (state, color);
@@ -34,7 +34,7 @@ fn brush(
             (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             (125 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
             (204 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-            255,
+            150,
         ];
     } else if input.1.pressed(KeyCode::ShiftLeft) {
         state = State::Solid;
@@ -52,11 +52,10 @@ fn brush(
         .map(|ray| ray.origin.truncate())
     {
         world_position.y *= -1.;
-        let prev_mpos = prev_mpos.single().0.unwrap();
 
         for v in Line::new(
-            prev_mpos.as_ivec2(),
-            world_position.as_ivec2() - prev_mpos.as_ivec2(),
+            prev_mpos.0.unwrap().as_ivec2(),
+            world_position.as_ivec2() - prev_mpos.0.unwrap().as_ivec2(),
         ) {
             let pos = global_to_chunk(v);
 
@@ -96,13 +95,13 @@ fn brush(
     }
 }
 
-#[derive(Component)]
+#[derive(Resource, Default)]
 pub struct PreviousMousePos(pub Option<Vec2>);
 
 fn prev_mpos(
     window: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
-    mut prev_mpos: Query<&mut PreviousMousePos>,
+    mut prev_mpos: ResMut<PreviousMousePos>,
 ) {
     let (camera, camera_transform) = camera_q.single();
     let window = window.single();
@@ -114,7 +113,7 @@ fn prev_mpos(
     {
         world_position.y *= -1.;
 
-        prev_mpos.single_mut().0 = Some(world_position);
+        prev_mpos.0 = Some(world_position);
     }
 }
 
@@ -207,6 +206,7 @@ impl Plugin for DebugPlugin {
         .add_systems(PreUpdate, delete_image)
         .add_plugins(WorldInspectorPlugin::new())
         //Frame on console
-        .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin));
+        .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
+        .init_resource::<PreviousMousePos>();
     }
 }
