@@ -7,6 +7,7 @@ use crate::prelude::*;
 pub struct Player {
     fuel: f32,
     jetpack: bool,
+    atom_id: u8,
 }
 
 impl Default for Player {
@@ -14,14 +15,14 @@ impl Default for Player {
         Self {
             fuel: FUEL_MAX,
             jetpack: false,
+            atom_id: 0,
         }
     }
 }
 
 #[derive(Component, Default)]
-pub struct Tool {
-    atoms: Vec<Atom>,
-}
+pub struct Tool;
+
 #[derive(Component)]
 pub struct ToolFront;
 
@@ -62,7 +63,7 @@ pub fn player_setup(
         .id();
     let tool_ent = commands
         .spawn(tool_bundle)
-        .insert(Tool::default())
+        .insert(Tool)
         .insert_children(0, &[tool_front_ent])
         .id();
 
@@ -147,30 +148,44 @@ pub fn update_player(
         }
     }
 
+    //Zoom
     for ev in scroll_evr.read() {
         if ev.unit == MouseScrollUnit::Line {
             camera_transform.scale *= 0.9_f32.powi(ev.y as i32);
         }
     }
+
+    //Change shooting atoms
+    if keys.just_pressed(KeyCode::Key1) {
+        player.atom_id = 0;
+    } else if keys.just_pressed(KeyCode::Key2) {
+        player.atom_id = 1;
+    } else if keys.just_pressed(KeyCode::Key3) {
+        player.atom_id = 2;
+    } else if keys.just_pressed(KeyCode::Key4) {
+        player.atom_id = 3;
+    } else if keys.just_pressed(KeyCode::Key5) {
+        player.atom_id = 4;
+    }
 }
 
 pub fn tool_system(
     mut commands: Commands,
-    mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
+    mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite), With<Tool>>,
     window: Query<&Window>,
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
-    mut player: Query<&mut TextureAtlasSprite, With<Player>>,
+    mut player: Query<(&mut TextureAtlasSprite, &Player)>,
     resources: (
         ResMut<ChunkManager>,
         ResMut<DirtyRects>,
         Res<Input<MouseButton>>,
     ),
 ) {
-    let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
+    let (mut tool_transform, tool_gtransform, mut tool_sprite) = tool.single_mut();
     let (camera, camera_gtransform) = camera.single_mut();
     let window = window.single();
-    let mut textatlas_sprite = player.single_mut();
+    let (mut textatlas_sprite, player) = player.single_mut();
     let (mut chunk_manager, mut dirty_rects, mouse) = resources;
 
     if let Some(world_position) = window
@@ -210,9 +225,10 @@ pub fn tool_system(
                     + bound_slope * 2.5 * i as f32 / n as f32
                     + vec2(angle.cos(), angle.sin());
                 let chunk_pos = global_to_chunk(vec.as_ivec2());
-                if let (Some(atom), Some(tool_atom)) =
-                    (chunk_manager.get_mut_atom(chunk_pos), tool.atoms.pop())
-                {
+                if let (Some(atom), tool_atom) = (
+                    chunk_manager.get_mut_atom(chunk_pos),
+                    Atom::new(player.atom_id),
+                ) {
                     if atom.state == State::Void || atom.state == State::Object {
                         let angle = fastrand::f32() * 0.5 - 0.25;
                         let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
@@ -245,7 +261,6 @@ pub fn tool_system(
                             });
 
                             pos_to_update.push(chunk_pos);
-                            tool.atoms.push(*atom);
                             *atom = Atom::default();
                             break;
                         }

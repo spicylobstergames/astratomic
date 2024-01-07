@@ -402,10 +402,12 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
         let mut awake_self = false;
         let state;
         let speed;
+        let prop;
         {
             let atom = &mut chunks.group[local_pos];
             state = atom.state;
             speed = atom.speed;
+            prop = atom.properties;
 
             if atom.f_idle < FRAMES_SLEEP && state != State::Void && state != State::Solid {
                 atom.f_idle += 1;
@@ -418,7 +420,14 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
                 false,
                 match state {
                     State::Powder => update_powder(chunks, pos, dt),
-                    State::Liquid => update_liquid(chunks, pos, dt),
+                    State::Liquid => {
+                        let flow = if let Some(Properties::Liquid { flow }) = prop {
+                            flow
+                        } else {
+                            3
+                        };
+                        update_liquid(chunks, pos, flow, dt)
+                    }
                     _ => HashSet::new(),
                 },
             )

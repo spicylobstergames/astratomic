@@ -9,6 +9,7 @@ use crate::prelude::*;
 pub struct Atom {
     pub color: [u8; 4],
     pub state: State,
+    pub properties: Option<Properties>,
 
     #[serde(skip)]
     pub speed: (i8, i8),
@@ -27,6 +28,70 @@ impl Atom {
             ..Default::default()
         }
     }
+
+    //TODO Change this to a yaml file
+    pub fn new(id: u8) -> Atom {
+        let mut atom = Atom::default();
+
+        //Change color and state, etc
+        match id {
+            0 => {
+                //Sand
+                atom.state = State::Powder;
+                atom.color = [
+                    (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    (92 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    255,
+                ];
+            }
+            1 => {
+                //Water
+                atom.state = State::Liquid;
+                atom.color = [
+                    (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    (125 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    (204 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    150,
+                ];
+                atom.properties = Some(Properties::Liquid { flow: 5 });
+            }
+            2 => {
+                //Gravel
+                atom.state = State::Powder;
+                atom.color = [
+                    (110 + rand::thread_rng().gen_range(-12_i16..12_i16)) as u8,
+                    (110 + rand::thread_rng().gen_range(-12_i16..12_i16)) as u8,
+                    (110 + rand::thread_rng().gen_range(-12_i16..12_i16)) as u8,
+                    255,
+                ];
+            }
+            3 => {
+                //Lava
+                atom.state = State::Liquid;
+                atom.color = [
+                    (245 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    (140 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    (10 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    255,
+                ];
+                atom.properties = Some(Properties::Liquid { flow: 1 });
+            }
+            4 => {
+                //Dirt
+                atom.state = State::Powder;
+                atom.color = [
+                    (120 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    (70 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    (40 + rand::thread_rng().gen_range(-5_i16..5_i16)) as u8,
+                    255,
+                ];
+            }
+            _ => panic!("Atom not found, invalid ID."),
+        }
+
+        atom
+    }
 }
 
 // TODO Change this to a Material type
@@ -39,6 +104,11 @@ pub enum State {
     Object,
     #[default]
     Void,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+pub enum Properties {
+    Liquid { flow: u8 },
 }
 
 // Update different types of atoms
@@ -90,7 +160,12 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
 }
 
 /// Updates liquid and returns atoms awakened
-pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
+pub fn update_liquid(
+    chunks: &mut UpdateChunksType,
+    pos: IVec2,
+    flow: u8,
+    dt: u8,
+) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
     let mut cur_pos = pos;
 
@@ -129,7 +204,7 @@ pub fn update_liquid(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
         };
 
         if let Some(side) = side {
-            for _ in 0..5 {
+            for _ in 0..flow {
                 let state = get_state(chunks, cur_pos);
                 if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], state, dt) {
                     break;
