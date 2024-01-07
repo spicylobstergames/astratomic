@@ -35,6 +35,3 @@ bevy_dylib = "0.12.1"
 [profile.release]
 codegen-units = 1
 lto           = true
-
-[build-dependencies]
-shadow-rs = "0.25.0"
