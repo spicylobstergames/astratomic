@@ -15,17 +15,8 @@ mod player;
 mod prelude {
     pub use crate::atom::State;
     pub use crate::{
-        actors::*,
-        animation::*,
-        atom::*,
-        chunk::*,
-        chunk_group::*,
-        chunk_manager::*,
-        consts::*,
-        geom_tools::*,
-        manager_api::*,
-        particles::*,
-        player::*, //debug::*,
+        actors::*, animation::*, atom::*, chunk::*, chunk_group::*, chunk_manager::*, consts::*,
+        debug::*, geom_tools::*, manager_api::*, particles::*, player::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -38,6 +29,7 @@ mod prelude {
     pub use serde_big_array::BigArray;
 
     pub use std::collections::{HashMap, HashSet};
+    pub use std::env;
     pub use std::fs;
     pub use std::fs::File;
     pub use std::io::Write;
@@ -46,19 +38,26 @@ mod prelude {
 use prelude::*;
 
 fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+    let args: Vec<_> = env::args().collect();
+
+    let mut app = App::new();
+
+    app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         //local plugins
         .add_plugins((
             ChunkManagerPlugin,
-            //DebugPlugin,
             ActorsPlugin,
             PlayerPlugin,
             animation::AnimationPlugin,
             ParticlesPlugin,
         ))
-        .add_systems(Startup, setup_camera)
-        .run();
+        .add_systems(Startup, setup_camera);
+
+    if args.contains(&"-d".to_string()) || args.contains(&"--debug".to_string()) {
+        app.add_plugins(DebugPlugin);
+    }
+
+    app.run();
 }
 
 fn setup_camera(mut commands: Commands) {
