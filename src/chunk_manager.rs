@@ -427,7 +427,9 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
             (
                 false,
                 match materials[id] {
-                    Material::Powder => update_powder(chunks, pos, dt),
+                    Material::Powder {
+                        inertial_resistance,
+                    } => update_powder(chunks, pos, dt, inertial_resistance),
                     Material::Liquid { flow } => update_liquid(chunks, pos, flow, dt),
                     _ => HashSet::new(),
                 },
@@ -436,17 +438,19 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
             (true, update_atom(chunks, pos, dt))
         };
 
+        let atom = &mut chunks.group[local_pos];
         let mut self_awakened = HashSet::new();
         if awakened.contains(&pos) {
-            let atom = &mut chunks.group[local_pos];
             atom.f_idle = 0;
+            atom.moving = true;
         } else if vector {
-            let atom = &mut chunks.group[local_pos];
             atom.f_idle = 0;
             awakened.insert(pos);
+            atom.moving = false;
         } else if awake_self {
             awakened.insert(pos);
             self_awakened.insert(pos);
+            atom.moving = false;
         }
 
         for awoke in awakened {

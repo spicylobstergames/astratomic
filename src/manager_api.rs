@@ -126,7 +126,12 @@ pub fn down_neigh(
     let mut neigh = [(false, IVec2::ZERO); 3];
 
     let material = get_material(chunks, pos);
-    for (neigh, x) in neigh.iter_mut().zip([0, -1, 1]) {
+    let to_check = if material.is_powder() && !get_moving(chunks, pos) {
+        vec![0]
+    } else {
+        vec![0, -1, 1]
+    };
+    for (neigh, x) in neigh.iter_mut().zip(to_check) {
         neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), ids, material, dt);
         neigh.1 = IVec2::new(x, 1);
     }
@@ -187,6 +192,22 @@ pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, vel: IVec2) {
 /// Gets material from a global pos
 pub fn get_material(chunks: &UpdateChunksType, pos: IVec2) -> Material {
     chunks.materials.0[chunks.group[pos].id as usize]
+}
+
+/// Gets if atom is moving
+pub fn set_moving(chunks: &mut UpdateChunksType, pos: IVec2, inertial_resistance: f32) {
+    for x_off in [-1, 1] {
+        if fastrand::f32() > inertial_resistance {
+            chunks.group[pos + ivec2(x_off, 0)].moving = true;
+        } else {
+            break;
+        }
+    }
+}
+
+/// Gets if atom is moving
+pub fn get_moving(chunks: &UpdateChunksType, pos: IVec2) -> bool {
+    chunks.group[pos].moving
 }
 
 /// Checks if atom is able to update this frame from a global pos

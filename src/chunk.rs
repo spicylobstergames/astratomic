@@ -1,5 +1,4 @@
 use bevy::render::render_resource::*;
-use rand::Rng;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 
@@ -31,13 +30,7 @@ impl Chunk {
             Ordering::Less => {}
             _ => {
                 for atom in &mut atoms {
-                    atom.id = 2;
-                    atom.color = [
-                        (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-                        (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-                        (92 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-                        255,
-                    ];
+                    *atom = Atom::new(4);
                 }
             }
         }

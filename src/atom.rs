@@ -12,6 +12,8 @@ pub struct Atom {
     pub id: u8,
 
     #[serde(skip)]
+    pub moving: bool,
+    #[serde(skip)]
     pub speed: (i8, i8),
     // Frames idle
     #[serde(skip)]
@@ -92,7 +94,12 @@ impl Atom {
 // Update different types of atoms
 
 /// Updates powder and returns atoms awakened
-pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet<IVec2> {
+pub fn update_powder(
+    chunks: &mut UpdateChunksType,
+    pos: IVec2,
+    dt: u8,
+    inertial_resistance: f32,
+) -> HashSet<IVec2> {
     let mut awakened = HashSet::new();
 
     let mut cur_pos = pos;
@@ -107,14 +114,17 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
     for _ in 0..speed {
         let neigh = down_neigh(chunks, cur_pos, &[(3, 0.2)], dt);
         let mut swapped = false;
+        if get_moving(chunks, cur_pos) {
+            set_moving(chunks, cur_pos, inertial_resistance);
+        }
         for neigh in neigh {
             if neigh.0 {
+                set_moving(chunks, cur_pos, inertial_resistance);
                 swap(chunks, cur_pos, cur_pos + neigh.1, dt);
                 awakened.insert(cur_pos);
                 cur_pos += neigh.1;
                 awakened.insert(cur_pos);
                 swapped = true;
-
                 break;
             }
         }
@@ -126,7 +136,7 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
                 chunks,
                 cur_pos,
                 Vec2::from_angle(rand::thread_rng().gen_range(-PI / 2.0..PI / 2.))
-                    .rotate(vel * 0.3)
+                    .rotate(vel * 0.3 * 1. * (1. - inertial_resistance))
                     .as_ivec2(),
             );
 

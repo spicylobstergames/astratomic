@@ -13,7 +13,9 @@ use thiserror::Error;
 #[derive(Default, Debug, Deserialize, PartialEq, Clone, Copy)]
 pub enum Material {
     Solid,
-    Powder,
+    Powder {
+        inertial_resistance: f32,
+    },
     Liquid {
         flow: u8,
     },
@@ -37,7 +39,7 @@ impl Material {
     }
 
     pub fn is_powder(&self) -> bool {
-        matches!(self, Material::Powder)
+        matches!(self, Material::Powder { .. })
     }
 
     pub fn is_solid(&self) -> bool {

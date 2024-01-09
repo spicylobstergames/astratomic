@@ -6,11 +6,11 @@
     Object,
 
     //2 Sand
-    Powder,
+    Powder ( inertial_resistance: 0.1),
     //3 Water
     Liquid ( flow: 5 ),
     //4 Gravel
-    Powder,
+    Powder ( inertial_resistance: 0.92),
     //5 Lava
     Liquid ( flow: 1 ),
     //6 Dirt
