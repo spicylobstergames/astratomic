@@ -165,8 +165,6 @@ pub fn update_player(
         player.atom_id = 4;
     } else if keys.just_pressed(KeyCode::Key4) {
         player.atom_id = 5;
-    } else if keys.just_pressed(KeyCode::Key5) {
-        player.atom_id = 6;
     }
 }
 
@@ -219,7 +217,7 @@ pub fn tool_system(
         let mut pos_to_update = vec![];
         if mouse.pressed(MouseButton::Right) {
             let new_tool_front = tool_front + tool_slope * 2.;
-            let n = 12;
+            let n = 6;
 
             for i in 0..=n {
                 let angle = fastrand::f32() * std::f32::consts::TAU;

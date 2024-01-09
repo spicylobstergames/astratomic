@@ -76,11 +76,29 @@ impl Atom {
                 ];
             }
             6 => {
+                //Grass
+                atom.color = [
+                    (30 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    (170 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    (10 + rand::thread_rng().gen_range(-5_i16..5_i16)) as u8,
+                    255,
+                ];
+            }
+            7 => {
                 //Dirt
                 atom.color = [
                     (120 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
                     (70 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
                     (40 + rand::thread_rng().gen_range(-5_i16..5_i16)) as u8,
+                    255,
+                ];
+            }
+            8 => {
+                //Rock
+                atom.color = [
+                    (80 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    (80 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    (80 + rand::thread_rng().gen_range(-5_i16..5_i16)) as u8,
                     255,
                 ];
             }

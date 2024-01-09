@@ -28,9 +28,21 @@ impl Chunk {
 
         match index.y.cmp(&2) {
             Ordering::Less => {}
-            _ => {
+            Ordering::Equal => {
+                for (i, atom) in atoms.iter_mut().enumerate() {
+                    let id = match i {
+                        0..=511 => 6,
+                        512..=2815 => 7,
+                        _ => 4,
+                    };
+
+                    *atom = Atom::new(id);
+                }
+            }
+
+            Ordering::Greater => {
                 for atom in &mut atoms {
-                    *atom = Atom::new(4);
+                    *atom = Atom::new(8);
                 }
             }
         }

@@ -13,8 +13,10 @@
     Powder ( inertial_resistance: 0.92),
     //5 Lava
     Liquid ( flow: 1 ),
-    //6 Dirt
+    //6 Grass
     Solid,
-    //7 Rock
-    Solid
+    //7 Dirt
+    Solid,
+    //8 Rock
+    Solid,
 ])
