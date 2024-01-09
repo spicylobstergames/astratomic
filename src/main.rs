@@ -10,13 +10,13 @@ mod consts;
 mod debug;
 mod geom_tools;
 mod manager_api;
+mod materials;
 mod particles;
 mod player;
 mod prelude {
-    pub use crate::atom::State;
     pub use crate::{
         actors::*, animation::*, atom::*, chunk::*, chunk_group::*, chunk_manager::*, consts::*,
-        debug::*, geom_tools::*, manager_api::*, particles::*, player::*,
+        debug::*, geom_tools::*, manager_api::*, materials::*, particles::*, player::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -33,6 +33,8 @@ mod prelude {
     pub use std::fs;
     pub use std::fs::File;
     pub use std::io::Write;
+
+    pub use crate::materials::Material;
 }
 
 use prelude::*;
@@ -50,6 +52,7 @@ fn main() {
             PlayerPlugin,
             animation::AnimationPlugin,
             ParticlesPlugin,
+            MaterialsPlugin,
         ))
         .add_systems(Startup, setup_camera);
 

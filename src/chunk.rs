@@ -31,7 +31,7 @@ impl Chunk {
             Ordering::Less => {}
             _ => {
                 for atom in &mut atoms {
-                    atom.state = State::Powder;
+                    atom.id = 2;
                     atom.color = [
                         (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
                         (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,

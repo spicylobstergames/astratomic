@@ -16,11 +16,11 @@ fn brush(
 ) {
     let atom;
     if input.0.pressed(MouseButton::Middle) {
-        atom = Atom::new(0);
-    } else if input.1.pressed(KeyCode::ControlLeft) {
-        atom = Atom::new(1);
-    } else if input.1.pressed(KeyCode::ShiftLeft) {
         atom = Atom::new(2);
+    } else if input.1.pressed(KeyCode::ControlLeft) {
+        atom = Atom::new(3);
+    } else if input.1.pressed(KeyCode::ShiftLeft) {
+        atom = Atom::new(4);
     } else {
         return;
     }

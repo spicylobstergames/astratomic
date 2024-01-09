@@ -2,14 +2,14 @@ use rand::Rng;
 use std::collections::HashSet;
 use std::f32::consts::PI;
 
+use serde::Deserialize;
+
 use crate::prelude::*;
 
-// TODO Make smaller
 #[derive(Clone, Copy, Default, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Atom {
     pub color: [u8; 4],
-    pub state: State,
-    pub properties: Option<Properties>,
+    pub id: u8,
 
     #[serde(skip)]
     pub speed: (i8, i8),
@@ -23,21 +23,22 @@ pub struct Atom {
 impl Atom {
     pub fn object() -> Self {
         Atom {
-            state: State::Object,
+            id: 1,
             //color: [255, 255, 255, 255],
             ..Default::default()
         }
     }
 
-    //TODO Change this to a yaml file
     pub fn new(id: u8) -> Atom {
-        let mut atom = Atom::default();
+        let mut atom = Atom {
+            id,
+            ..Default::default()
+        };
 
-        //Change color and state, etc
+        //Change color and material, etc
         match id {
-            0 => {
+            2 => {
                 //Sand
-                atom.state = State::Powder;
                 atom.color = [
                     (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
                     (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
@@ -45,20 +46,17 @@ impl Atom {
                     255,
                 ];
             }
-            1 => {
+            3 => {
                 //Water
-                atom.state = State::Liquid;
                 atom.color = [
                     (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
                     (125 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
                     (204 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
                     150,
                 ];
-                atom.properties = Some(Properties::Liquid { flow: 5 });
             }
-            2 => {
+            4 => {
                 //Gravel
-                atom.state = State::Powder;
                 atom.color = [
                     (110 + rand::thread_rng().gen_range(-12_i16..12_i16)) as u8,
                     (110 + rand::thread_rng().gen_range(-12_i16..12_i16)) as u8,
@@ -66,20 +64,17 @@ impl Atom {
                     255,
                 ];
             }
-            3 => {
+            5 => {
                 //Lava
-                atom.state = State::Liquid;
                 atom.color = [
                     (245 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
                     (140 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
                     (10 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
                     255,
                 ];
-                atom.properties = Some(Properties::Liquid { flow: 1 });
             }
-            4 => {
+            6 => {
                 //Dirt
-                atom.state = State::Powder;
                 atom.color = [
                     (120 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
                     (70 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
@@ -92,23 +87,6 @@ impl Atom {
 
         atom
     }
-}
-
-// TODO Change this to a Material type
-#[derive(Default, Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
-pub enum State {
-    Solid,
-    Powder,
-    Liquid,
-    Gas,
-    Object,
-    #[default]
-    Void,
-}
-
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
-pub enum Properties {
-    Liquid { flow: u8 },
 }
 
 // Update different types of atoms
@@ -127,7 +105,7 @@ pub fn update_powder(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashS
     }
 
     for _ in 0..speed {
-        let neigh = down_neigh(chunks, cur_pos, &[(State::Liquid, 0.2)], dt);
+        let neigh = down_neigh(chunks, cur_pos, &[(3, 0.2)], dt);
         let mut swapped = false;
         for neigh in neigh {
             if neigh.0 {
@@ -205,8 +183,8 @@ pub fn update_liquid(
 
         if let Some(side) = side {
             for _ in 0..flow {
-                let state = get_state(chunks, cur_pos);
-                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], state, dt) {
+                let material = get_material(chunks, cur_pos);
+                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], material, dt) {
                     break;
                 }
 
@@ -236,13 +214,12 @@ pub fn update_atom(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet
     // Move
     for pos in Line::new(cur_pos, vel) {
         awakened.insert(cur_pos);
-        let state = get_state(chunks, cur_pos);
-        if swapable(chunks, pos, &[], state, dt) {
+        let material = get_material(chunks, cur_pos);
+        if swapable(chunks, pos, &[], material, dt) {
             swap(chunks, cur_pos, pos, dt);
             cur_pos = pos;
             awakened.insert(cur_pos);
-        } else if get_state(chunks, pos) == State::Liquid
-            && get_state(chunks, cur_pos) == State::Liquid
+        } else if get_material(chunks, pos).is_liquid() && get_material(chunks, cur_pos).is_liquid()
         {
             awakened.insert(pos);
             set_vel(chunks, pos, vel * 4 / 5);
@@ -255,7 +232,7 @@ pub fn update_atom(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet
                     cur_pos,
                     (Vec2::from_angle(PI).rotate(vel.as_vec2()) * 0.5).as_ivec2(),
                 );
-            } else if !swapable(chunks, cur_pos + IVec2::Y, &[], state, dt) {
+            } else if !swapable(chunks, cur_pos + IVec2::Y, &[], material, dt) {
                 set_vel(chunks, cur_pos, IVec2::ZERO);
             }
             break;

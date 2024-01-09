@@ -1,6 +1,5 @@
 use bevy::sprite::Anchor;
 
-use crate::atom::State;
 use crate::prelude::*;
 
 #[derive(Component)]
@@ -15,7 +14,7 @@ impl Default for Player {
         Self {
             fuel: FUEL_MAX,
             jetpack: false,
-            atom_id: 0,
+            atom_id: 2,
         }
     }
 }
@@ -89,10 +88,12 @@ pub fn update_player(
     mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices)>,
     chunk_manager: ResMut<ChunkManager>,
     mut camera: Query<&mut Transform, (Without<Tool>, With<Camera>)>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let (mut actor, mut player, mut anim_idxs) = player.single_mut();
     let (keys, mut scroll_evr) = input;
     let mut camera_transform = camera.single_mut();
+    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     // Gravity
     if actor.vel.y < TERM_VEL as f32 {
@@ -104,7 +105,7 @@ pub fn update_player(
     actor.vel.x = x * RUN_SPEED;
 
     // Refuel
-    let on_ground = on_ground(&chunk_manager, &actor);
+    let on_ground = on_ground(&chunk_manager, &actor, materials);
     if on_ground {
         player.fuel = (player.fuel + FUEL_REGEN).clamp(0., Player::default().fuel);
     }
@@ -157,36 +158,38 @@ pub fn update_player(
 
     //Change shooting atoms
     if keys.just_pressed(KeyCode::Key1) {
-        player.atom_id = 0;
-    } else if keys.just_pressed(KeyCode::Key2) {
-        player.atom_id = 1;
-    } else if keys.just_pressed(KeyCode::Key3) {
         player.atom_id = 2;
-    } else if keys.just_pressed(KeyCode::Key4) {
+    } else if keys.just_pressed(KeyCode::Key2) {
         player.atom_id = 3;
-    } else if keys.just_pressed(KeyCode::Key5) {
+    } else if keys.just_pressed(KeyCode::Key3) {
         player.atom_id = 4;
+    } else if keys.just_pressed(KeyCode::Key4) {
+        player.atom_id = 5;
+    } else if keys.just_pressed(KeyCode::Key5) {
+        player.atom_id = 6;
     }
 }
 
 pub fn tool_system(
     mut commands: Commands,
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite), With<Tool>>,
-    window: Query<&Window>,
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
-    mut player: Query<(&mut TextureAtlasSprite, &Player)>,
+    querys: (Query<&Window>, Query<(&mut TextureAtlasSprite, &Player)>),
     resources: (
         ResMut<ChunkManager>,
         ResMut<DirtyRects>,
         Res<Input<MouseButton>>,
     ),
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let (mut tool_transform, tool_gtransform, mut tool_sprite) = tool.single_mut();
     let (camera, camera_gtransform) = camera.single_mut();
-    let window = window.single();
+    let (window, mut player) = querys;
     let (mut textatlas_sprite, player) = player.single_mut();
     let (mut chunk_manager, mut dirty_rects, mouse) = resources;
+    let window = window.single();
+    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     if let Some(world_position) = window
         .cursor_position()
@@ -229,7 +232,7 @@ pub fn tool_system(
                     chunk_manager.get_mut_atom(chunk_pos),
                     Atom::new(player.atom_id),
                 ) {
-                    if atom.state == State::Void || atom.state == State::Object {
+                    if materials[atom.id].is_void() || materials[atom.id].is_object() {
                         let angle = fastrand::f32() * 0.5 - 0.25;
                         let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
                             .rotate(vec2(angle.cos(), angle.sin()));
@@ -252,7 +255,7 @@ pub fn tool_system(
                 for vec in Line::new(tool_front.as_ivec2(), bound_vec - tool_front.as_ivec2()) {
                     let chunk_pos = global_to_chunk(vec);
                     if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                        if atom.state != State::Void && atom.state != State::Object {
+                        if !materials[atom.id].is_void() && !materials[atom.id].is_object() {
                             commands.spawn(Particle {
                                 atom: *atom,
                                 pos: chunk_pos.to_global().as_vec2(),

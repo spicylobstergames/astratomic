@@ -66,7 +66,10 @@ pub fn update_particles(
     entities: Query<&GlobalTransform, Without<Particle>>,
     mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: ResMut<DirtyRects>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
+    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+
     let compute_pool = ComputeTaskPool::get();
 
     compute_pool.scope(|deferred_scope| {
@@ -84,7 +87,7 @@ pub fn update_particles(
                 }
 
                 if let Some(atom) = chunk_manager.get_mut_atom(update.chunk_pos) {
-                    if atom.state == State::Void {
+                    if materials[atom.id].is_void() {
                         *atom = update.atom;
                         commands.entity(update.ent).despawn();
 
@@ -143,13 +146,13 @@ pub fn update_particles(
                                     [prev_chunk_pos.atom.d1()];
 
                                 if particle.state == PartState::Normal
-                                    && atom.state != State::Void
-                                    && atom.state != State::Object
+                                    && !materials[atom.id].is_void()
+                                    && !materials[atom.id].is_object()
                                 {
                                     //Hit something!
                                     //If our previous pos is free
-                                    if prev_atom.state == State::Void
-                                        || prev_atom.state == State::Object
+                                    if materials[prev_atom.id].is_void()
+                                        || materials[prev_atom.id].is_object()
                                     {
                                         particle_send
                                             .try_send(DeferredParticleUpdate {
@@ -168,8 +171,8 @@ pub fn update_particles(
 
                                     break;
                                 } else if particle.state == PartState::Looking
-                                    && atom.state == State::Void
-                                    || atom.state == State::Object
+                                    && materials[prev_atom.id].is_void()
+                                    || materials[prev_atom.id].is_object()
                                 {
                                     particle_send
                                         .try_send(DeferredParticleUpdate {

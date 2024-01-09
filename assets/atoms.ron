@@ -1,0 +1,20 @@
+([
+    //0 Void
+    Void,
+
+    //1 Dummy atom
+    Object,
+
+    //2 Sand
+    Powder,
+    //3 Water
+    Liquid ( flow: 5 ),
+    //4 Gravel
+    Powder,
+    //5 Lava
+    Liquid ( flow: 1 ),
+    //6 Dirt
+    Solid,
+    //7 Rock
+    Solid
+])
