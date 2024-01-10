@@ -674,7 +674,8 @@ pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, manager_setup)
-            .add_systems(Update, (chunk_manager_update, update_manager_pos))
+            .add_systems(FixedUpdate, chunk_manager_update)
+            .add_systems(Update, update_manager_pos)
             .init_resource::<ChunkManager>()
             .init_resource::<DirtyRects>();
 

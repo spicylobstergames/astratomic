@@ -352,9 +352,15 @@ pub struct SavingTask(pub Option<Task<()>>);
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (update_player.after(chunk_manager_update),))
-            .add_systems(PostUpdate, (update_player_sprite, tool_system))
-            .insert_resource(SavingTask::default())
-            .add_systems(PostStartup, player_setup.after(manager_setup));
+        app.add_systems(
+            FixedUpdate,
+            (
+                update_player.after(chunk_manager_update),
+                update_player_sprite,
+                tool_system.after(chunk_manager_update),
+            ),
+        )
+        .insert_resource(SavingTask::default())
+        .add_systems(PostStartup, player_setup.after(manager_setup));
     }
 }
