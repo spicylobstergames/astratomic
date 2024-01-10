@@ -54,7 +54,7 @@ fn main() {
             ParticlesPlugin,
             MaterialsPlugin,
         ))
-        .add_systems(Startup, setup_camera);
+        .add_systems(Startup, setup);
 
     if args.contains(&"-d".to_string()) || args.contains(&"--debug".to_string()) {
         app.add_plugins(DebugPlugin);
@@ -63,7 +63,9 @@ fn main() {
     app.run();
 }
 
-fn setup_camera(mut commands: Commands) {
+fn setup(mut commands: Commands, mut time: ResMut<Time<Fixed>>) {
+    time.set_timestep_hz(58.);
+
     let mut camera = Camera2dBundle::default();
     camera.camera.hdr = true;
     camera.transform.scale.x = 0.23;
