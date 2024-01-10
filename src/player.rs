@@ -19,6 +19,14 @@ impl Default for Player {
     }
 }
 
+impl Drop for Actor {
+    fn drop(&mut self) {
+        let file = File::create("assets/world/player").unwrap();
+        let mut buffered = BufWriter::new(file);
+        bincode::serialize_into(&mut buffered, &self.pos).unwrap();
+    }
+}
+
 #[derive(Default)]
 pub enum PlayerState {
     #[default]
@@ -39,10 +47,21 @@ pub fn player_setup(
     asset_server: Res<AssetServer>,
     mut texture_atlases: ResMut<Assets<TextureAtlas>>,
 ) {
+    let pos: IVec2;
+    if let Ok(file) = File::open("assets/world/player") {
+        let mut buffered = BufReader::new(file);
+        pos = bincode::deserialize_from(&mut buffered).unwrap();
+    } else {
+        pos = IVec2::default();
+        let file = File::create("assets/world/player").unwrap();
+        let mut buffered = BufWriter::new(file);
+        bincode::serialize_into(&mut buffered, &pos).unwrap();
+    }
+
     let player_actor = Actor {
         height: 17,
         width: 10,
-        pos: ivec2(0, 0),
+        pos,
         vel: vec2(0., 0.),
     };
 
@@ -221,7 +240,9 @@ pub fn tool_system(
     let (window, mut player) = querys;
     let (mut textatlas_sprite, player) = player.single_mut();
     let (mut chunk_manager, mut dirty_rects, mouse) = resources;
-    let window = window.single();
+    let Ok(window) = window.get_single() else {
+        return;
+    };
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     if let Some(world_position) = window
@@ -241,7 +262,7 @@ pub fn tool_system(
         tool_transform.translation.x =
             tool_transform.translation.x.abs() * (flip_bool as i8 * 2 - 1) as f32;
 
-        //Tool shooting and sucking atoms
+        //Tool pulling and pushing atoms
         let mut center_vec_y_flipped = center_vec;
         center_vec_y_flipped.y *= -1.;
 

@@ -1,4 +1,4 @@
 /target
 .vscode/
-/assets/worlds/**
+/assets/world/**
 .cargo/config.toml

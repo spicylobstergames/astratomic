@@ -16,7 +16,7 @@ Powered by a similar engine as Noita, made from scratch with Rust.
   - Multithreaded sand simulation
   - GPU rendering optimizations of the sim
   - AABB colliders for the player and mobs
-  - Player with special gun to shoot and suck atoms, and also a jetpack
+  - Player with special gun to push and pull atoms, and also a jetpack
   - Bigger map, with saving/loading
 
 **What's next:**
@@ -27,7 +27,7 @@ Powered by a similar engine as Noita, made from scratch with Rust.
 In the bigger picture we also aim to achieve intergalactic travel like Starbound, procedurally generated animations inspired by Rainworld, all the cool mechanics you see in Noita, multiplayer and modding, the last two made possible by a future engine migration to [Bones](https://github.com/fishfolk/bones/).
 
 ## Controls
-Left Mouse button to suck atoms, Right Mouse button to shoot atoms.
+Left Mouse button to pull atoms, Right Mouse button to push atoms.
 Mouse wheel to zoom in/out.
 
 ## Last Update Changelog
@@ -38,7 +38,7 @@ We added:
 - Player
   - The player is pretty cool! It has some animations, a jetpack and a pretty nice tool!
  - Player tool
-   - The tool can suck atoms(Left Mouse Button), and also shoot(Right Mouse Button) the atoms you sucked!
+   - The tool can pull atoms(Left Mouse Button), and also push(Right Mouse Button) the atoms you pulled!
 - Engine Changes
   - We changed the Chunk Manager approach to store Chunks in a Vec to storing them in a HashMap, this lays the ground for future updates, like Save/Load worlds, and big explorable worlds. It was needed to simplify addind the other additions and unfortunately took some time to do.
 

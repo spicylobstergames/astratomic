@@ -30,9 +30,9 @@ mod prelude {
 
     pub use std::collections::{HashMap, HashSet};
     pub use std::env;
-    pub use std::fs;
     pub use std::fs::File;
     pub use std::io::Write;
+    pub use std::io::{BufReader, BufWriter};
 
     pub use crate::materials::Material;
 }

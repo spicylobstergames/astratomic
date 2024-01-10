@@ -1,6 +1,6 @@
 use crate::prelude::*;
 
-#[derive(Component, Clone, Copy)]
+#[derive(Component, Clone)]
 pub struct Actor {
     pub width: u8,
     pub height: u8,
