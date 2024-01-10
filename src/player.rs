@@ -1,27 +1,36 @@
 use bevy::sprite::Anchor;
 
-use crate::atom::State;
 use crate::prelude::*;
 
 #[derive(Component)]
 pub struct Player {
     fuel: f32,
-    jetpack: bool,
+    state: PlayerState,
+    atom_id: u8,
 }
 
 impl Default for Player {
     fn default() -> Self {
         Self {
             fuel: FUEL_MAX,
-            jetpack: false,
+            state: PlayerState::default(),
+            atom_id: 2,
         }
     }
 }
 
-#[derive(Component, Default)]
-pub struct Tool {
-    atoms: Vec<Atom>,
+#[derive(Default)]
+pub enum PlayerState {
+    #[default]
+    Idle,
+    Walking,
+    Jumping(f64),
+    Jetpack(bool),
 }
+
+#[derive(Component, Default)]
+pub struct Tool;
+
 #[derive(Component)]
 pub struct ToolFront;
 
@@ -48,21 +57,21 @@ pub fn player_setup(
     let tool_bundle = SpriteBundle {
         texture: tool_handle,
         sprite: Sprite {
-            anchor: Anchor::CenterLeft,
+            anchor: Anchor::Custom(vec2(-0.1, 0.)),
             ..Default::default()
         },
-        transform: Transform::from_translation(Vec3::new(-3., -3.5, 0.1)),
+        transform: Transform::from_translation(Vec3::new(-1., -3.5, 0.1)),
         ..Default::default()
     };
     let tool_front_ent = commands
         .spawn((
-            TransformBundle::from_transform(Transform::from_translation(vec3(8., 0., 0.))),
+            TransformBundle::from_transform(Transform::from_translation(vec3(5., 0., 0.))),
             ToolFront,
         ))
         .id();
     let tool_ent = commands
         .spawn(tool_bundle)
-        .insert(Tool::default())
+        .insert(Tool)
         .insert_children(0, &[tool_front_ent])
         .id();
 
@@ -88,90 +97,132 @@ pub fn update_player(
     mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices)>,
     chunk_manager: ResMut<ChunkManager>,
     mut camera: Query<&mut Transform, (Without<Tool>, With<Camera>)>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+    time: Res<Time>,
 ) {
     let (mut actor, mut player, mut anim_idxs) = player.single_mut();
     let (keys, mut scroll_evr) = input;
     let mut camera_transform = camera.single_mut();
+    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     // Gravity
     if actor.vel.y < TERM_VEL as f32 {
-        actor.vel.y += 1.;
+        actor.vel.y += 1.
+            * if matches!(player.state, PlayerState::Jetpack { .. }) {
+                0.4
+            } else {
+                1.
+            };
     }
 
     // Movement
     let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
     actor.vel.x = x * RUN_SPEED;
 
+    let on_ground = on_ground(&chunk_manager, &actor, materials);
+
     // Refuel
-    let on_ground = on_ground(&chunk_manager, &actor);
     if on_ground {
         player.fuel = (player.fuel + FUEL_REGEN).clamp(0., Player::default().fuel);
     }
 
-    // Jump and Jetpack
-    let mut just_jumped = false;
+    if on_ground {
+        if x.abs() > 0. {
+            player.state = PlayerState::Walking
+        } else {
+            player.state = PlayerState::Idle
+        }
+    }
+
+    // Jump
     if keys.just_pressed(KeyCode::Space) {
         if on_ground {
             actor.vel.y -= JUMP_MAG;
-            just_jumped = true;
+            player.state = PlayerState::Jumping(time.elapsed_seconds_wrapped_f64());
         } else {
-            player.jetpack = true;
+            player.state = PlayerState::Jetpack(true);
             actor.vel.y = 0.;
         }
     }
 
-    if player.fuel > 0. && keys.pressed(KeyCode::Space) && player.jetpack {
-        actor.vel.y = (actor.vel.y - JETPACK_FORCE).clamp(-JETPACK_MAX, f32::MAX);
-        player.fuel -= FUEL_COMSUMPTON;
-    } else {
-        player.jetpack = false;
-    }
-
-    //Animation
-    if player.jetpack {
-        anim_idxs.first = 24;
-        anim_idxs.last = 26;
-    } else if !on_ground && player.fuel < FUEL_MAX {
-        anim_idxs.first = 32;
-        anim_idxs.last = 32;
-    } else if just_jumped {
-        anim_idxs.first = 16;
-        anim_idxs.last = 23;
-    } else if on_ground {
-        if x.abs() > 0. {
-            anim_idxs.first = 8;
-            anim_idxs.last = 11;
-        } else {
-            anim_idxs.first = 0;
-            anim_idxs.last = 1;
+    //Jump higher when holding space
+    if let PlayerState::Jumping(jump_start) = player.state {
+        if keys.pressed(KeyCode::Space)
+            && time.elapsed_seconds_wrapped_f64() - jump_start < TIME_JUMP_PRESSED
+        {
+            actor.vel.y -= PRESSED_JUMP_MAG
         }
     }
 
+    // Jetpack
+    let mut new_up = false;
+    if let PlayerState::Jetpack(_) = player.state {
+        if player.fuel > 0. && keys.pressed(KeyCode::Space) {
+            actor.vel.y = (actor.vel.y - JETPACK_FORCE).clamp(-JETPACK_MAX, f32::MAX);
+            player.fuel -= FUEL_COMSUMPTON;
+            new_up = true;
+        } else {
+            new_up = false;
+        }
+    }
+
+    if let PlayerState::Jetpack(up) = &mut player.state {
+        *up = new_up
+    };
+
+    //Animation
+    (anim_idxs.first, anim_idxs.last) = match player.state {
+        PlayerState::Idle => (0, 1),
+        PlayerState::Walking => (8, 11),
+        PlayerState::Jumping { .. } => (16, 23),
+        PlayerState::Jetpack(up) => {
+            if up {
+                (24, 26)
+            } else {
+                (32, 32)
+            }
+        }
+    };
+
+    //Zoom
     for ev in scroll_evr.read() {
         if ev.unit == MouseScrollUnit::Line {
             camera_transform.scale *= 0.9_f32.powi(ev.y as i32);
         }
     }
+
+    //Change shooting atoms
+    if keys.just_pressed(KeyCode::Key1) {
+        player.atom_id = 2;
+    } else if keys.just_pressed(KeyCode::Key2) {
+        player.atom_id = 3;
+    } else if keys.just_pressed(KeyCode::Key3) {
+        player.atom_id = 4;
+    } else if keys.just_pressed(KeyCode::Key4) {
+        player.atom_id = 5;
+    }
 }
 
 pub fn tool_system(
     mut commands: Commands,
-    mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite, &mut Tool)>,
-    window: Query<&Window>,
+    mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite), With<Tool>>,
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
-    mut player: Query<&mut TextureAtlasSprite, With<Player>>,
+    querys: (Query<&Window>, Query<(&mut TextureAtlasSprite, &Player)>),
     resources: (
         ResMut<ChunkManager>,
         ResMut<DirtyRects>,
         Res<Input<MouseButton>>,
     ),
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
-    let (mut tool_transform, tool_gtransform, mut tool_sprite, mut tool) = tool.single_mut();
+    let (mut tool_transform, tool_gtransform, mut tool_sprite) = tool.single_mut();
     let (camera, camera_gtransform) = camera.single_mut();
-    let window = window.single();
-    let mut textatlas_sprite = player.single_mut();
+    let (window, mut player) = querys;
+    let (mut textatlas_sprite, player) = player.single_mut();
     let (mut chunk_manager, mut dirty_rects, mouse) = resources;
+    let window = window.single();
+    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     if let Some(world_position) = window
         .cursor_position()
@@ -196,12 +247,12 @@ pub fn tool_system(
 
         let tool_slope = Vec2::new(angle.cos(), -angle.sin());
         let bound_slope = Vec2::new((angle + std::f32::consts::FRAC_PI_2).cos(), -(angle).cos());
-        let tool_front = center_vec_y_flipped + tool_slope * 8.;
+        let tool_front = center_vec_y_flipped + tool_slope * 5.;
 
         let mut pos_to_update = vec![];
         if mouse.pressed(MouseButton::Right) {
             let new_tool_front = tool_front + tool_slope * 2.;
-            let n = 12;
+            let n = 6;
 
             for i in 0..=n {
                 let angle = fastrand::f32() * std::f32::consts::TAU;
@@ -210,10 +261,11 @@ pub fn tool_system(
                     + bound_slope * 2.5 * i as f32 / n as f32
                     + vec2(angle.cos(), angle.sin());
                 let chunk_pos = global_to_chunk(vec.as_ivec2());
-                if let (Some(atom), Some(tool_atom)) =
-                    (chunk_manager.get_mut_atom(chunk_pos), tool.atoms.pop())
-                {
-                    if atom.state == State::Void || atom.state == State::Object {
+                if let (Some(atom), tool_atom) = (
+                    chunk_manager.get_mut_atom(chunk_pos),
+                    Atom::new(player.atom_id),
+                ) {
+                    if materials[atom.id].is_void() || materials[atom.id].is_object() {
                         let angle = fastrand::f32() * 0.5 - 0.25;
                         let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
                             .rotate(vec2(angle.cos(), angle.sin()));
@@ -236,7 +288,7 @@ pub fn tool_system(
                 for vec in Line::new(tool_front.as_ivec2(), bound_vec - tool_front.as_ivec2()) {
                     let chunk_pos = global_to_chunk(vec);
                     if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                        if atom.state != State::Void && atom.state != State::Object {
+                        if !materials[atom.id].is_void() && !materials[atom.id].is_object() {
                             commands.spawn(Particle {
                                 atom: *atom,
                                 pos: chunk_pos.to_global().as_vec2(),
@@ -245,7 +297,6 @@ pub fn tool_system(
                             });
 
                             pos_to_update.push(chunk_pos);
-                            tool.atoms.push(*atom);
                             *atom = Atom::default();
                             break;
                         }
@@ -280,15 +331,9 @@ pub struct SavingTask(pub Option<Task<()>>);
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                update_player.after(chunk_manager_update),
-                tool_system.after(update_player),
-                update_player_sprite.after(update_actors),
-            ),
-        )
-        .insert_resource(SavingTask::default())
-        .add_systems(PostStartup, player_setup.after(manager_setup));
+        app.add_systems(Update, (update_player.after(chunk_manager_update),))
+            .add_systems(PostUpdate, (update_player_sprite, tool_system))
+            .insert_resource(SavingTask::default())
+            .add_systems(PostStartup, player_setup.after(manager_setup));
     }
 }

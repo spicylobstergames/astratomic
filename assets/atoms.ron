@@ -1,0 +1,22 @@
+([
+    //0 Void
+    Void,
+
+    //1 Dummy atom
+    Object,
+
+    //2 Sand
+    Powder ( inertial_resistance: 0.1),
+    //3 Water
+    Liquid ( flow: 5 ),
+    //4 Gravel
+    Powder ( inertial_resistance: 0.92),
+    //5 Lava
+    Liquid ( flow: 1 ),
+    //6 Grass
+    Solid,
+    //7 Dirt
+    Solid,
+    //8 Rock
+    Solid,
+])

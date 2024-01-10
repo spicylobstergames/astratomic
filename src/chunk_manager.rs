@@ -212,6 +212,7 @@ pub fn manager_setup(
 pub fn chunk_manager_update(
     mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects_resource: ResMut<DirtyRects>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     chunk_manager.dt = chunk_manager.dt.wrapping_add(1);
     let dt = chunk_manager.dt;
@@ -222,6 +223,9 @@ pub fn chunk_manager_update(
         new: new_dirty_rects,
         render: render_dirty_rects,
     } = &mut *dirty_rects_resource;
+
+    //Get materials
+    let materials = &materials.0.get(materials.1 .0.clone()).unwrap();
 
     let first_x = chunk_manager.pos.x;
     let first_y = chunk_manager.pos.y;
@@ -370,6 +374,7 @@ pub fn chunk_manager_update(
                                 group: chunk_group,
                                 dirty_update_rect_send,
                                 dirty_render_rect_send,
+                                materials,
                             },
                             dt,
                             rect,
@@ -389,6 +394,8 @@ pub fn chunk_manager_update(
 }
 
 pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) {
+    let materials = chunks.materials;
+
     let x_iter = rand_range(dirty_rect.min.x as i32..dirty_rect.max.x as i32 + 1).into_iter();
     let y_iter = rand_range(dirty_rect.min.y as i32..dirty_rect.max.y as i32 + 1).into_iter();
     for (y, x) in y_iter.cartesian_product(x_iter) {
@@ -400,14 +407,17 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
         }
 
         let mut awake_self = false;
-        let state;
+        let id;
         let speed;
         {
             let atom = &mut chunks.group[local_pos];
-            state = atom.state;
+            id = atom.id;
             speed = atom.speed;
 
-            if atom.f_idle < FRAMES_SLEEP && state != State::Void && state != State::Solid {
+            if atom.f_idle < FRAMES_SLEEP
+                && materials[id] != Material::Void
+                && materials[id] != Material::Solid
+            {
                 atom.f_idle += 1;
                 awake_self = true;
             }
@@ -416,9 +426,11 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
         let (vector, mut awakened) = if speed.0 == 0 && speed.1 >= 0 {
             (
                 false,
-                match state {
-                    State::Powder => update_powder(chunks, pos, dt),
-                    State::Liquid => update_liquid(chunks, pos, dt),
+                match materials[id] {
+                    Material::Powder {
+                        inertial_resistance,
+                    } => update_powder(chunks, pos, dt, inertial_resistance),
+                    Material::Liquid { flow } => update_liquid(chunks, pos, flow, dt),
                     _ => HashSet::new(),
                 },
             )
@@ -426,17 +438,19 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
             (true, update_atom(chunks, pos, dt))
         };
 
+        let atom = &mut chunks.group[local_pos];
         let mut self_awakened = HashSet::new();
         if awakened.contains(&pos) {
-            let atom = &mut chunks.group[local_pos];
             atom.f_idle = 0;
+            atom.moving = true;
         } else if vector {
-            let atom = &mut chunks.group[local_pos];
             atom.f_idle = 0;
             awakened.insert(pos);
+            atom.moving = false;
         } else if awake_self {
             awakened.insert(pos);
             self_awakened.insert(pos);
+            atom.moving = false;
         }
 
         for awoke in awakened {

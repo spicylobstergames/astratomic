@@ -11,20 +11,21 @@ pub struct UpdateChunksType<'a> {
     pub group: ChunkGroup<'a>,
     pub dirty_update_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
     pub dirty_render_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
+    pub materials: &'a Materials,
 }
 
 /// Swap two atoms from global 3x3 chunks positions
 pub fn swap(chunks: &mut UpdateChunksType, pos1: IVec2, pos2: IVec2, dt: u8) {
-    let states = [get_state(chunks, pos1), get_state(chunks, pos2)];
+    let materials = [get_material(chunks, pos1), get_material(chunks, pos2)];
     let chunk_group = &mut chunks.group;
     {
         let temp = chunk_group[pos1];
-        chunk_group[pos1] = if states[1] == State::Object {
+        chunk_group[pos1] = if materials[1].is_object() {
             Atom::default()
         } else {
             chunk_group[pos2]
         };
-        chunk_group[pos2] = if states[0] == State::Object {
+        chunk_group[pos2] = if materials[0].is_object() {
             Atom::default()
         } else {
             temp
@@ -93,20 +94,23 @@ pub fn global_to_chunk(mut pos: IVec2) -> ChunkPos {
 }
 
 /// See if position is swapable, that means it sees if the position is a void
-/// or if it's a swapable state and has been not updated
+/// or if it's a swapable material and has been not updated
 pub fn swapable(
     chunks: &UpdateChunksType,
     pos: IVec2,
-    states: &[(State, f32)],
-    state: State,
+    ids: &[(u8, f32)],
+    material: Material,
     dt: u8,
 ) -> bool {
     if let Some(atom) = chunks.group.get_global(pos) {
-        atom.state == State::Void
-            || (states.iter().any(|&(state, prob)| {
-                state == atom.state && rand::thread_rng().gen_range(0.0..1.0) < prob
-            }) && atom.updated_at != dt)
-            || (atom.state == State::Object && state == State::Liquid)
+        let atom_material = chunks.materials.0[atom.id as usize];
+
+        atom_material == Material::Void
+            || (ids
+                .iter()
+                .any(|&(id, prob)| id == atom.id && rand::thread_rng().gen_range(0.0..1.0) < prob)
+                && atom.updated_at != dt)
+            || (atom_material.is_object() && material.is_liquid())
     } else {
         false
     }
@@ -116,14 +120,19 @@ pub fn swapable(
 pub fn down_neigh(
     chunks: &UpdateChunksType,
     pos: IVec2,
-    states: &[(State, f32)],
+    ids: &[(u8, f32)],
     dt: u8,
 ) -> [(bool, IVec2); 3] {
     let mut neigh = [(false, IVec2::ZERO); 3];
 
-    let state = get_state(chunks, pos);
-    for (neigh, x) in neigh.iter_mut().zip([0, -1, 1]) {
-        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), states, state, dt);
+    let material = get_material(chunks, pos);
+    let to_check = if material.is_powder() && !get_moving(chunks, pos) {
+        vec![0]
+    } else {
+        vec![0, -1, 1]
+    };
+    for (neigh, x) in neigh.iter_mut().zip(to_check) {
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 1), ids, material, dt);
         neigh.1 = IVec2::new(x, 1);
     }
 
@@ -138,14 +147,14 @@ pub fn down_neigh(
 pub fn side_neigh(
     chunks: &UpdateChunksType,
     pos: IVec2,
-    states: &[(State, f32)],
+    ids: &[(u8, f32)],
     dt: u8,
 ) -> [(bool, IVec2); 2] {
     let mut neigh = [(false, IVec2::ZERO); 2];
 
-    let state = get_state(chunks, pos);
+    let material = get_material(chunks, pos);
     for (neigh, x) in neigh.iter_mut().zip([-1, 1]) {
-        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), states, state, dt);
+        neigh.0 = swapable(chunks, pos + IVec2::new(x, 0), ids, material, dt);
         neigh.1 = IVec2::new(x, 0);
     }
 
@@ -180,15 +189,31 @@ pub fn set_vel(chunks: &mut UpdateChunksType, pos: IVec2, vel: IVec2) {
     chunks.group[pos].speed.1 = vel.y as i8;
 }
 
-/// Gets state from a global pos
-pub fn get_state(chunks: &UpdateChunksType, pos: IVec2) -> State {
-    chunks.group[pos].state
+/// Gets material from a global pos
+pub fn get_material(chunks: &UpdateChunksType, pos: IVec2) -> Material {
+    chunks.materials.0[chunks.group[pos].id as usize]
+}
+
+/// Gets if atom is moving
+pub fn set_moving(chunks: &mut UpdateChunksType, pos: IVec2, inertial_resistance: f32) {
+    for x_off in [-1, 1] {
+        if fastrand::f32() > inertial_resistance {
+            chunks.group[pos + ivec2(x_off, 0)].moving = true;
+        } else {
+            break;
+        }
+    }
+}
+
+/// Gets if atom is moving
+pub fn get_moving(chunks: &UpdateChunksType, pos: IVec2) -> bool {
+    chunks.group[pos].moving
 }
 
 /// Checks if atom is able to update this frame from a global pos
 pub fn dt_updatable(chunks: &UpdateChunksType, pos: IVec2, dt: u8) -> bool {
     if let Some(atom) = chunks.group.get_global(pos) {
-        atom.updated_at != dt || atom.state == State::Void
+        atom.updated_at != dt || (chunks.materials.0[atom.id as usize]).is_void()
     } else {
         false
     }

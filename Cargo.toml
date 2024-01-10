@@ -1,37 +1,46 @@
 [package]
 name = "astratomic"
 description = "A 2D survival game"
-version = "0.1.1"
-edition = "2021"
+version     = "0.1.1"
+edition     = "2021"
 license     = "PolyForm NonCommercial v1.0"
 default-run = "astratomic"
 
 [dependencies]
-bevy = "0.12"
+bevy                = {version = "0.12", features =["file_watcher"]}
 bevy-inspector-egui = "0.22"
-rand = { version = "0.8.5", features = ["small_rng"] }
-fastrand = "2.0.1"
-async-channel = "2.1.0"
-smallvec = "1.11.2"
-itertools = "0.12.0"
+rand                = { version = "0.8.5", features = ["small_rng"] }
+fastrand            = "2.0.1"
+async-channel       = "2.1.0"
+smallvec            = "1.11.2"
+itertools           = "0.12.0"
 
-serde = "1.0"
-serde_derive = "1.0"
-bincode = "1.3.3"
-serde-big-array = "0.5.1"
-bevy-async-task = "1.3.1"
-
-# Enable a small amount of optimization in debug mode
-[profile.dev]
-opt-level = 1
-
-# Enable high optimizations for dependencies (incl. Bevy), but not for our code:
-[profile.dev.package."*"]
-opt-level = 3
+serde               = "1.0"
+serde_derive        = "1.0"
+bincode             = "1.3.3"
+serde-big-array     = "0.5.1"
+ron                 = "0.8.1"
+bevy-async-task     = "1.3.1"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy_dylib = "0.12.1"
 
-[profile.release]
+# Optimize dependencies even in development
+[profile.dev.package."*"]
 codegen-units = 1
+debug         = 1 # Only keep line numbers
+opt-level     = 3
+
+# Optimize our code a little bit.
+[profile.dev]
+codegen-units = 256
+opt-level     = 1
+
+[profile.dev-optimized]
+debug     = 1
+inherits  = "dev"
+opt-level = 3
+
+[profile.release]
+codegen-units = 1    # Improved rapier physics perf, so it might help other stuff, too
 lto           = true

@@ -1,6 +1,5 @@
 use crate::prelude::*;
 use bevy::sprite::Anchor;
-use rand::Rng;
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
@@ -15,30 +14,13 @@ fn brush(
     prev_mpos: Res<PreviousMousePos>,
     input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
 ) {
-    let (state, color);
-
-    if input.1.pressed(KeyCode::L) {
-        state = State::Gas;
-        color = [255, 255, 255, 255];
-    } else if input.0.pressed(MouseButton::Middle) {
-        state = State::Powder;
-        color = [
-            (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-            (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-            (92 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-            255,
-        ];
+    let atom;
+    if input.0.pressed(MouseButton::Middle) {
+        atom = Atom::new(2);
     } else if input.1.pressed(KeyCode::ControlLeft) {
-        state = State::Liquid;
-        color = [
-            (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-            (125 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-            (204 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-            150,
-        ];
+        atom = Atom::new(3);
     } else if input.1.pressed(KeyCode::ShiftLeft) {
-        state = State::Solid;
-        color = [127, 131, 134, 255];
+        atom = Atom::new(8);
     } else {
         return;
     }
@@ -63,12 +45,6 @@ fn brush(
             if chunk_manager.get_atom(&pos).is_none() {
                 continue;
             }
-
-            let atom = Atom {
-                color,
-                state,
-                ..Default::default()
-            };
 
             chunk_manager[pos] = atom;
 
