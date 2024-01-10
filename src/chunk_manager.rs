@@ -273,9 +273,6 @@ pub fn chunk_manager_update(
 
         // Spawn a task on the deferred scope for handling deferred dirty render rects.
         deferred_scope.spawn(async move {
-            // Clear the previous render rects
-            *render_dirty_rects = HashMap::new();
-
             //Update all rendering, used when debugging
             /*
             for x in 0..CHUNKS_WIDTH {
@@ -670,12 +667,17 @@ fn prepare_chunk_gpu_textures(
     }
 }
 
+fn clear_render_rect(mut dirty_rects: ResMut<DirtyRects>) {
+    dirty_rects.render = HashMap::new();
+}
+
 pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, manager_setup)
             .add_systems(FixedUpdate, chunk_manager_update)
             .add_systems(Update, update_manager_pos)
+            .add_systems(PreUpdate, clear_render_rect)
             .init_resource::<ChunkManager>()
             .init_resource::<DirtyRects>();
 
