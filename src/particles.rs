@@ -239,7 +239,7 @@ pub struct ParticlesPlugin;
 impl Plugin for ParticlesPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            Update,
+            FixedUpdate,
             (
                 hydrate_particles.before(update_particles),
                 update_particles.after(chunk_manager_update),

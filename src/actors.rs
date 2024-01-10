@@ -244,7 +244,7 @@ pub struct ActorsPlugin;
 impl Plugin for ActorsPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            Update,
+            FixedUpdate,
             (
                 add_actors
                     .before(chunk_manager_update)
