@@ -113,9 +113,10 @@ impl ChunkManager {
 
 impl Drop for ChunkManager {
     fn drop(&mut self) {
-        let file = fs::read("assets/worlds/world").unwrap_or_default();
+        let file = File::open("assets/world/world").unwrap();
+        let mut buffered = BufReader::new(file);
         let mut file_chunks: HashMap<IVec2, Chunk> =
-            bincode::deserialize(&file).unwrap_or_default();
+            bincode::deserialize_from(&mut buffered).unwrap();
 
         for (pos, chunk) in &self.chunks {
             if let Some(file_chunk) = file_chunks.get_mut(pos) {
@@ -125,12 +126,9 @@ impl Drop for ChunkManager {
             }
         }
 
-        let data = bincode::serialize(&file_chunks).unwrap();
-        //Save file
-        let _ = File::create("assets/worlds/world")
-            .unwrap()
-            .write(&data)
-            .unwrap();
+        let file = File::create("assets/world/world").unwrap();
+        let mut buffered = BufWriter::new(file);
+        bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
     }
 }
 
@@ -177,8 +175,16 @@ pub fn manager_setup(
     let mut images_vec = vec![];
     chunk_manager.pos = ivec2(-16, -16);
 
-    let file = fs::read("assets/worlds/world").unwrap_or_default();
-    let file_chunks: HashMap<IVec2, Chunk> = bincode::deserialize(&file).unwrap_or_default();
+    let file_chunks: HashMap<IVec2, Chunk>;
+    if let Ok(file) = File::open("assets/world/world") {
+        let mut buffered = BufReader::new(file);
+        file_chunks = bincode::deserialize_from(&mut buffered).unwrap();
+    } else {
+        file_chunks = HashMap::new();
+        let file = File::create("assets/world/world").unwrap();
+        let mut buffered = BufWriter::new(file);
+        bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
+    }
 
     for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + width)
         .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + height)
@@ -543,14 +549,16 @@ pub fn update_manager_pos(
 
             if new_diff != IVec2::ZERO {
                 task_executor.start(async move {
-                    let file = fs::read("assets/worlds/world").unwrap_or_default();
+                    let file = File::open("assets/world/world").unwrap();
+                    let mut buffered = BufReader::new(file);
+
                     let chunks: HashMap<IVec2, Chunk> =
-                        bincode::deserialize(&file).unwrap_or_default();
+                        bincode::deserialize_from(&mut buffered).unwrap();
                     (chunks, new_diff)
                 });
             }
         }
-        AsyncTaskStatus::Finished((mut file, diff)) => {
+        AsyncTaskStatus::Finished((mut file_chunks, diff)) => {
             let chunk_textures = chunk_textures.single();
             for _ in 0..diff.x.abs() {
                 chunk_manager.move_manager(
@@ -558,7 +566,7 @@ pub fn update_manager_pos(
                     &mut images,
                     &chunk_textures,
                     &image_entities,
-                    &mut file,
+                    &mut file_chunks,
                     MoveDir::X(diff.x.signum()),
                 );
             }
@@ -569,19 +577,16 @@ pub fn update_manager_pos(
                     &mut images,
                     &chunk_textures,
                     &image_entities,
-                    &mut file,
+                    &mut file_chunks,
                     MoveDir::Y(diff.y.signum()),
                 );
             }
 
             let pool = AsyncComputeTaskPool::get();
             saving_task.0 = Some(pool.spawn(async move {
-                let data = bincode::serialize(&file).unwrap();
-                //Save file
-                let _ = File::create("assets/worlds/world")
-                    .unwrap()
-                    .write(&data)
-                    .unwrap();
+                let file = File::create("assets/world/world").unwrap();
+                let mut buffered = BufWriter::new(file);
+                bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
             }));
         }
         AsyncTaskStatus::Pending => {}
