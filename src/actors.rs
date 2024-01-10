@@ -59,7 +59,7 @@ pub fn on_ground(chunk_manager: &ChunkManager, actor: &Actor, materials: &Materi
         let chunk_pos = global_to_chunk(actor.pos + ivec2(x_off as i32, actor.height as i32));
 
         if let Some(atom) = chunk_manager.get_atom(&chunk_pos) {
-            if !materials[atom].is_void() {
+            if materials[atom].is_powder() || materials[atom].is_solid() {
                 return true;
             }
         } else {
@@ -127,7 +127,9 @@ pub fn update_actors(
                         //Check if we can snap back to the ground
                         true => {
                             for i in 1..=DOWN_WALK_HEIGHT {
-                                if !move_y(&mut chunk_manager, &mut actor, 1, materials) {
+                                if !move_y(&mut chunk_manager, &mut actor, 1, materials)
+                                    && on_ground(&chunk_manager, &actor, materials)
+                                {
                                     break;
                                 } else if i == DOWN_WALK_HEIGHT {
                                     abort_stair(

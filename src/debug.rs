@@ -20,7 +20,7 @@ fn brush(
     } else if input.1.pressed(KeyCode::ControlLeft) {
         atom = Atom::new(3);
     } else if input.1.pressed(KeyCode::ShiftLeft) {
-        atom = Atom::new(4);
+        atom = Atom::new(8);
     } else {
         return;
     }

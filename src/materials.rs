@@ -120,7 +120,6 @@ impl AssetLoader for MaterialsLoader {
 
 pub fn setup(mut materials_handle: ResMut<MaterialsHandle>, asset_server: Res<AssetServer>) {
     materials_handle.0 = asset_server.load("atoms.ron");
-    println!("{:#?}", materials_handle.0);
 }
 
 pub struct MaterialsPlugin;

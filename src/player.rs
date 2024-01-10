@@ -5,7 +5,7 @@ use crate::prelude::*;
 #[derive(Component)]
 pub struct Player {
     fuel: f32,
-    jetpack: bool,
+    state: PlayerState,
     atom_id: u8,
 }
 
@@ -13,10 +13,19 @@ impl Default for Player {
     fn default() -> Self {
         Self {
             fuel: FUEL_MAX,
-            jetpack: false,
+            state: PlayerState::default(),
             atom_id: 2,
         }
     }
+}
+
+#[derive(Default)]
+pub enum PlayerState {
+    #[default]
+    Idle,
+    Walking,
+    Jumping(f64),
+    Jetpack(bool),
 }
 
 #[derive(Component, Default)]
@@ -48,15 +57,15 @@ pub fn player_setup(
     let tool_bundle = SpriteBundle {
         texture: tool_handle,
         sprite: Sprite {
-            anchor: Anchor::CenterLeft,
+            anchor: Anchor::Custom(vec2(-0.1, 0.)),
             ..Default::default()
         },
-        transform: Transform::from_translation(Vec3::new(-3., -3.5, 0.1)),
+        transform: Transform::from_translation(Vec3::new(-1., -3.5, 0.1)),
         ..Default::default()
     };
     let tool_front_ent = commands
         .spawn((
-            TransformBundle::from_transform(Transform::from_translation(vec3(8., 0., 0.))),
+            TransformBundle::from_transform(Transform::from_translation(vec3(5., 0., 0.))),
             ToolFront,
         ))
         .id();
@@ -89,6 +98,7 @@ pub fn update_player(
     chunk_manager: ResMut<ChunkManager>,
     mut camera: Query<&mut Transform, (Without<Tool>, With<Camera>)>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+    time: Res<Time>,
 ) {
     let (mut actor, mut player, mut anim_idxs) = player.single_mut();
     let (keys, mut scroll_evr) = input;
@@ -97,57 +107,82 @@ pub fn update_player(
 
     // Gravity
     if actor.vel.y < TERM_VEL as f32 {
-        actor.vel.y += 1.;
+        actor.vel.y += 1.
+            * if matches!(player.state, PlayerState::Jetpack { .. }) {
+                0.4
+            } else {
+                1.
+            };
     }
 
     // Movement
     let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
     actor.vel.x = x * RUN_SPEED;
 
-    // Refuel
     let on_ground = on_ground(&chunk_manager, &actor, materials);
+
+    // Refuel
     if on_ground {
         player.fuel = (player.fuel + FUEL_REGEN).clamp(0., Player::default().fuel);
     }
 
-    // Jump and Jetpack
-    let mut just_jumped = false;
+    if on_ground {
+        if x.abs() > 0. {
+            player.state = PlayerState::Walking
+        } else {
+            player.state = PlayerState::Idle
+        }
+    }
+
+    // Jump
     if keys.just_pressed(KeyCode::Space) {
         if on_ground {
             actor.vel.y -= JUMP_MAG;
-            just_jumped = true;
+            player.state = PlayerState::Jumping(time.elapsed_seconds_wrapped_f64());
         } else {
-            player.jetpack = true;
+            player.state = PlayerState::Jetpack(true);
             actor.vel.y = 0.;
         }
     }
 
-    if player.fuel > 0. && keys.pressed(KeyCode::Space) && player.jetpack {
-        actor.vel.y = (actor.vel.y - JETPACK_FORCE).clamp(-JETPACK_MAX, f32::MAX);
-        player.fuel -= FUEL_COMSUMPTON;
-    } else {
-        player.jetpack = false;
-    }
-
-    //Animation
-    if player.jetpack {
-        anim_idxs.first = 24;
-        anim_idxs.last = 26;
-    } else if !on_ground && player.fuel < FUEL_MAX {
-        anim_idxs.first = 32;
-        anim_idxs.last = 32;
-    } else if just_jumped {
-        anim_idxs.first = 16;
-        anim_idxs.last = 23;
-    } else if on_ground {
-        if x.abs() > 0. {
-            anim_idxs.first = 8;
-            anim_idxs.last = 11;
-        } else {
-            anim_idxs.first = 0;
-            anim_idxs.last = 1;
+    //Jump higher when holding space
+    if let PlayerState::Jumping(jump_start) = player.state {
+        if keys.pressed(KeyCode::Space)
+            && time.elapsed_seconds_wrapped_f64() - jump_start < TIME_JUMP_PRESSED
+        {
+            actor.vel.y -= PRESSED_JUMP_MAG
         }
     }
+
+    // Jetpack
+    let mut new_up = false;
+    if let PlayerState::Jetpack(_) = player.state {
+        if player.fuel > 0. && keys.pressed(KeyCode::Space) {
+            actor.vel.y = (actor.vel.y - JETPACK_FORCE).clamp(-JETPACK_MAX, f32::MAX);
+            player.fuel -= FUEL_COMSUMPTON;
+            new_up = true;
+        } else {
+            new_up = false;
+        }
+    }
+
+    if let PlayerState::Jetpack(up) = &mut player.state {
+        *up = new_up
+    };
+
+    //Animation
+    (anim_idxs.first, anim_idxs.last) = match player.state {
+        PlayerState::Idle => (0, 1),
+        PlayerState::Walking => (8, 11),
+        PlayerState::Jumping { .. } => (16, 23),
+        PlayerState::Jetpack(up) => {
+            if up {
+                (24, 26)
+            } else {
+                (32, 32)
+            }
+        }
+    };
 
     //Zoom
     for ev in scroll_evr.read() {
@@ -212,7 +247,7 @@ pub fn tool_system(
 
         let tool_slope = Vec2::new(angle.cos(), -angle.sin());
         let bound_slope = Vec2::new((angle + std::f32::consts::FRAC_PI_2).cos(), -(angle).cos());
-        let tool_front = center_vec_y_flipped + tool_slope * 8.;
+        let tool_front = center_vec_y_flipped + tool_slope * 5.;
 
         let mut pos_to_update = vec![];
         if mouse.pressed(MouseButton::Right) {
@@ -296,15 +331,9 @@ pub struct SavingTask(pub Option<Task<()>>);
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            (
-                update_player.after(chunk_manager_update),
-                tool_system.after(update_player),
-                update_player_sprite.after(update_actors),
-            ),
-        )
-        .insert_resource(SavingTask::default())
-        .add_systems(PostStartup, player_setup.after(manager_setup));
+        app.add_systems(Update, (update_player.after(chunk_manager_update),))
+            .add_systems(PostUpdate, (update_player_sprite, tool_system))
+            .insert_resource(SavingTask::default())
+            .add_systems(PostStartup, player_setup.after(manager_setup));
     }
 }

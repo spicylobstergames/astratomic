@@ -10,7 +10,7 @@ pub const QUARTER_CHUNK_LEN: usize = CHUNK_LEN / 4;
 // Actor consts
 
 pub const UP_WALK_HEIGHT: usize = 3;
-pub const DOWN_WALK_HEIGHT: usize = 6;
+pub const DOWN_WALK_HEIGHT: usize = 4;
 
 // Player consts
 pub const FUEL_MAX: f32 = 50.;
@@ -19,7 +19,9 @@ pub const FUEL_COMSUMPTON: f32 = 0.48;
 pub const JETPACK_FORCE: f32 = 1.5;
 pub const JETPACK_MAX: f32 = 3.;
 
-pub const JUMP_MAG: f32 = 13.;
+pub const JUMP_MAG: f32 = 9.;
+pub const PRESSED_JUMP_MAG: f32 = 0.6;
+pub const TIME_JUMP_PRESSED: f64 = 0.8;
 pub const RUN_SPEED: f32 = 3.5;
 
 pub const TOOL_DISTANCE: f32 = 32.;
