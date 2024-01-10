@@ -241,7 +241,7 @@ pub fn tool_system(
         tool_transform.translation.x =
             tool_transform.translation.x.abs() * (flip_bool as i8 * 2 - 1) as f32;
 
-        //Tool shooting and sucking atoms
+        //Tool pulling and pushing atoms
         let mut center_vec_y_flipped = center_vec;
         center_vec_y_flipped.y *= -1.;
 
