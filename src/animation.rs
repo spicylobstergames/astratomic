@@ -34,6 +34,6 @@ fn animate_sprite(
 pub struct AnimationPlugin;
 impl Plugin for AnimationPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(FixedUpdate, animate_sprite.after(update_player_sprite));
+        app.add_systems(FixedUpdate, animate_sprite.after(update_player));
     }
 }

@@ -112,7 +112,7 @@ pub fn player_setup(
 
 /// Updates player
 pub fn update_player(
-    input: (ResMut<Input<KeyCode>>, EventReader<MouseWheel>),
+    input: (Res<Inputs>, EventReader<MouseWheel>),
     mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices)>,
     chunk_manager: ResMut<ChunkManager>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
@@ -120,7 +120,7 @@ pub fn update_player(
     mut zoom: ResMut<Zoom>,
 ) {
     let (mut actor, mut player, mut anim_idxs) = player.single_mut();
-    let (keys, mut scroll_evr) = input;
+    let (inputs, mut scroll_evr) = input;
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     // Gravity
@@ -134,7 +134,7 @@ pub fn update_player(
     }
 
     // Movement
-    let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
+    let x = inputs.right - inputs.left;
     actor.vel.x = x * RUN_SPEED;
 
     let on_ground = on_ground(&chunk_manager, &actor, materials);
@@ -153,7 +153,7 @@ pub fn update_player(
     }
 
     // Jump
-    if keys.just_pressed(KeyCode::Space) {
+    if inputs.jump_just_pressed {
         if on_ground {
             actor.vel.y -= JUMP_MAG;
             player.state = PlayerState::Jumping(time.elapsed_seconds_wrapped_f64());
@@ -165,7 +165,7 @@ pub fn update_player(
 
     //Jump higher when holding space
     if let PlayerState::Jumping(jump_start) = player.state {
-        if keys.pressed(KeyCode::Space)
+        if inputs.jump_pressed
             && time.elapsed_seconds_wrapped_f64() - jump_start < TIME_JUMP_PRESSED
         {
             actor.vel.y -= PRESSED_JUMP_MAG
@@ -175,7 +175,7 @@ pub fn update_player(
     // Jetpack
     let mut new_up = false;
     if let PlayerState::Jetpack(_) = player.state {
-        if player.fuel > 0. && keys.pressed(KeyCode::Space) {
+        if player.fuel > 0. && inputs.jump_pressed {
             actor.vel.y = (actor.vel.y - JETPACK_FORCE).clamp(-JETPACK_MAX, f32::MAX);
             player.fuel -= FUEL_COMSUMPTON;
             new_up = true;
@@ -211,13 +211,13 @@ pub fn update_player(
     }
 
     //Change shooting atoms
-    if keys.just_pressed(KeyCode::Key1) {
+    if inputs.numbers[0] {
         player.atom_id = 2;
-    } else if keys.just_pressed(KeyCode::Key2) {
+    } else if inputs.numbers[1] {
         player.atom_id = 3;
-    } else if keys.just_pressed(KeyCode::Key3) {
+    } else if inputs.numbers[2] {
         player.atom_id = 4;
-    } else if keys.just_pressed(KeyCode::Key4) {
+    } else if inputs.numbers[3] {
         player.atom_id = 5;
     }
 }
@@ -228,18 +228,14 @@ pub fn tool_system(
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
     querys: (Query<&Window>, Query<(&mut TextureAtlasSprite, &Player)>),
-    resources: (
-        ResMut<ChunkManager>,
-        ResMut<DirtyRects>,
-        Res<Input<MouseButton>>,
-    ),
+    resources: (ResMut<ChunkManager>, ResMut<DirtyRects>, Res<Inputs>),
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let (mut tool_transform, tool_gtransform, mut tool_sprite) = tool.single_mut();
     let (camera, camera_gtransform) = camera.single_mut();
     let (window, mut player) = querys;
     let (mut textatlas_sprite, player) = player.single_mut();
-    let (mut chunk_manager, mut dirty_rects, mouse) = resources;
+    let (mut chunk_manager, mut dirty_rects, inputs) = resources;
     let Ok(window) = window.get_single() else {
         return;
     };
@@ -271,8 +267,8 @@ pub fn tool_system(
         let tool_front = center_vec_y_flipped + tool_slope * 5.;
 
         let mut pos_to_update = vec![];
-        if mouse.pressed(MouseButton::Right) {
-            let new_tool_front = tool_front + tool_slope * 2.;
+        if inputs.push {
+            let new_tool_front = tool_front + tool_slope * 3.5;
             let n = 6;
 
             for i in 0..=n {
@@ -299,7 +295,7 @@ pub fn tool_system(
                     }
                 }
             }
-        } else if mouse.pressed(MouseButton::Left) {
+        } else if inputs.pull {
             let center_bound = tool_front + tool_slope * TOOL_DISTANCE;
 
             let bound1 = (center_bound + bound_slope * TOOL_RANGE).as_ivec2();
@@ -343,18 +339,80 @@ pub fn update_player_sprite(mut query: Query<(&mut Transform, &Actor), With<Play
 #[derive(Resource, Default)]
 pub struct SavingTask(pub Option<Task<()>>);
 
+pub fn get_input(
+    keys: Res<Input<KeyCode>>,
+    mouse_buttons: Res<Input<MouseButton>>,
+    mut inputs: ResMut<Inputs>,
+) {
+    //Jump
+    if keys.just_pressed(KeyCode::Space) {
+        inputs.jump_just_pressed = true;
+        inputs.jump_pressed = true;
+    } else if inputs.jump_pressed {
+        inputs.jump_pressed = true;
+    }
+
+    //Movement
+    if keys.pressed(KeyCode::A) {
+        inputs.left = 1.;
+    }
+    if keys.pressed(KeyCode::D) {
+        inputs.right = 1.;
+    }
+
+    //Tool
+    if mouse_buttons.pressed(MouseButton::Left) {
+        inputs.pull = true;
+    }
+    if mouse_buttons.pressed(MouseButton::Right) {
+        inputs.push = true;
+    }
+
+    //Numbers, to select atoms
+    if keys.just_pressed(KeyCode::Key1) {
+        inputs.numbers[0] = true;
+    } else if keys.just_pressed(KeyCode::Key2) {
+        inputs.numbers[1] = true;
+    } else if keys.just_pressed(KeyCode::Key3) {
+        inputs.numbers[2] = true;
+    } else if keys.just_pressed(KeyCode::Key4) {
+        inputs.numbers[3] = true;
+    }
+}
+
+pub fn clear_input(mut inputs: ResMut<Inputs>) {
+    *inputs = Inputs::default();
+}
+
+#[derive(Resource, Default)]
+pub struct Inputs {
+    left: f32,
+    right: f32,
+
+    pull: bool,
+    push: bool,
+
+    jump_pressed: bool,
+    jump_just_pressed: bool,
+
+    numbers: [bool; 4],
+}
+
 pub struct PlayerPlugin;
 impl Plugin for PlayerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             FixedUpdate,
             (
-                update_player.after(chunk_manager_update),
-                update_player_sprite,
-                tool_system.after(chunk_manager_update),
+                update_player.before(update_actors),
+                update_player_sprite.after(update_actors),
+                tool_system.before(chunk_manager_update),
+                clear_input.after(update_player).after(tool_system),
             ),
         )
-        .insert_resource(SavingTask::default())
+        .add_systems(PreUpdate, get_input)
+        .init_resource::<SavingTask>()
+        .init_resource::<Inputs>()
         .add_systems(PostStartup, player_setup.after(manager_setup));
     }
 }

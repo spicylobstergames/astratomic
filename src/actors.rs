@@ -9,7 +9,7 @@ pub struct Actor {
 }
 
 //Called before simulations
-pub fn add_actors(
+pub fn fill_actors(
     mut chunk_manager: ResMut<ChunkManager>,
     actors: Query<&Actor>,
     mut dirty_rects: ResMut<DirtyRects>,
@@ -33,7 +33,7 @@ pub fn add_actors(
 }
 
 //Called after simulation, before actor update
-pub fn remove_actors(
+pub fn unfill_actors(
     mut chunk_manager: ResMut<ChunkManager>,
     actors: Query<&Actor>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
@@ -246,18 +246,9 @@ impl Plugin for ActorsPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                add_actors
-                    .before(chunk_manager_update)
-                    .before(remove_actors)
-                    .before(update_actors),
-                remove_actors
-                    .after(chunk_manager_update)
-                    .after(add_actors)
-                    .before(update_actors),
-                update_actors
-                    .after(remove_actors)
-                    .after(add_actors)
-                    .after(chunk_manager_update),
+                fill_actors.before(chunk_manager_update),
+                unfill_actors.after(chunk_manager_update),
+                update_actors.after(unfill_actors),
             ),
         );
     }
