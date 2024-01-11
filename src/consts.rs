@@ -27,6 +27,9 @@ pub const RUN_SPEED: f32 = 3.5;
 pub const TOOL_DISTANCE: f32 = 32.;
 pub const TOOL_RANGE: f32 = 12.;
 
+pub const ZOOM_LOWER_BOUND: f32 = 0.15;
+pub const ZOOM_UPPER_BOUND: f32 = 0.30;
+
 // Engine consts
 
 //This was a "scale" const for the atoms, but we can just zoom in, so it was removed
