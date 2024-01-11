@@ -1,5 +1,4 @@
 use bevy::render::render_resource::*;
-use std::cmp::Ordering;
 use std::collections::HashSet;
 
 use crate::prelude::*;
@@ -26,21 +25,24 @@ impl Chunk {
     pub fn new(texture: Handle<Image>, index: IVec2) -> Chunk {
         let mut atoms = [Atom::default(); CHUNK_LEN];
 
-        match index.y.cmp(&2) {
-            Ordering::Less => {}
-            Ordering::Equal => {
+        match index.y {
+            i32::MIN..=0 => {}
+            1 => {
                 for (i, atom) in atoms.iter_mut().enumerate() {
                     let id = match i {
                         0..=511 => 6,
-                        512..=2815 => 7,
-                        _ => 4,
+                        _ => 7,
                     };
 
                     *atom = Atom::new(id);
                 }
             }
-
-            Ordering::Greater => {
+            2 => {
+                for atom in &mut atoms {
+                    *atom = Atom::new(4);
+                }
+            }
+            3..=i32::MAX => {
                 for atom in &mut atoms {
                     *atom = Atom::new(8);
                 }
