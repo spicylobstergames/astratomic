@@ -3,6 +3,7 @@ use bevy::prelude::*;
 mod actors;
 mod animation;
 mod atom;
+mod camera;
 mod chunk;
 mod chunk_group;
 mod chunk_manager;
@@ -15,8 +16,8 @@ mod particles;
 mod player;
 mod prelude {
     pub use crate::{
-        actors::*, animation::*, atom::*, chunk::*, chunk_group::*, chunk_manager::*, consts::*,
-        debug::*, geom_tools::*, manager_api::*, materials::*, particles::*, player::*,
+        actors::*, animation::*, atom::*, camera::*, chunk::*, chunk_group::*, chunk_manager::*,
+        consts::*, debug::*, geom_tools::*, manager_api::*, materials::*, particles::*, player::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -53,6 +54,7 @@ fn main() {
             animation::AnimationPlugin,
             ParticlesPlugin,
             MaterialsPlugin,
+            CameraPlugin,
         ))
         .add_systems(Startup, setup);
 
