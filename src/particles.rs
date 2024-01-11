@@ -241,8 +241,8 @@ impl Plugin for ParticlesPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                hydrate_particles.before(update_particles),
-                update_particles.after(chunk_manager_update),
+                hydrate_particles.after(update_player),
+                update_particles.before(chunk_manager_update),
             ),
         );
     }
