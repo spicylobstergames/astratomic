@@ -88,7 +88,11 @@ pub fn update_particles(
                 }
 
                 let mut change_atom = false;
-                if let Some(atom) = chunk_manager_deffered.read().unwrap().get_atom(&update.chunk_pos) {
+                if let Some(atom) = chunk_manager_deffered
+                    .read()
+                    .unwrap()
+                    .get_atom(&update.chunk_pos)
+                {
                     if materials[atom.id].is_void() {
                         change_atom = true;
                     }
@@ -147,9 +151,13 @@ pub fn update_particles(
                                 let chunk_pos = global_to_chunk(pos);
                                 let prev_chunk_pos = global_to_chunk(prev_pos);
 
-                                let atom = chunk_manager.read().unwrap().get_atom(&chunk_pos).unwrap().clone();
-                                let prev_atom =
-                                    chunk_manager.read().unwrap().get_atom(&prev_chunk_pos).unwrap().clone();
+                                let atom =
+                                    *chunk_manager.read().unwrap().get_atom(&chunk_pos).unwrap();
+                                let prev_atom = *chunk_manager
+                                    .read()
+                                    .unwrap()
+                                    .get_atom(&prev_chunk_pos)
+                                    .unwrap();
 
                                 if particle.state == PartState::Normal
                                     && !materials[atom.id].is_void()
