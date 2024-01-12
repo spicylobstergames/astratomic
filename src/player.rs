@@ -302,8 +302,18 @@ pub fn tool_system(
             let bound2 = (center_bound + -bound_slope * TOOL_RANGE).as_ivec2();
 
             for bound_vec in Line::new(bound1, bound2 - bound1) {
-                for vec in Line::new(tool_front.as_ivec2(), bound_vec - tool_front.as_ivec2()) {
+                for vec in Line::new(
+                    (tool_front - 4. * tool_slope).as_ivec2(),
+                    bound_vec - (tool_front - 4. * tool_slope).as_ivec2(),
+                ) {
                     let chunk_pos = global_to_chunk(vec);
+                    if (vec.distance_squared((tool_front - 6. * tool_slope).as_ivec2()) as f32)
+                        .sqrt()
+                        < 6.
+                    {
+                        continue;
+                    }
+
                     if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
                         if !materials[atom.id].is_void() && !materials[atom.id].is_object() {
                             commands.spawn(Particle {
@@ -348,7 +358,7 @@ pub fn get_input(
     if keys.just_pressed(KeyCode::Space) {
         inputs.jump_just_pressed = true;
         inputs.jump_pressed = true;
-    } else if inputs.jump_pressed {
+    } else if keys.pressed(KeyCode::Space) {
         inputs.jump_pressed = true;
     }
 
