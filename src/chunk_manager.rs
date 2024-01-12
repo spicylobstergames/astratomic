@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use crate::prelude::*;
 
 /// Updates and do the chunks logic
-#[derive(Default, Resource, Clone)]
+#[derive(Default, Resource)]
 pub struct ChunkManager {
     pub chunks: HashMap<IVec2, Chunk>,
     pub pos: IVec2,

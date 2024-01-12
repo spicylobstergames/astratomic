@@ -34,6 +34,7 @@ mod prelude {
     pub use std::fs::File;
     pub use std::io::Write;
     pub use std::io::{BufReader, BufWriter};
+    pub use std::sync::{Arc, RwLock};
 
     pub use crate::materials::Material;
 }
