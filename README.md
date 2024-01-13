@@ -28,6 +28,7 @@ Powered by a similar engine as Noita, made from scratch with Rust.
 In the bigger picture we also aim to achieve intergalactic travel like Starbound, procedurally generated animations inspired by Rainworld, all the cool mechanics you see in Noita, multiplayer and modding, the last two made possible by a future engine migration to [Bones](https://github.com/fishfolk/bones/).
 
 ## Controls
+You can walk with WASD and jump with Space. When on air press space again to activate your jetpack!
 Left Mouse button to pull atoms, Right Mouse button to push atoms.
 Mouse wheel to zoom in/out.
 
