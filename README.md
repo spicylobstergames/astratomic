@@ -7,6 +7,16 @@
 Astratomic is a survival game that draws inspiration from the likes of Noita and Starbound.
 Powered by a similar engine as Noita, made from scratch with Rust.
 
+## Controls
+- You can walk with WASD and jump with Space. When on air press space again to activate your jetpack!
+- Left Mouse button to pull atoms, Right Mouse button to push atoms.
+- Mouse wheel to zoom in/out.
+
+## Where to play it
+
+- Go to our latest release page https://github.com/spicylobstergames/astratomic/releases/tag/v0.2.0
+- Download the zip for your platform, unzip it and run the executable, it's that simple!
+
 ## Current State and Goals
 
 **We currently implemented:**
@@ -25,11 +35,6 @@ Powered by a similar engine as Noita, made from scratch with Rust.
   - Procedural Animations
   
 In the bigger picture we also aim to achieve intergalactic travel like Starbound, procedurally generated animations inspired by Rainworld, all the cool mechanics you see in Noita, multiplayer and modding, the last two made possible by a future engine migration to [Bones](https://github.com/fishfolk/bones/).
-
-## Controls
-You can walk with WASD and jump with Space. When on air press space again to activate your jetpack!
-Left Mouse button to pull atoms, Right Mouse button to push atoms.
-Mouse wheel to zoom in/out.
 
 ## Last Update Changelog
 
