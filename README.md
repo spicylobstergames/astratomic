@@ -37,18 +37,6 @@ Powered by a similar engine as Noita, made from scratch with Rust.
   
 In the bigger picture we also aim to achieve intergalactic travel like Starbound, procedurally generated animations inspired by Rainworld, all the cool mechanics you see in Noita, multiplayer and modding, the last two made possible by a future engine migration to [Bones](https://github.com/fishfolk/bones/).
 
-## Last Update Changelog
-
-We added:
-- Actors
-  - AABB colliders that interact with the atom world.
-- Player
-  - The player is pretty cool! It has some animations, a jetpack and a pretty nice tool!
- - Player tool
-   - The tool can pull atoms(Left Mouse Button), and also push(Right Mouse Button) the atoms you pulled!
-- Engine Changes
-  - We changed the Chunk Manager approach to store Chunks in a Vec to storing them in a HashMap, this lays the ground for future updates, like Save/Load worlds, and big explorable worlds. It was needed to simplify addind the other additions and unfortunately took some time to do.
-
 ## Licensing
 
 In the future we aim to separate the engine code from the game code, making the former licensed under Apache v2.0 and the latter under PolyForm NonCommercial v1.0.
