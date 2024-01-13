@@ -8,7 +8,7 @@ Astratomic is a survival game that draws inspiration from the likes of Noita and
 Powered by a similar engine as Noita, made from scratch with Rust.
 
 ## Controls
-- You can walk with WASD and jump with Space. When on air press space again to activate your jetpack!
+- You can walk with WASD and jump with Space. When on air press Space again to activate your jetpack!
 - Left Mouse button to pull atoms, Right Mouse button to push atoms.
 - Mouse wheel to zoom in/out.
 
