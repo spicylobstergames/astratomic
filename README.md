@@ -10,6 +10,7 @@ Powered by a similar engine as Noita, made from scratch with Rust.
 ## Controls
 - You can walk with WASD and jump with Space. When on air press Space again to activate your jetpack!
 - Left Mouse button to pull atoms, Right Mouse button to push atoms.
+- Press 1-4 to select the atom you can push.
 - Mouse wheel to zoom in/out.
 
 ## Where to play it
