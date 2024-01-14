@@ -102,6 +102,15 @@ pub fn update_particles(
                     commands.entity(update.ent).despawn();
                     continue;
                 }
+
+                if change_atom {
+                    let atom = &mut chunk_manager_deffered.write().unwrap()[update.chunk_pos];
+                    *atom = update.atom;
+                    commands.entity(update.ent).despawn();
+
+                    update_dirty_rects(&mut dirty_rects.render, update.chunk_pos);
+                    update_dirty_rects_3x3(&mut dirty_rects.current, update.chunk_pos);
+                }
             }
         });
 

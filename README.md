@@ -2,11 +2,21 @@
 
 [![Discord](https://img.shields.io/discord/865004050357682246?logo=discord&logoColor=white)](https://discord.gg/JFhxYBvxR8) 
 
-[astrademo.webm](https://github.com/Zac8668/astratomic/assets/78173025/f079acdc-9e1f-4636-b39b-6b358de71f11)
-
+[![Screenshot from 2024-01-13 09-08-15](https://github.com/spicylobstergames/astratomic/assets/78173025/175de10d-fc7b-4fa3-813e-04705c480662)](https://youtu.be/bChefWqOmh0)
 
 Astratomic is a survival game that draws inspiration from the likes of Noita and Starbound.
 Powered by a similar engine as Noita, made from scratch with Rust.
+
+## Controls
+- You can walk with WASD and jump with Space. When on air press Space again to activate your jetpack!
+- Left Mouse button to pull atoms, Right Mouse button to push atoms.
+- Press 1-4 to select the atom you can push.
+- Mouse wheel to zoom in/out.
+
+## Where to play it
+
+- Go to our latest release page https://github.com/spicylobstergames/astratomic/releases/tag/v0.2.0
+- Download the zip for your platform, unzip it and run the executable, it's that simple!
 
 ## Current State and Goals
 
@@ -26,22 +36,6 @@ Powered by a similar engine as Noita, made from scratch with Rust.
   - Procedural Animations
   
 In the bigger picture we also aim to achieve intergalactic travel like Starbound, procedurally generated animations inspired by Rainworld, all the cool mechanics you see in Noita, multiplayer and modding, the last two made possible by a future engine migration to [Bones](https://github.com/fishfolk/bones/).
-
-## Controls
-Left Mouse button to pull atoms, Right Mouse button to push atoms.
-Mouse wheel to zoom in/out.
-
-## Last Update Changelog
-
-We added:
-- Actors
-  - AABB colliders that interact with the atom world.
-- Player
-  - The player is pretty cool! It has some animations, a jetpack and a pretty nice tool!
- - Player tool
-   - The tool can pull atoms(Left Mouse Button), and also push(Right Mouse Button) the atoms you pulled!
-- Engine Changes
-  - We changed the Chunk Manager approach to store Chunks in a Vec to storing them in a HashMap, this lays the ground for future updates, like Save/Load worlds, and big explorable worlds. It was needed to simplify addind the other additions and unfortunately took some time to do.
 
 ## Licensing
 
