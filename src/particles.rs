@@ -48,7 +48,6 @@ pub fn hydrate_particles(
                     custom_size: Some(Vec2::new(1.0, 1.0)),
                     ..default()
                 },
-                //TODO figure out layers
                 transform: Transform::from_translation(Vec3::new(
                     particle.pos.x,
                     -particle.pos.y,
@@ -82,29 +81,26 @@ pub fn update_particles(
         let chunk_manager_deffered = Arc::clone(&chunk_manager);
         deferred_scope.spawn(async move {
             while let Ok(update) = particles_recv.recv().await {
-                if update.remove {
+                if let Some((chunk_pos, update_atom)) = update.remove {
+                    let mut change_atom = false;
+                    if let Some(atom) = chunk_manager_deffered.read().unwrap().get_atom(&chunk_pos)
+                    {
+                        if materials[atom.id].is_void() {
+                            change_atom = true;
+                        }
+                    }
+
+                    if change_atom {
+                        let atom = &mut chunk_manager_deffered.write().unwrap()[chunk_pos];
+                        *atom = update_atom;
+                        commands.entity(update.ent).despawn();
+
+                        update_dirty_rects(&mut dirty_rects.render, chunk_pos);
+                        update_dirty_rects_3x3(&mut dirty_rects.current, chunk_pos);
+                    }
+                } else {
                     commands.entity(update.ent).despawn();
                     continue;
-                }
-
-                let mut change_atom = false;
-                if let Some(atom) = chunk_manager_deffered
-                    .read()
-                    .unwrap()
-                    .get_atom(&update.chunk_pos)
-                {
-                    if materials[atom.id].is_void() {
-                        change_atom = true;
-                    }
-                }
-
-                if change_atom {
-                    let atom = &mut chunk_manager_deffered.write().unwrap()[update.chunk_pos];
-                    *atom = update.atom;
-                    commands.entity(update.ent).despawn();
-
-                    update_dirty_rects(&mut dirty_rects.render, update.chunk_pos);
-                    update_dirty_rects_3x3(&mut dirty_rects.current, update.chunk_pos);
                 }
             }
         });
@@ -130,12 +126,7 @@ pub fn update_particles(
                     || !y_bound.contains(&(cur_pos.y as i32))
                 {
                     particle_send
-                        .try_send(DeferredParticleUpdate {
-                            remove: true,
-                            atom: Atom::default(),
-                            chunk_pos: ChunkPos::default(),
-                            ent,
-                        })
+                        .try_send(DeferredParticleUpdate { remove: None, ent })
                         .unwrap();
                 } else {
                     match particle.state {
@@ -170,10 +161,11 @@ pub fn update_particles(
                                     {
                                         particle_send
                                             .try_send(DeferredParticleUpdate {
-                                                chunk_pos: global_to_chunk(prev_pos),
-                                                atom: particle.atom,
+                                                remove: Some((
+                                                    global_to_chunk(prev_pos),
+                                                    particle.atom,
+                                                )),
                                                 ent,
-                                                remove: false,
                                             })
                                             .unwrap();
                                     } else if particle.state != PartState::Looking {
@@ -190,10 +182,8 @@ pub fn update_particles(
                                 {
                                     particle_send
                                         .try_send(DeferredParticleUpdate {
-                                            chunk_pos: global_to_chunk(pos),
-                                            atom: particle.atom,
+                                            remove: Some((global_to_chunk(pos), particle.atom)),
                                             ent,
-                                            remove: false,
                                         })
                                         .unwrap();
                                     break;
@@ -227,12 +217,7 @@ pub fn update_particles(
                                 < 3.
                             {
                                 particle_send
-                                    .try_send(DeferredParticleUpdate {
-                                        remove: true,
-                                        atom: Atom::default(),
-                                        chunk_pos: ChunkPos::default(),
-                                        ent,
-                                    })
+                                    .try_send(DeferredParticleUpdate { remove: None, ent })
                                     .unwrap();
                             }
                         }
@@ -243,10 +228,8 @@ pub fn update_particles(
 }
 
 pub struct DeferredParticleUpdate {
-    pub chunk_pos: ChunkPos,
-    pub atom: Atom,
     pub ent: Entity,
-    pub remove: bool,
+    pub remove: Option<(ChunkPos, Atom)>,
 }
 
 pub struct ParticlesPlugin;
