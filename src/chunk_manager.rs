@@ -163,7 +163,7 @@ impl DirtyRects {
 }
 
 #[derive(Component)]
-pub struct ChunkTextures;
+pub struct ChunksParent;
 
 pub fn manager_setup(
     mut commands: Commands,
@@ -203,16 +203,35 @@ pub fn manager_setup(
 
     commands
         .spawn((
-            Name::new("Chunks textures"),
+            Name::new("Chunks"),
             VisibilityBundle::default(),
             TransformBundle::from_transform(Transform::from_translation(vec3(
                 0.,
                 0.,
                 AUTOMATA_LAYER,
             ))),
-            ChunkTextures,
+            ChunksParent,
         ))
         .push_children(&images_vec);
+}
+
+pub fn add_colliders(
+    mut commands: Commands,
+    chunk_manager: Res<ChunkManager>,
+    chunks: Query<(Entity, &ChunkComponent), Without<Collider>>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+) {
+    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+
+    for (ent, pos) in &chunks {
+        if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
+            let collider = chunk.get_collider(materials);
+
+            if let Some(collider) = collider {
+                commands.entity(ent).insert(collider);
+            }
+        }
+    }
 }
 
 pub fn chunk_manager_update(
@@ -471,6 +490,9 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
     }
 }
 
+#[derive(Component)]
+pub struct ChunkComponent(pub IVec2);
+
 //Still needs to add the return entity to a parent
 pub fn add_chunk(
     commands: &mut Commands,
@@ -491,25 +513,31 @@ pub fn add_chunk(
     //Update chunk image
     let image = images.get_mut(&chunk.texture).unwrap();
     chunk.update_all(image);
-    chunk_manager.chunks.insert(index, chunk);
 
     //Spawn Image
-    commands
-        .spawn(SpriteBundle {
-            texture: texture_copy,
-            sprite: Sprite {
-                anchor: Anchor::TopLeft,
+    let entity = commands
+        .spawn((
+            SpriteBundle {
+                texture: texture_copy,
+                sprite: Sprite {
+                    anchor: Anchor::TopLeft,
+                    ..Default::default()
+                },
+                transform: Transform::from_xyz(pos.x, pos.y, 0.),
                 ..Default::default()
             },
-            transform: Transform::from_xyz(pos.x, pos.y, 0.),
-            ..Default::default()
-        })
-        .id()
+            ChunkComponent(index),
+        ))
+        .id();
+    chunk.entity = Some(entity);
+
+    chunk_manager.chunks.insert(index, chunk);
+    entity
 }
 
 pub fn update_manager_pos(
     mut commands: Commands,
-    chunk_textures: Query<Entity, With<ChunkTextures>>,
+    chunk_textures: Query<Entity, With<ChunksParent>>,
     image_entities: Query<(&Parent, Entity, &Handle<Image>)>,
     player: Query<&Actor, With<Player>>,
     resources: (
@@ -675,9 +703,9 @@ pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, manager_setup)
-            .add_systems(FixedUpdate, chunk_manager_update)
-            .add_systems(Update, update_manager_pos)
             .add_systems(PreUpdate, clear_render_rect)
+            .add_systems(FixedUpdate, chunk_manager_update)
+            .add_systems(Update, (update_manager_pos, add_colliders))
             .init_resource::<ChunkManager>()
             .init_resource::<DirtyRects>();
 

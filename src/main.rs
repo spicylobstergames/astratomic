@@ -36,6 +36,9 @@ mod prelude {
     pub use std::io::{BufReader, BufWriter};
     pub use std::sync::{Arc, RwLock};
 
+    pub use bevy_rapier2d::prelude::*;
+    pub use contour::ContourBuilder;
+
     pub use crate::materials::Material;
 }
 
@@ -56,6 +59,10 @@ fn main() {
             ParticlesPlugin,
             MaterialsPlugin,
             CameraPlugin,
+        ))
+        .add_plugins((
+            RapierPhysicsPlugin::<NoUserData>::default(),
+            RapierDebugRenderPlugin::default(),
         ))
         .add_systems(Startup, setup);
 

@@ -9,18 +9,22 @@ default-run = "astratomic"
 [dependencies]
 bevy                = {version = "0.12", features =["file_watcher"]}
 bevy-inspector-egui = "0.22"
-rand                = { version = "0.8.5", features = ["small_rng"] }
-fastrand            = "2.0.1"
-async-channel       = "2.1.0"
-smallvec            = "1.11.2"
-itertools           = "0.12.0"
+rand                = { version = "0.8", features = ["small_rng"] }
+fastrand            = "2.0"
+async-channel       = "2.1"
+smallvec            = "1.12"
+itertools           = "0.12"
 
 serde               = "1.0"
 serde_derive        = "1.0"
-bincode             = "1.3.3"
-serde-big-array     = "0.5.1"
-ron                 = "0.8.1"
-bevy-async-task     = "1.3.1"
+bincode             = "1.3"
+serde-big-array     = "0.5"
+ron                 = "0.8"
+bevy-async-task     = "1.3"
+
+contour = "0.12"
+bevy_rapier2d = { version = "0.23", features = [ "simd-stable", "debug-render-2d", "parallel" ] }
+geo = "0.27"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy_dylib = "0.12.1"

@@ -1,4 +1,5 @@
 use bevy::render::render_resource::*;
+use geo::{Simplify, TriangulateEarcut};
 use std::collections::HashSet;
 
 use crate::prelude::*;
@@ -10,6 +11,8 @@ pub struct Chunk {
 
     #[serde(skip)]
     pub texture: Handle<Image>,
+    #[serde(skip)]
+    pub entity: Option<Entity>,
 }
 
 impl Default for Chunk {
@@ -17,6 +20,7 @@ impl Default for Chunk {
         Self {
             atoms: [Atom::default(); CHUNK_LEN],
             texture: Handle::default(),
+            entity: None,
         }
     }
 }
@@ -49,7 +53,11 @@ impl Chunk {
             }
         }
 
-        Chunk { atoms, texture }
+        Chunk {
+            atoms,
+            texture,
+            entity: None,
+        }
     }
 
     pub fn new_image() -> Image {
@@ -79,5 +87,47 @@ impl Chunk {
             .collect();
 
         self.update_image_positions(image, &positions)
+    }
+
+    pub fn get_collider(&self, materials: &Materials) -> Option<Collider> {
+        let c = ContourBuilder::new(CHUNK_LENGHT as u32, CHUNK_LENGHT as u32, false);
+
+        let res = c.contours(&self.get_values(materials), &[0.5]).unwrap();
+        let mut colliders = vec![];
+        for countour in res {
+            let geometry = countour.geometry().simplify(&4.0);
+
+            for polygon in geometry {
+                let triangles = polygon.earcut_triangles();
+                for triangle in triangles {
+                    let collider = Collider::triangle(
+                        vec2(triangle.0.x as f32, -triangle.0.y as f32),
+                        vec2(triangle.1.x as f32, -triangle.1.y as f32),
+                        vec2(triangle.2.x as f32, -triangle.2.y as f32),
+                    );
+                    colliders.push((Vec2::ZERO, 0.0_f32, collider));
+                }
+            }
+        }
+        if !colliders.is_empty() {
+            Some(Collider::compound(colliders))
+        } else {
+            None
+        }
+    }
+    pub fn get_values(&self, materials: &Materials) -> Vec<f64> {
+        let mut values = vec![];
+
+        for row in self.atoms.chunks(CHUNK_LENGHT) {
+            for atom in row {
+                if materials[atom].is_solid() {
+                    values.push(1.)
+                } else {
+                    values.push(0.)
+                }
+            }
+        }
+
+        values
     }
 }

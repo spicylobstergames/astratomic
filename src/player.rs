@@ -332,9 +332,16 @@ pub fn tool_system(
             }
         }
 
+        let mut chunks = HashSet::new();
         for pos in pos_to_update {
             update_dirty_rects_3x3(&mut dirty_rects.current, pos);
             update_dirty_rects(&mut dirty_rects.render, pos);
+            chunks.insert(pos.chunk);
+        }
+
+        for chunk in chunks {
+            let chunk = chunk_manager.chunks.get(&chunk).unwrap();
+            commands.entity(chunk.entity.unwrap()).remove::<Collider>();
         }
     }
 }
