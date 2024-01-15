@@ -96,7 +96,7 @@ pub fn player_setup(
 
     commands
         .spawn((
-            player_actor,
+            player_actor.clone(),
             Player::default(),
             SpriteSheetBundle {
                 texture_atlas: player_atlas_handle,
@@ -106,6 +106,12 @@ pub fn player_setup(
             },
             animation_indices,
             AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
+            bevy_rapier2d::prelude::RigidBody::Dynamic,
+            bevy_rapier2d::prelude::LockedAxes::ROTATION_LOCKED,
+            bevy_rapier2d::prelude::Collider::cuboid(
+                player_actor.width as f32 / 2.,
+                player_actor.height as f32 / 2.,
+            ),
         ))
         .add_child(tool_ent);
 }

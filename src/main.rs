@@ -14,10 +14,12 @@ mod manager_api;
 mod materials;
 mod particles;
 mod player;
+mod rigidbody;
 mod prelude {
     pub use crate::{
         actors::*, animation::*, atom::*, camera::*, chunk::*, chunk_group::*, chunk_manager::*,
         consts::*, debug::*, geom_tools::*, manager_api::*, materials::*, particles::*, player::*,
+        rigidbody::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -59,9 +61,10 @@ fn main() {
             ParticlesPlugin,
             MaterialsPlugin,
             CameraPlugin,
+            RigidbodyPlugin,
         ))
         .add_plugins((
-            RapierPhysicsPlugin::<NoUserData>::default(),
+            RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(6.),
             RapierDebugRenderPlugin::default(),
         ))
         .add_systems(Startup, setup);

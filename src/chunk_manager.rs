@@ -228,7 +228,10 @@ pub fn add_colliders(
             let collider = chunk.get_collider(materials);
 
             if let Some(collider) = collider {
-                commands.entity(ent).insert(collider);
+                commands
+                    .entity(ent)
+                    .insert(collider)
+                    .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
             }
         }
     }
