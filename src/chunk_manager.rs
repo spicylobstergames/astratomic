@@ -220,6 +220,8 @@ pub fn chunk_manager_update(
     mut dirty_rects_resource: ResMut<DirtyRects>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
+    puffin::profile_function!();
+
     chunk_manager.dt = chunk_manager.dt.wrapping_add(1);
     let dt = chunk_manager.dt;
 
@@ -294,7 +296,33 @@ pub fn chunk_manager_update(
             .into_iter()
             .cartesian_product(rand_range(0..2).into_iter())
         {
+            puffin::profile_scope!("Update step scope.");
+
             compute_pool.scope(|scope| {
+                let chunk_groups = get_chunk_groups(
+                    &mut chunk_manager.chunks,
+                    (x_toff, y_toff),
+                    dirty_rects,
+                    manager_pos,
+                );
+
+                for chunk_group in chunk_groups {
+                    let rect = dirty_rects.get(&chunk_group.center_pos).unwrap();
+                    scope.spawn(async move {
+                        update_chunks(
+                            &mut UpdateChunksType {
+                                group: chunk_group,
+                                dirty_update_rect_send,
+                                dirty_render_rect_send,
+                                materials,
+                            },
+                            dt,
+                            rect,
+                        )
+                    });
+                }
+
+                /*OLD
                 //Get chopped chunks references
                 let mut mutable_references = HashMap::new();
                 get_mutable_references(
@@ -383,7 +411,7 @@ pub fn chunk_manager_update(
                             rect,
                         )
                     });
-                }
+                }*/
             });
         }
 
@@ -397,6 +425,8 @@ pub fn chunk_manager_update(
 }
 
 pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) {
+    puffin::profile_function!();
+
     let materials = chunks.materials;
 
     let x_iter = rand_range(dirty_rect.min.x as i32..dirty_rect.max.x as i32 + 1).into_iter();
