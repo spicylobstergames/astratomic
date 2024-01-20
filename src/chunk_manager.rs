@@ -297,9 +297,8 @@ pub fn chunk_manager_update(
                     (x_toff, y_toff),
                     dirty_rects,
                     manager_pos,
-                    dt,
                     (dirty_update_rect_send, dirty_render_rect_send),
-                    materials,
+                    (dt, materials),
                     scope,
                 );
             });

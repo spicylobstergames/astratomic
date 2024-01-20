@@ -58,12 +58,15 @@ fn main() {
             ParticlesPlugin,
             MaterialsPlugin,
             CameraPlugin,
-            //PuffinPlugin,
         ))
         .add_systems(Startup, setup);
 
     if args.contains(&"-d".to_string()) || args.contains(&"--debug".to_string()) {
         app.add_plugins(DebugPlugin);
+    }
+
+    if args.contains(&"-p".to_string()) || args.contains(&"--profiling".to_string()) {
+        app.add_plugins(PuffinPlugin);
     }
 
     app.run();

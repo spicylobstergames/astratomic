@@ -235,17 +235,18 @@ pub fn update_chunk_groups<'a>(
     (x_toff, y_toff): (i32, i32),
     dirty_rects: &'a HashMap<IVec2, URect>,
     manager_pos: IVec2,
-    dt: u8,
     senders: (
         &'a Sender<DeferredDirtyRectUpdate>,
         &'a Sender<DeferredDirtyRectUpdate>,
     ),
-    materials: &'a Materials,
+    update: (u8, &'a Materials),
+
     scope: &Scope<'a, '_, ()>,
 ) {
     puffin::profile_function!();
 
     let (dirty_update_rect_send, dirty_render_rect_send) = senders;
+    let (dt, materials) = update;
 
     let mut chunk_groups = vec![];
     let mut indices = HashMap::new();
