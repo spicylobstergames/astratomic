@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use async_channel::Sender;
 use itertools::Itertools;
 
 pub type ChunkCenter<'a> = Option<&'a mut [Atom; CHUNK_LEN]>;
@@ -228,13 +229,23 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
     IVec2::new(global_x, global_y)
 }
 
-pub fn get_chunk_groups<'a>(
+//This function gets the chunk groups and spawns a scope to update them
+pub fn update_chunk_groups<'a>(
     chunks: &'a mut HashMap<IVec2, Chunk>,
     (x_toff, y_toff): (i32, i32),
-    dirty_rects: &HashMap<IVec2, URect>,
+    dirty_rects: &'a HashMap<IVec2, URect>,
     manager_pos: IVec2,
-) -> Vec<ChunkGroup<'a>> {
+    dt: u8,
+    senders: (
+        &'a Sender<DeferredDirtyRectUpdate>,
+        &'a Sender<DeferredDirtyRectUpdate>,
+    ),
+    materials: &'a Materials,
+    scope: &Scope<'a, '_, ()>,
+) {
     puffin::profile_function!();
+
+    let (dirty_update_rect_send, dirty_render_rect_send) = senders;
 
     let mut chunk_groups = vec![];
     let mut indices = HashMap::new();
@@ -356,9 +367,26 @@ pub fn get_chunk_groups<'a>(
 
     for (chunk_pos, chunk) in chunks.iter_mut() {
         if let Some(i) = indices.get(chunk_pos) {
-            chunk_groups[*i].center = Some(&mut chunk.atoms);
+            let i = *i;
+            let chunk_group;
+            unsafe {
+                chunk_group = chunk_groups.as_mut_ptr().add(i).as_mut().unwrap();
+                chunk_group.center = Some(&mut chunk.atoms);
+            }
+            let rect = dirty_rects.get(chunk_pos).unwrap();
+
+            scope.spawn(async move {
+                update_chunks(
+                    &mut UpdateChunksType {
+                        group: chunk_group,
+                        dirty_update_rect_send,
+                        dirty_render_rect_send,
+                        materials,
+                    },
+                    dt,
+                    rect,
+                )
+            });
         }
     }
-
-    chunk_groups
 }

@@ -58,7 +58,7 @@ fn main() {
             ParticlesPlugin,
             MaterialsPlugin,
             CameraPlugin,
-            PuffinPlugin,
+            //PuffinPlugin,
         ))
         .add_systems(Startup, setup);
 

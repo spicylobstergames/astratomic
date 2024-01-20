@@ -292,28 +292,16 @@ pub fn chunk_manager_update(
             puffin::profile_scope!("Update step scope.");
 
             compute_pool.scope(|scope| {
-                let chunk_groups = get_chunk_groups(
+                update_chunk_groups(
                     &mut chunk_manager.chunks,
                     (x_toff, y_toff),
                     dirty_rects,
                     manager_pos,
+                    dt,
+                    (dirty_update_rect_send, dirty_render_rect_send),
+                    materials,
+                    scope,
                 );
-
-                for chunk_group in chunk_groups {
-                    let rect = dirty_rects.get(&chunk_group.center_pos).unwrap();
-                    scope.spawn(async move {
-                        update_chunks(
-                            &mut UpdateChunksType {
-                                group: chunk_group,
-                                dirty_update_rect_send,
-                                dirty_render_rect_send,
-                                materials,
-                            },
-                            dt,
-                            rect,
-                        )
-                    });
-                }
             });
         }
 
