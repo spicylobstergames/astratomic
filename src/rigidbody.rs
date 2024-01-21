@@ -67,7 +67,7 @@ pub fn fill_rigidbodies(
                 .is_solid()
             {
                 let angle = vec2(transform.rotation.z.cos(), transform.rotation.z.sin());
-                let mut pos = vec2(x as f32, y as f32).rotate(angle) + transform.translation.xy();
+                let pos = vec2(x as f32, y as f32).rotate(angle) + transform.translation.xy();
                 //pos.y *= -1.;
 
                 let chunk_pos = global_to_chunk(pos.as_ivec2());
@@ -94,8 +94,8 @@ pub fn unfill_rigidbodies(
 
     for (transform, rigidbody) in &rigidbodies {
         for (x, y) in (0..rigidbody.width).cartesian_product(0..rigidbody.height) {
-            let angle = vec2(-transform.rotation.z.cos(),- transform.rotation.z.sin());
-            let mut pos = vec2(x as f32, y as f32).rotate(angle) + transform.translation.xy();
+            let angle = vec2(-transform.rotation.z.cos(), -transform.rotation.z.sin());
+            let pos = vec2(x as f32, y as f32).rotate(angle) + transform.translation.xy();
             //pos.y *= -1.;
 
             let chunk_pos = global_to_chunk(pos.as_ivec2());

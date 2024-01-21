@@ -14,14 +14,13 @@ mod manager_api;
 mod materials;
 mod particles;
 mod player;
-mod rigidbody;
 mod puffin_plugin;
+mod rigidbody;
 mod prelude {
     pub use crate::{
         actors::*, animation::*, atom::*, camera::*, chunk::*, chunk_group::*, chunk_manager::*,
         consts::*, debug::*, geom_tools::*, manager_api::*, materials::*, particles::*, player::*,
-        rigidbody::*,
-        puffin_plugin::*,
+        puffin_plugin::*, rigidbody::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
