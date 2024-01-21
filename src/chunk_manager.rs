@@ -220,6 +220,8 @@ pub fn chunk_manager_update(
     mut dirty_rects_resource: ResMut<DirtyRects>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
+    puffin::profile_function!();
+
     chunk_manager.dt = chunk_manager.dt.wrapping_add(1);
     let dt = chunk_manager.dt;
 
@@ -233,14 +235,7 @@ pub fn chunk_manager_update(
     //Get materials
     let materials = &materials.0.get(materials.1 .0.clone()).unwrap();
 
-    let first_x = chunk_manager.pos.x;
-    let first_y = chunk_manager.pos.y;
-    let last_x = chunk_manager.pos.x + LOAD_WIDTH;
-    let last_y = chunk_manager.pos.y + LOAD_HEIGHT;
     let manager_pos = ivec2(chunk_manager.pos.x, chunk_manager.pos.y);
-
-    let row_range = first_x..last_x;
-    let column_range = first_y..last_y;
 
     let compute_pool = ComputeTaskPool::get();
 
@@ -294,96 +289,18 @@ pub fn chunk_manager_update(
             .into_iter()
             .cartesian_product(rand_range(0..2).into_iter())
         {
+            puffin::profile_scope!("Update step scope.");
+
             compute_pool.scope(|scope| {
-                //Get chopped chunks references
-                let mut mutable_references = HashMap::new();
-                get_mutable_references(
+                update_chunk_groups(
                     &mut chunk_manager.chunks,
-                    &mut mutable_references,
                     (x_toff, y_toff),
                     dirty_rects,
                     manager_pos,
+                    (dirty_update_rect_send, dirty_render_rect_send),
+                    (dt, materials),
+                    scope,
                 );
-
-                //Iterate through the center chunks
-                let y_iter = ((y_toff + first_y)..last_y).step_by(2);
-                let x_iter = ((x_toff + first_x)..last_x).step_by(2);
-                for (x, y) in x_iter.cartesian_product(y_iter) {
-                    let center_pos = ivec2(x, y);
-                    let Some(rect) = dirty_rects.get(&center_pos) else {
-                        continue;
-                    };
-                    let ChunkReference::Center(center) =
-                        mutable_references.remove(&center_pos).unwrap()
-                    else {
-                        unreachable!()
-                    };
-                    let mut chunk_group = ChunkGroup::new(center, center_pos);
-
-                    // Get the rest of the 3x3 chunks to add to the chunk group
-                    for (x_off, y_off) in (-1..=1).cartesian_product(-1..=1) {
-                        //If it's the center chunk, or out of bounds continue
-                        if (x_off == 0 && y_off == 0)
-                            || !column_range.contains(&(y + y_off))
-                            || !row_range.contains(&(x + x_off))
-                        {
-                            continue;
-                        }
-
-                        let (group_idx, reference_idx) = match (x_off, y_off) {
-                            // Left Right
-                            (-1, 0) => (1, 1),
-                            (1, 0) => (2, 0),
-                            // Up Down
-                            (0, -1) => (0, 1),
-                            (0, 1) => (3, 0),
-                            // Corners
-                            (-1, -1) => (0, 3),
-                            (1, -1) => (1, 2),
-                            (-1, 1) => (2, 1),
-                            (1, 1) => (3, 0),
-
-                            _ => unreachable!(),
-                        };
-
-                        if x_off.abs() != y_off.abs() {
-                            // Side
-                            let side = if let Some(ChunkReference::Side(ref mut side)) =
-                                mutable_references.get_mut(&(center_pos + ivec2(x_off, y_off)))
-                            {
-                                side[reference_idx].take()
-                            } else {
-                                unreachable!()
-                            };
-
-                            chunk_group.sides[group_idx] = side;
-                        } else {
-                            // Corner
-                            let corner = if let Some(ChunkReference::Corner(ref mut corner)) =
-                                mutable_references.get_mut(&(center_pos + ivec2(x_off, y_off)))
-                            {
-                                corner[reference_idx].take()
-                            } else {
-                                unreachable!()
-                            };
-
-                            chunk_group.corners[group_idx] = corner;
-                        }
-                    }
-
-                    scope.spawn(async move {
-                        update_chunks(
-                            &mut UpdateChunksType {
-                                group: chunk_group,
-                                dirty_update_rect_send,
-                                dirty_render_rect_send,
-                                materials,
-                            },
-                            dt,
-                            rect,
-                        )
-                    });
-                }
             });
         }
 
@@ -397,6 +314,8 @@ pub fn chunk_manager_update(
 }
 
 pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) {
+    puffin::profile_function!();
+
     let materials = chunks.materials;
 
     let x_iter = rand_range(dirty_rect.min.x as i32..dirty_rect.max.x as i32 + 1).into_iter();

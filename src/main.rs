@@ -14,10 +14,12 @@ mod manager_api;
 mod materials;
 mod particles;
 mod player;
+mod puffin_plugin;
 mod prelude {
     pub use crate::{
         actors::*, animation::*, atom::*, camera::*, chunk::*, chunk_group::*, chunk_manager::*,
         consts::*, debug::*, geom_tools::*, manager_api::*, materials::*, particles::*, player::*,
+        puffin_plugin::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -61,6 +63,10 @@ fn main() {
 
     if args.contains(&"-d".to_string()) || args.contains(&"--debug".to_string()) {
         app.add_plugins(DebugPlugin);
+    }
+
+    if args.contains(&"-p".to_string()) || args.contains(&"--profiling".to_string()) {
+        app.add_plugins(PuffinPlugin);
     }
 
     app.run();
