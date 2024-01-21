@@ -364,6 +364,7 @@ pub fn update_chunk_groups<'a>(
         chunk_groups.push(chunk_group);
     }
 
+    //TODO This can maybe be done with a par_iter_mut()
     for (chunk_pos, chunk) in chunks.iter_mut() {
         if let Some(i) = indices.get(chunk_pos) {
             let chunk_group;
