@@ -271,10 +271,10 @@ pub fn update_chunk_groups<'a>(
             let off = ivec2(x_off, y_off);
             unsafe {
                 match (x_off, y_off) {
-                    (0, 0) => { /*CENTER*/ }
-
+                    // CENTER
+                    (0, 0) => {}
+                    // UP and DOWN
                     (0, -1) | (0, 1) => {
-                        // UP and DOWN
                         let Some(chunk) = chunks.get_mut(&(*chunk_pos + off)) else {
                             continue;
                         };
@@ -292,9 +292,8 @@ pub fn update_chunk_groups<'a>(
                         chunk_group.sides[if y_off == -1 { 0 } else { 3 }] =
                             Some(atoms.try_into().unwrap());
                     }
-
+                    //LEFT and RIGHT
                     (-1, 0) | (1, 0) => {
-                        //LEFT and RIGHT
                         let Some(chunk) = chunks.get_mut(&(*chunk_pos + off)) else {
                             continue;
                         };
@@ -319,9 +318,8 @@ pub fn update_chunk_groups<'a>(
                         chunk_group.sides[if x_off == -1 { 1 } else { 2 }] =
                             Some(atoms.try_into().unwrap());
                     }
-
+                    //CORNERS
                     (-1, -1) | (1, -1) | (-1, 1) | (1, 1) => {
-                        //CORNERS
                         let Some(chunk) = chunks.get_mut(&(*chunk_pos + off)) else {
                             continue;
                         };
@@ -368,12 +366,11 @@ pub fn update_chunk_groups<'a>(
 
     for (chunk_pos, chunk) in chunks.iter_mut() {
         if let Some(i) = indices.get(chunk_pos) {
-            let i = *i;
             let chunk_group;
             unsafe {
-                chunk_group = chunk_groups.as_mut_ptr().add(i).as_mut().unwrap();
-                chunk_group.center = Some(&mut chunk.atoms);
+                chunk_group = chunk_groups.as_mut_ptr().add(*i).as_mut().unwrap();
             }
+            chunk_group.center = Some(&mut chunk.atoms);
             let rect = dirty_rects.get(chunk_pos).unwrap();
 
             scope.spawn(async move {
