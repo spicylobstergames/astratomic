@@ -106,7 +106,7 @@ pub fn player_setup(
             },
             animation_indices,
             AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
-            bevy_rapier2d::prelude::RigidBody::Dynamic,
+            bevy_rapier2d::prelude::RigidBody::Fixed,
             bevy_rapier2d::prelude::LockedAxes::ROTATION_LOCKED,
             bevy_rapier2d::prelude::Collider::cuboid(
                 player_actor.width as f32 / 2.,
