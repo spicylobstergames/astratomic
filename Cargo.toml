@@ -26,6 +26,10 @@ contour = "0.12"
 bevy_rapier2d = { version = "0.23", features = [ "simd-stable", "debug-render-2d", "parallel" ] }
 geo = "0.27"
 
+egui                = "0.24"
+puffin              = "0.18"
+puffin_egui         = "0.24"
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy_dylib = "0.12.1"
 

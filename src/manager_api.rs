@@ -8,7 +8,7 @@ use async_channel::Sender;
 use crate::prelude::*;
 
 pub struct UpdateChunksType<'a> {
-    pub group: ChunkGroup<'a>,
+    pub group: &'a mut ChunkGroup<'a>,
     pub dirty_update_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
     pub dirty_render_rect_send: &'a Sender<DeferredDirtyRectUpdate>,
     pub materials: &'a Materials,

@@ -1,10 +1,13 @@
 use crate::prelude::*;
+use async_channel::Sender;
+use itertools::Itertools;
 
-pub type ChunkCorners<'a> = [Option<[&'a mut Atom; CHUNK_LEN / 4]>; 4];
-pub type ChunkSides<'a> = [Option<[&'a mut Atom; CHUNK_LEN / 2]>; 4];
+pub type ChunkCenter<'a> = Option<&'a mut [Atom; CHUNK_LEN]>;
+pub type ChunkCorners<'a> = [Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>; 4];
+pub type ChunkSides<'a> = [Option<[&'a mut Atom; HALF_CHUNK_LEN]>; 4];
 
 pub struct ChunkGroup<'a> {
-    pub center: &'a mut [Atom; CHUNK_LEN],
+    pub center: ChunkCenter<'a>,
     pub corners: ChunkCorners<'a>,
     pub sides: ChunkSides<'a>,
     /// Position of the center chunk.
@@ -12,15 +15,6 @@ pub struct ChunkGroup<'a> {
 }
 
 impl<'a> ChunkGroup<'a> {
-    pub fn new(center: &'a mut [Atom; CHUNK_LEN], center_pos: IVec2) -> Self {
-        Self {
-            center,
-            corners: [None, None, None, None],
-            sides: [None, None, None, None],
-            center_pos,
-        }
-    }
-
     pub fn group_to_chunk(center_pos: IVec2, group_idx: i32) -> IVec2 {
         let x_diff = group_idx % 3 - 1;
         let y_diff = group_idx / 3 - 1;
@@ -47,7 +41,7 @@ impl<'a> ChunkGroup<'a> {
         let mut pos = idx.0;
         match idx.1 {
             // Center
-            4 => Some(&self.center[idx.0.d1()]),
+            4 => Some(&self.center.as_ref().unwrap()[idx.0.d1()]),
             // Corners
             0 | 2 | 6 | 8 => {
                 // Offset position
@@ -100,7 +94,7 @@ impl<'a> ChunkGroup<'a> {
         let mut pos = idx.0;
         match idx.1 {
             // Center
-            4 => Some(&mut self.center[idx.0.d1()]),
+            4 => Some(&mut self.center.as_mut().unwrap()[idx.0.d1()]),
             // Corners
             0 | 2 | 6 | 8 => {
                 // Offset position
@@ -235,123 +229,163 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
     IVec2::new(global_x, global_y)
 }
 
-//Chunk References
-
-pub enum ChunkReference<'a> {
-    //Not chopped
-    Center(&'a mut [Atom; CHUNK_LEN]),
-    //Chopped in two
-    Side([Option<[&'a mut Atom; HALF_CHUNK_LEN]>; 2]),
-    //Chopped in four
-    Corner([Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>; 4]),
-}
-
-//This splits up our chunks for the update step, while also mutably borrowing them, making a `ChunkReference`
-//Some chunks are not chopped others are chopped up/down, left/right, and also in four corners.
-//We do this because each center chunk needs half of the adjacent chunks
-//So it needs up/down/left/right halves, and also four corners
-//TODO Decrease individual atoms iterations to get a &mut Atom;
-pub fn get_mutable_references<'a>(
+//This function gets the chunk groups and spawns a scope to update them
+pub fn update_chunk_groups<'a>(
     chunks: &'a mut HashMap<IVec2, Chunk>,
-    mutable_references: &mut HashMap<IVec2, ChunkReference<'a>>,
     (x_toff, y_toff): (i32, i32),
-    dirty_rects: &HashMap<IVec2, URect>,
+    dirty_rects: &'a HashMap<IVec2, URect>,
     manager_pos: IVec2,
+    senders: (
+        &'a Sender<DeferredDirtyRectUpdate>,
+        &'a Sender<DeferredDirtyRectUpdate>,
+    ),
+    update: (u8, &'a Materials),
+
+    scope: &Scope<'a, '_, ()>,
 ) {
-    chunks
-        .iter_mut()
-        .filter(|(chunk_pos, _)| {
-            let same_x = (chunk_pos.x + x_toff + manager_pos.x.abs() % 2) % 2 == 0;
-            let same_y = (chunk_pos.y + y_toff + manager_pos.y.abs() % 2) % 2 == 0;
-            let step_as_center = same_x && same_y;
-            if step_as_center && dirty_rects.contains_key(*chunk_pos) {
-                return true;
-            } else if !step_as_center {
-                let to_check = match (same_x, same_y) {
-                    (false, false) => vec![ivec2(-1, -1), ivec2(-1, 1), ivec2(1, -1), ivec2(1, 1)],
-                    (true, false) => vec![ivec2(0, -1), ivec2(0, 1)],
-                    (false, true) => vec![ivec2(-1, 0), ivec2(1, 0)],
-                    _ => unreachable!(),
-                };
-                for vec in to_check {
-                    if dirty_rects.contains_key(&(**chunk_pos + vec)) {
-                        return true;
+    puffin::profile_function!();
+
+    let (dirty_update_rect_send, dirty_render_rect_send) = senders;
+    let (dt, materials) = update;
+
+    let mut chunk_groups = vec![];
+    let mut indices = HashMap::new();
+
+    for chunk_pos in dirty_rects.keys() {
+        let same_x = (chunk_pos.x + x_toff + manager_pos.x.abs() % 2) % 2 == 0;
+        let same_y = (chunk_pos.y + y_toff + manager_pos.y.abs() % 2) % 2 == 0;
+
+        if !same_x || !same_y || !chunks.contains_key(chunk_pos) {
+            continue;
+        }
+
+        let mut chunk_group = ChunkGroup {
+            center: None,
+            sides: [None, None, None, None],
+            corners: [None, None, None, None],
+            center_pos: *chunk_pos,
+        };
+        indices.insert(chunk_pos, chunk_groups.len());
+
+        for (x_off, y_off) in (-1..=1).cartesian_product(-1..=1) {
+            let off = ivec2(x_off, y_off);
+            unsafe {
+                match (x_off, y_off) {
+                    // CENTER
+                    (0, 0) => {}
+                    // UP and DOWN
+                    (0, -1) | (0, 1) => {
+                        let Some(chunk) = chunks.get_mut(&(*chunk_pos + off)) else {
+                            continue;
+                        };
+
+                        let mut start_ptr = chunk.atoms.as_mut_ptr();
+                        if y_off == -1 {
+                            start_ptr = start_ptr.add(HALF_CHUNK_LEN);
+                        }
+
+                        let mut atoms = vec![];
+                        for i in 0..HALF_CHUNK_LEN {
+                            atoms.push(start_ptr.add(i).as_mut().unwrap());
+                        }
+
+                        chunk_group.sides[if y_off == -1 { 0 } else { 3 }] =
+                            Some(atoms.try_into().unwrap());
                     }
+                    //LEFT and RIGHT
+                    (-1, 0) | (1, 0) => {
+                        let Some(chunk) = chunks.get_mut(&(*chunk_pos + off)) else {
+                            continue;
+                        };
+
+                        let start_ptr = chunk.atoms.as_mut_ptr();
+
+                        let mut atoms = vec![];
+                        let mut add_off = match x_off {
+                            -1 => HALF_CHUNK_LENGHT,
+                            1 => 0,
+                            _ => unreachable!(),
+                        };
+
+                        for i in 0..HALF_CHUNK_LEN {
+                            if i % HALF_CHUNK_LENGHT == 0 && i != 0 {
+                                add_off += HALF_CHUNK_LENGHT;
+                            }
+
+                            atoms.push(start_ptr.add(i + add_off).as_mut().unwrap());
+                        }
+
+                        chunk_group.sides[if x_off == -1 { 1 } else { 2 }] =
+                            Some(atoms.try_into().unwrap());
+                    }
+                    //CORNERS
+                    (-1, -1) | (1, -1) | (-1, 1) | (1, 1) => {
+                        let Some(chunk) = chunks.get_mut(&(*chunk_pos + off)) else {
+                            continue;
+                        };
+
+                        let start_ptr = chunk.atoms.as_mut_ptr();
+
+                        let mut atoms = vec![];
+                        let mut add_off = match (x_off, y_off) {
+                            (1, 1) => 0,
+                            (-1, 1) => HALF_CHUNK_LENGHT,
+                            (1, -1) => HALF_CHUNK_LEN,
+                            (-1, -1) => HALF_CHUNK_LEN + HALF_CHUNK_LENGHT,
+
+                            _ => unreachable!(),
+                        };
+
+                        for i in 0..QUARTER_CHUNK_LEN {
+                            if i % HALF_CHUNK_LENGHT == 0 && i != 0 {
+                                add_off += HALF_CHUNK_LENGHT;
+                            }
+
+                            atoms.push(start_ptr.add(i + add_off).as_mut().unwrap());
+                        }
+
+                        let corner_idx = match (x_off, y_off) {
+                            (1, 1) => 3,
+                            (-1, 1) => 2,
+                            (1, -1) => 1,
+                            (-1, -1) => 0,
+
+                            _ => unreachable!(),
+                        };
+
+                        chunk_group.corners[corner_idx] = Some(atoms.try_into().unwrap());
+                    }
+
+                    _ => unreachable!(),
                 }
             }
+        }
 
-            false
-        })
-        .for_each(|(chunk_pos, chunk)| {
-            let same_x = (chunk_pos.x + x_toff + manager_pos.x.abs() % 2) % 2 == 0;
-            let same_y = (chunk_pos.y + y_toff + manager_pos.y.abs() % 2) % 2 == 0;
+        chunk_groups.push(chunk_group);
+    }
 
-            match (same_x, same_y) {
-                (true, true) => {
-                    mutable_references.insert(*chunk_pos, ChunkReference::Center(&mut chunk.atoms));
-                }
-                (true, false) => {
-                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
-
-                    mutable_references.insert(
-                        *chunk_pos,
-                        ChunkReference::Side([
-                            Some(up.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
-                            Some(down.iter_mut().collect::<Vec<_>>().try_into().unwrap()),
-                        ]),
-                    );
-                }
-                (false, true) => {
-                    let (left, right) = split_left_right(&mut chunk.atoms);
-
-                    mutable_references
-                        .insert(*chunk_pos, ChunkReference::Side([Some(left), Some(right)]));
-                }
-
-                (false, false) => {
-                    let (up, down) = chunk.atoms.split_at_mut(CHUNK_LEN / 2);
-
-                    let (up_left, up_right) = updown_to_leftright(up);
-                    let (down_left, down_right) = updown_to_leftright(down);
-
-                    mutable_references.insert(
-                        *chunk_pos,
-                        ChunkReference::Corner([
-                            Some(up_left),
-                            Some(up_right),
-                            Some(down_left),
-                            Some(down_right),
-                        ]),
-                    );
-                }
+    //TODO This can maybe be done with a par_iter_mut()
+    for (chunk_pos, chunk) in chunks.iter_mut() {
+        if let Some(i) = indices.get(chunk_pos) {
+            let chunk_group;
+            unsafe {
+                chunk_group = chunk_groups.as_mut_ptr().add(*i).as_mut().unwrap();
             }
-        });
-}
+            chunk_group.center = Some(&mut chunk.atoms);
+            let rect = dirty_rects.get(chunk_pos).unwrap();
 
-pub fn split_left_right(
-    array: &mut [Atom],
-) -> ([&mut Atom; CHUNK_LEN / 2], [&mut Atom; CHUNK_LEN / 2]) {
-    let (left, right): (Vec<_>, Vec<_>) = array
-        .chunks_mut(CHUNK_LENGHT)
-        .flat_map(|chunk| {
-            let (left, right) = chunk.split_at_mut(HALF_CHUNK_LENGHT);
-            left.iter_mut().zip(right.iter_mut()).collect::<Vec<_>>()
-        })
-        .unzip();
-
-    (left.try_into().unwrap(), right.try_into().unwrap())
-}
-
-pub fn updown_to_leftright(
-    array: &mut [Atom],
-) -> ([&mut Atom; CHUNK_LEN / 4], [&mut Atom; CHUNK_LEN / 4]) {
-    let (left, right): (Vec<_>, Vec<_>) = array
-        .chunks_mut(CHUNK_LENGHT)
-        .flat_map(|chunk| {
-            let (left, right) = chunk.split_at_mut(HALF_CHUNK_LENGHT);
-            left.iter_mut().zip(right.iter_mut()).collect::<Vec<_>>()
-        })
-        .unzip();
-
-    (left.try_into().unwrap(), right.try_into().unwrap())
+            scope.spawn(async move {
+                update_chunks(
+                    &mut UpdateChunksType {
+                        group: chunk_group,
+                        dirty_update_rect_send,
+                        dirty_render_rect_send,
+                        materials,
+                    },
+                    dt,
+                    rect,
+                )
+            });
+        }
+    }
 }
