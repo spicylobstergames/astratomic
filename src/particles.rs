@@ -240,7 +240,8 @@ impl Plugin for ParticlesPlugin {
             (
                 hydrate_particles.after(update_player),
                 update_particles.before(chunk_manager_update),
-            ),
+            )
+                .run_if(in_state(GameState::Game)),
         );
     }
 }

@@ -251,6 +251,7 @@ dependencies = [
  "bevy-async-task",
  "bevy-inspector-egui",
  "bevy_dylib",
+ "bevy_egui",
  "bincode",
  "egui",
  "fastrand 2.0.1",

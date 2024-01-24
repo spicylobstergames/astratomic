@@ -1,3 +1,5 @@
+use bevy::prelude::Color;
+
 // Chunk Length consts
 // Chunk length MUST be divisible by 4
 pub const CHUNK_LENGHT: usize = 64;
@@ -49,3 +51,8 @@ pub const _CAMERA_SPEED: f32 = 10.;
 pub const PLAYER_LAYER: f32 = 1.;
 pub const PARTICLE_LAYER: f32 = 10.;
 pub const AUTOMATA_LAYER: f32 = 100.;
+
+//Buttons
+pub const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
+pub const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
+pub const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
