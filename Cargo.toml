@@ -27,6 +27,7 @@ bevy_rapier2d = { version = "0.23", features = [ "simd-stable", "debug-render-2d
 geo = "0.27"
 
 egui                = "0.24"
+bevy_egui           = "0.24"
 puffin              = "0.18"
 puffin_egui         = "0.24"
 

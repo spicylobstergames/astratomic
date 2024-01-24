@@ -624,10 +624,16 @@ fn clear_render_rect(mut dirty_rects: ResMut<DirtyRects>) {
 pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, manager_setup)
-            .add_systems(PreUpdate, clear_render_rect)
-            .add_systems(FixedUpdate, chunk_manager_update)
-            .add_systems(Update, (update_manager_pos, add_colliders))
+        app.add_systems(OnEnter(GameState::Game), manager_setup)
+            .add_systems(
+                FixedUpdate,
+                chunk_manager_update.run_if(in_state(GameState::Game)),
+            )
+            .add_systems(Update, update_manager_pos.run_if(in_state(GameState::Game)))
+            .add_systems(
+                PreUpdate,
+                clear_render_rect.run_if(in_state(GameState::Game)),
+            )
             .init_resource::<ChunkManager>()
             .init_resource::<DirtyRects>();
 

@@ -164,8 +164,11 @@ pub struct Zoom(pub f32);
 pub struct CameraPlugin;
 impl Plugin for CameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, (update_camera, on_resize_system))
-            .insert_resource(Zoom(0.23))
-            .insert_resource(TrackingCamera::default());
+        app.add_systems(
+            Update,
+            (update_camera, on_resize_system).run_if(in_state(GameState::Game)),
+        )
+        .insert_resource(Zoom(0.23))
+        .insert_resource(TrackingCamera::default());
     }
 }

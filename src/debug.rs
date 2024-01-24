@@ -177,9 +177,10 @@ impl Plugin for DebugPlugin {
                 render_actors.after(update_actors),
                 prev_mpos.after(brush),
                 //_camera
-            ),
+            )
+                .run_if(in_state(GameState::Game)),
         )
-        .add_systems(PreUpdate, delete_image)
+        .add_systems(PreUpdate, delete_image.run_if(in_state(GameState::Game)))
         .add_plugins(WorldInspectorPlugin::new())
         //Frame on console
         .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
