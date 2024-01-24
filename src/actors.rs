@@ -249,7 +249,8 @@ impl Plugin for ActorsPlugin {
                 fill_actors.before(chunk_manager_update),
                 unfill_actors.after(chunk_manager_update),
                 update_actors.after(unfill_actors),
-            ),
+            )
+                .run_if(in_state(GameState::Game)),
         );
     }
 }

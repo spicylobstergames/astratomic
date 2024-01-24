@@ -418,11 +418,12 @@ impl Plugin for PlayerPlugin {
                 update_player_sprite.after(update_actors),
                 tool_system.before(chunk_manager_update),
                 clear_input.after(update_player).after(tool_system),
-            ),
+            )
+                .run_if(in_state(GameState::Game)),
         )
-        .add_systems(PreUpdate, get_input)
+        .add_systems(PreUpdate, get_input.run_if(in_state(GameState::Game)))
         .init_resource::<SavingTask>()
         .init_resource::<Inputs>()
-        .add_systems(PostStartup, player_setup.after(manager_setup));
+        .add_systems(OnEnter(GameState::Game), player_setup.after(manager_setup));
     }
 }

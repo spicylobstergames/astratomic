@@ -1,6 +1,4 @@
 use crate::prelude::*;
-use bevy::window::PrimaryWindow;
-use bevy_inspector_egui::bevy_egui::EguiContext;
 
 fn setup() {
     puffin::set_scopes_on(true);
