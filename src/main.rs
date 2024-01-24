@@ -91,9 +91,20 @@ fn setup(mut commands: Commands, mut time: ResMut<Time<Fixed>>) {
     commands.spawn(camera);
 }
 
-#[derive(Clone, Copy, Default, Eq, PartialEq, Debug, Hash, States)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, States)]
 pub enum GameState {
-    #[default]
     Menu,
     Game,
+}
+
+impl Default for GameState {
+    fn default() -> Self {
+        let args: Vec<_> = env::args().collect();
+
+        if args.contains(&"-g".to_string()) || args.contains(&"--game".to_string()) {
+            GameState::Game
+        } else {
+            GameState::Menu
+        }
+    }
 }
