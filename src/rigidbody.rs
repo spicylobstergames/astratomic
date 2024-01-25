@@ -119,7 +119,7 @@ pub fn fill_rigidbodies(
             let pos = vec2(x as f32 - width as f32 / 2., y as f32 - height as f32 / 2.) + off;
             let chunk_pos = global_to_chunk(pos.as_ivec2());
 
-            let rotated_atom = rotated[y as usize * width as usize + x as usize];
+            let rotated_atom = rotated[y * width + x];
             if materials[rotated_atom.id].is_solid() {
                 if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
                     if materials[atom.id].is_void() {
