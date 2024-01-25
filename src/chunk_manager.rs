@@ -290,16 +290,6 @@ pub fn chunk_manager_update(
 
         // Spawn a task on the deferred scope for handling deferred dirty render rects.
         deferred_scope.spawn(async move {
-            //Update all rendering, used when debugging
-            /*
-            for x in 0..CHUNKS_WIDTH {
-                for y in 0..CHUNKS_HEIGHT {
-                    render_dirty_rects
-                        .insert(IVec2::new(x as i32, y as i32), URect::new(0, 0, 63, 63));
-                }
-            }
-            */
-
             // Loop through deferred tasks
             while let Ok(update) = dirty_render_rects_recv.recv().await {
                 update_dirty_rects(render_dirty_rects, update.chunk_pos);
@@ -541,16 +531,17 @@ pub fn update_manager_pos(
 }
 
 #[derive(Resource, Default, Deref, DerefMut)]
-struct ExtractedTextureUpdates(Vec<ExtractedTextureUpdate>);
+pub struct ExtractedTextureUpdates(pub Vec<ExtractedTextureUpdate>);
 
-struct ExtractedTextureUpdate {
-    id: AssetId<Image>,
+#[derive(Clone)]
+pub struct ExtractedTextureUpdate {
+    pub id: AssetId<Image>,
     // TODO: determine a good size for the data smallvec array.
     // The size of the array determines how many bytes we can store before it overflows and has
     // to make a heap allocation. 256 is enough to store an 8x8 pixel dirty rect.
-    data: SmallVec<[u8; 256]>,
-    origin: Origin3d,
-    size: Extent3d,
+    pub data: SmallVec<[u8; 256]>,
+    pub origin: Origin3d,
+    pub size: Extent3d,
 }
 
 fn extract_chunk_texture_updates(
@@ -629,7 +620,10 @@ impl Plugin for ChunkManagerPlugin {
                 FixedUpdate,
                 chunk_manager_update.run_if(in_state(GameState::Game)),
             )
-            .add_systems(Update, update_manager_pos.run_if(in_state(GameState::Game)))
+            .add_systems(
+                Update,
+                (update_manager_pos, add_colliders).run_if(in_state(GameState::Game)),
+            )
             .add_systems(
                 PreUpdate,
                 clear_render_rect.run_if(in_state(GameState::Game)),

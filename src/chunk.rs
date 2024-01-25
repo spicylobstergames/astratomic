@@ -93,6 +93,7 @@ impl Chunk {
             &self.get_values(materials),
             CHUNK_LENGHT as u32,
             CHUNK_LENGHT as u32,
+            (0., 0.),
         )
     }
 

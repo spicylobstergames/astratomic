@@ -172,9 +172,9 @@ impl Plugin for DebugPlugin {
         app.add_systems(
             Update,
             (
-                render_dirty_rects.after(update_actors),
+                //render_dirty_rects.after(update_actors),
                 brush.after(chunk_manager_update),
-                render_actors.after(update_actors),
+                //render_actors.after(update_actors),
                 prev_mpos.after(brush),
                 //_camera
             )

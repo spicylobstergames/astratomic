@@ -1,12 +1,25 @@
 use crate::prelude::*;
+use bevy::render::render_resource::*;
+use bevy::render::*;
 use geo::{Simplify, TriangulateEarcut};
 use itertools::Itertools;
+use smallvec::{SmallVec, ToSmallVec};
 
 #[derive(Component)]
 pub struct Rigidbody {
     pub atoms: Vec<Atom>,
     pub width: u8,
     pub height: u8,
+    pub filled: Vec<ChunkPos>,
+    pub texture: Handle<Image>,
+    pub texture_ent: Entity,
+    pub text_update: Option<ExtractedTextureUpdate>,
+}
+
+impl Rigidbody {
+    fn texture_lenght(&self) -> u32 {
+        (self.width as u32).max(self.height as u32) * 2
+    }
 }
 
 #[derive(Component, Default)]
@@ -23,32 +36,55 @@ pub fn load_images(mut commands: Commands, server: Res<AssetServer>) {
 
 pub fn add_rigidbodies(
     mut commands: Commands,
-    images: Res<Assets<Image>>,
+    mut images: ResMut<Assets<Image>>,
     handles: Query<(Entity, &RigidbodyHandle), Without<Hydrated>>,
 ) {
     for (ent, handle) in &handles {
-        let image = images.get(handle.0.clone()).unwrap();
+        let image = images.get(handle.0.clone()).unwrap().clone();
 
-        let collider = get_collider(&image_values(image), image.width(), image.height()).unwrap();
+        let lenght = image.width().max(image.height()) * 2;
+        let new_image = Image::new(
+            Extent3d {
+                height: lenght,
+                width: lenght,
+                ..Default::default()
+            },
+            TextureDimension::D2,
+            vec![0; (lenght as usize).pow(2) * 4],
+            TextureFormat::Rgba8UnormSrgb,
+        );
+        let texture = images.add(new_image);
+
+        let texture_ent = commands
+            .spawn(SpriteBundle {
+                texture: texture.clone(),
+                ..Default::default()
+            })
+            .id();
+
         let rigidbody = Rigidbody {
-            atoms: image_atoms(image),
+            atoms: image_atoms(&image),
             height: image.height() as u8,
             width: image.width() as u8,
+            filled: vec![],
+            texture,
+            text_update: None,
+            texture_ent,
         };
+
+        let collider = get_collider(
+            &image_values(&image),
+            image.width(),
+            image.height(),
+            (rigidbody.width as f64 / -2., rigidbody.height as f64 / -2.),
+        )
+        .unwrap();
 
         commands
             .spawn(collider)
             .insert(rigidbody)
-            .insert(SpriteBundle {
-                texture: handle.0.clone(),
-                sprite: Sprite {
-                    anchor: bevy::sprite::Anchor::TopLeft,
-                    ..Default::default()
-                },
-                transform: Transform::from_xyz(0., 64., 0.),
-                ..Default::default()
-            })
-            .insert(bevy_rapier2d::prelude::RigidBody::Dynamic);
+            .insert(bevy_rapier2d::prelude::RigidBody::Dynamic)
+            .insert(TransformBundle::default());
 
         commands.entity(ent).insert(Hydrated);
     }
@@ -56,55 +92,116 @@ pub fn add_rigidbodies(
 
 pub fn fill_rigidbodies(
     mut chunk_manager: ResMut<ChunkManager>,
-    rigidbodies: Query<(&Transform, &Rigidbody)>,
+    mut rigidbodies: Query<(&Transform, &mut Rigidbody)>,
+    mut transforms: Query<&mut Transform, Without<Rigidbody>>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
-    for (transform, rigidbody) in &rigidbodies {
-        for (x, y) in (0..rigidbody.width).cartesian_product(0..rigidbody.height) {
-            if materials[rigidbody.atoms[y as usize * rigidbody.width as usize + x as usize].id]
-                .is_solid()
-            {
-                let angle = vec2(transform.rotation.z.cos(), transform.rotation.z.sin());
-                let pos = vec2(x as f32, y as f32).rotate(angle) + transform.translation.xy();
-                //pos.y *= -1.;
+    for (transform, mut rigidbody) in &mut rigidbodies {
+        let mut rotation = -(transform.rotation.to_euler(EulerRot::XYZ).2 as f64).to_degrees();
+        if rotation < 0. {
+            rotation += 360.;
+        }
 
-                let chunk_pos = global_to_chunk(pos.as_ivec2());
+        let (width, height, rotated) = rotsprite::rotsprite(
+            rigidbody.atoms.as_slice(),
+            &Atom::default(),
+            rigidbody.width as usize,
+            rotation,
+        )
+        .unwrap();
+        let mut data = SmallVec::new();
 
+        for (y, x) in (0..height).cartesian_product(0..width) {
+            let mut off = transform.translation.xy();
+            off.y *= -1.;
+            let pos = vec2(x as f32 - width as f32 / 2., y as f32 - height as f32 / 2.) + off;
+            let chunk_pos = global_to_chunk(pos.as_ivec2());
+
+            let rotated_atom = rotated[y as usize * width as usize + x as usize];
+            if materials[rotated_atom.id].is_solid() {
                 if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
                     if materials[atom.id].is_void() {
-                        let mut new_atom = Atom::object();
-                        new_atom.color = [255, 255, 255, 255];
-
-                        *atom = new_atom;
+                        *atom = Atom::object();
+                        rigidbody.filled.push(chunk_pos);
                     }
+                }
+
+                data.extend_from_slice(&rotated_atom.color);
+            } else {
+                data.extend_from_slice(&[0, 0, 0, 0]);
+            }
+
+            if y == 0 && x == 0 {
+                let chunk_pos = global_to_chunk(off.as_ivec2());
+                let global = chunk_pos.to_global();
+                let mut transform = transforms.get_mut(rigidbody.texture_ent).unwrap();
+
+                transform.translation.x = global.x as f32;
+                transform.translation.y = -global.y as f32;
+            }
+        }
+
+        let origin = (vec2(
+            rigidbody.texture_lenght() as f32,
+            rigidbody.texture_lenght() as f32,
+        ) / 2.
+            - vec2(width as f32, height as f32) / 2.)
+            .as_uvec2();
+
+        let text_update = ExtractedTextureUpdate {
+            id: rigidbody.texture.id(),
+            data,
+            origin: Origin3d {
+                x: origin.x,
+                y: origin.y,
+                z: 0,
+            },
+            size: Extent3d {
+                width: width as u32,
+                height: height as u32,
+                depth_or_array_layers: 1,
+            },
+        };
+
+        rigidbody.text_update = Some(text_update);
+    }
+}
+
+pub fn unfill_rigidbodies(
+    mut chunk_manager: ResMut<ChunkManager>,
+    mut rigidbodies: Query<&mut Rigidbody>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+) {
+    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+
+    for mut rigidbody in &mut rigidbodies {
+        while let Some(chunk_pos) = rigidbody.filled.pop() {
+            if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
+                if materials[atom.id].is_object() {
+                    *atom = Atom {
+                        ..Default::default()
+                    };
                 }
             }
         }
     }
 }
 
-pub fn unfill_rigidbodies(
-    mut chunk_manager: ResMut<ChunkManager>,
-    rigidbodies: Query<(&Transform, &Rigidbody)>,
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+pub fn extract_images(
+    rigidibodies: Extract<Query<&Rigidbody>>,
+    mut extracted_updates: ResMut<ExtractedTextureUpdates>,
 ) {
-    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
-
-    for (transform, rigidbody) in &rigidbodies {
-        for (x, y) in (0..rigidbody.width).cartesian_product(0..rigidbody.height) {
-            let angle = vec2(-transform.rotation.z.cos(), -transform.rotation.z.sin());
-            let pos = vec2(x as f32, y as f32).rotate(angle) + transform.translation.xy();
-            //pos.y *= -1.;
-
-            let chunk_pos = global_to_chunk(pos.as_ivec2());
-
-            if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                if materials[atom.id].is_object() {
-                    *atom = Atom::default();
-                }
-            }
+    for rigibody in &rigidibodies {
+        if let Some(text_update) = &rigibody.text_update {
+            extracted_updates.push(ExtractedTextureUpdate {
+                data: vec![0; (rigibody.texture_lenght().pow(2) * 4) as usize].to_smallvec(),
+                id: text_update.id,
+                origin: Origin3d::ZERO,
+                size: text_update.size,
+            });
+            extracted_updates.push(text_update.clone());
         }
     }
 }
@@ -132,19 +229,22 @@ pub fn image_atoms(image: &Image) -> Vec<Atom> {
                 ..Default::default()
             });
         } else {
-            atoms.push(Atom {
-                id: 0,
-                color: pixel.try_into().unwrap(),
-                ..Default::default()
-            })
+            atoms.push(Atom::default())
         }
     }
 
     atoms
 }
 
-pub fn get_collider(values: &[f64], width: u32, height: u32) -> Option<Collider> {
-    let c = ContourBuilder::new(width, height, false);
+pub fn get_collider(
+    values: &[f64],
+    width: u32,
+    height: u32,
+    origin: (f64, f64),
+) -> Option<Collider> {
+    let c = ContourBuilder::new(width, height, false)
+        .x_origin(origin.0)
+        .y_origin(origin.1);
 
     let res = c.contours(values, &[0.5]).unwrap();
     let mut colliders = vec![];
@@ -174,13 +274,18 @@ pub struct RigidbodyPlugin;
 impl Plugin for RigidbodyPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(Startup, load_images)
-            .add_systems(Update, add_rigidbodies)
+            .add_systems(Update, add_rigidbodies.run_if(in_state(GameState::Game)))
             .add_systems(
                 FixedUpdate,
                 (
                     fill_rigidbodies.before(chunk_manager_update),
                     unfill_rigidbodies.after(chunk_manager_update),
-                ),
+                )
+                    .run_if(in_state(GameState::Game)),
             );
+
+        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+            render_app.add_systems(ExtractSchedule, extract_images);
+        }
     }
 }
