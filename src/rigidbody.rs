@@ -58,6 +58,10 @@ pub fn add_rigidbodies(
         let texture_ent = commands
             .spawn(SpriteBundle {
                 texture: texture.clone(),
+                sprite: Sprite {
+                    anchor: bevy::sprite::Anchor::TopLeft,
+                    ..Default::default()
+                },
                 ..Default::default()
             })
             .id();
@@ -99,6 +103,8 @@ pub fn fill_rigidbodies(
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     for (transform, mut rigidbody) in &mut rigidbodies {
+        let mut text_transform = transforms.get_mut(rigidbody.texture_ent).unwrap();
+
         let mut rotation = -(transform.rotation.to_euler(EulerRot::XYZ).2 as f64).to_degrees();
         if rotation < 0. {
             rotation += 360.;
@@ -134,30 +140,18 @@ pub fn fill_rigidbodies(
             }
 
             if y == 0 && x == 0 {
-                let chunk_pos = global_to_chunk(off.as_ivec2());
+                let chunk_pos = global_to_chunk(pos.as_ivec2());
                 let global = chunk_pos.to_global();
-                let mut transform = transforms.get_mut(rigidbody.texture_ent).unwrap();
 
-                transform.translation.x = global.x as f32;
-                transform.translation.y = -global.y as f32;
+                text_transform.translation.x = global.x as f32;
+                text_transform.translation.y = -global.y as f32;
             }
         }
-
-        let origin = (vec2(
-            rigidbody.texture_lenght() as f32,
-            rigidbody.texture_lenght() as f32,
-        ) / 2.
-            - vec2(width as f32, height as f32) / 2.)
-            .as_uvec2();
 
         let text_update = ExtractedTextureUpdate {
             id: rigidbody.texture.id(),
             data,
-            origin: Origin3d {
-                x: origin.x,
-                y: origin.y,
-                z: 0,
-            },
+            origin: Origin3d { x: 0, y: 0, z: 0 },
             size: Extent3d {
                 width: width as u32,
                 height: height as u32,
