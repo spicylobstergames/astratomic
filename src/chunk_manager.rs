@@ -218,20 +218,78 @@ pub fn manager_setup(
 pub fn add_colliders(
     mut commands: Commands,
     chunk_manager: Res<ChunkManager>,
-    chunks: Query<(Entity, &ChunkComponent), Without<Collider>>,
+    chunks: Query<(Entity, &ChunkComponent)>,
+    rigidbodies: Query<(&Transform, &Rigidbody)>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
-    for (ent, pos) in &chunks {
-        if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
-            let collider = chunk.get_collider(materials);
+    let mut rects = vec![];
 
-            if let Some(collider) = collider {
-                commands
-                    .entity(ent)
-                    .insert(collider)
-                    .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
+    for (transform, rigidbody) in &rigidbodies {
+        let l = std::f32::consts::SQRT_2 * (rigidbody.width as f32).max(rigidbody.height as f32);
+
+        let angle = std::f32::consts::FRAC_PI_4 + std::f32::consts::PI;
+        let mut top_left = transform.translation.xy();
+        top_left.y *= -1.;
+        top_left += vec2(angle.cos(), angle.sin()) * l / 2.;
+
+        let angle = std::f32::consts::FRAC_PI_4;
+        let mut down_right = transform.translation.xy();
+        down_right.y *= -1.;
+        down_right += vec2(angle.cos(), angle.sin()) * l / 2.;
+
+        /*{
+            //Some debug visualization
+            let mut top_left = top_left;
+            top_left.y *= -1.;
+            gizmos.circle_2d(top_left, 10., Color::RED);
+
+            let mut down_right = down_right;
+            down_right.y *= -1.;
+            gizmos.circle_2d(down_right, 10., Color::BLACK);
+        }*/
+
+        top_left /= CHUNK_LENGHT as f32;
+        down_right /= CHUNK_LENGHT as f32;
+
+        const LOADING_OFF: i32 = 2;
+        let bounds_rect = IRect::new(
+            top_left.x as i32 - LOADING_OFF,
+            top_left.y as i32 - LOADING_OFF,
+            down_right.x as i32 + LOADING_OFF,
+            down_right.y as i32 + LOADING_OFF,
+        );
+
+        rects.push(bounds_rect);
+    }
+
+    if !rects.is_empty() {
+        'chunks: for (ent, pos) in &chunks {
+            for (i, rect) in rects.iter().enumerate() {
+                //If on bounds continue by breaking this loop
+                if rect.contains(pos.0) {
+                    break;
+                } else if i == rects.len() - 1 {
+                    //If none contains, remove collider and go to next chunk
+                    //Remove collider
+                    if let Some(mut entity) = commands.get_entity(ent) {
+                        entity.remove::<Collider>();
+                        entity.remove::<bevy_rapier2d::prelude::RigidBody>();
+                    }
+                    continue 'chunks;
+                }
+            }
+
+            if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
+                let collider = chunk.get_collider(materials);
+
+                if let Some(collider) = collider {
+                    commands
+                        .entity(ent)
+                        .insert(collider)
+                        .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
+                }
             }
         }
     }

@@ -10,6 +10,7 @@ pub struct Rigidbody {
     pub atoms: Vec<Atom>,
     pub width: u8,
     pub height: u8,
+    // Positions to remove Object atom later
     pub filled: Vec<ChunkPos>,
     pub texture: Handle<Image>,
     pub texture_ent: Entity,
@@ -17,8 +18,9 @@ pub struct Rigidbody {
 }
 
 impl Rigidbody {
-    fn texture_lenght(&self) -> u32 {
-        (self.width as u32).max(self.height as u32) * 2
+    pub fn texture_lenght(&self) -> u32 {
+        const OFF: f32 = 1.2;
+        ((self.width as f32 * OFF).powi(2) + (self.height as f32 * OFF).powi(2)).sqrt() as u32
     }
 }
 
@@ -103,13 +105,10 @@ pub fn fill_rigidbodies(
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     for (transform, mut rigidbody) in &mut rigidbodies {
-        let mut text_transform = transforms.get_mut(rigidbody.texture_ent).unwrap();
-
         let mut rotation = -(transform.rotation.to_euler(EulerRot::XYZ).2 as f64).to_degrees();
         if rotation < 0. {
             rotation += 360.;
         }
-
         let (width, height, rotated) = rotsprite::rotsprite(
             rigidbody.atoms.as_slice(),
             &Atom::default(),
@@ -117,12 +116,17 @@ pub fn fill_rigidbodies(
             rotation,
         )
         .unwrap();
+
+        //New texture data
         let mut data = SmallVec::new();
 
+        let mut off = transform.translation.xy();
+        off.y *= -1.;
+        let pos = vec2(width as f32 / -2., height as f32 / -2.) + off;
+
+        //This fills the chunks with Object atoms, and also converts the atom data to color data
         for (y, x) in (0..height).cartesian_product(0..width) {
-            let mut off = transform.translation.xy();
-            off.y *= -1.;
-            let pos = vec2(x as f32 - width as f32 / 2., y as f32 - height as f32 / 2.) + off;
+            let pos = pos + vec2(x as f32, y as f32);
             let chunk_pos = global_to_chunk(pos.as_ivec2());
 
             let rotated_atom = rotated[y * width + x];
@@ -138,15 +142,12 @@ pub fn fill_rigidbodies(
             } else {
                 data.extend_from_slice(&[0, 0, 0, 0]);
             }
-
-            if y == 0 && x == 0 {
-                let chunk_pos = global_to_chunk(pos.as_ivec2());
-                let global = chunk_pos.to_global();
-
-                text_transform.translation.x = global.x as f32;
-                text_transform.translation.y = -global.y as f32;
-            }
         }
+
+        //Set new texture and new texture transform
+        let mut text_transform = transforms.get_mut(rigidbody.texture_ent).unwrap();
+        text_transform.translation.x = pos.as_ivec2().x as f32;
+        text_transform.translation.y = -pos.as_ivec2().y as f32;
 
         let text_update = ExtractedTextureUpdate {
             id: rigidbody.texture.id(),
@@ -174,9 +175,7 @@ pub fn unfill_rigidbodies(
         while let Some(chunk_pos) = rigidbody.filled.pop() {
             if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
                 if materials[atom.id].is_object() {
-                    *atom = Atom {
-                        ..Default::default()
-                    };
+                    *atom = Atom::default();
                 }
             }
         }
