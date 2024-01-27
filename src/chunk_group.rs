@@ -1,13 +1,14 @@
+use core::slice;
+
 use crate::prelude::*;
 use async_channel::Sender;
 use itertools::Itertools;
 
-pub type ChunkCenter<'a> = Option<&'a mut [Atom; CHUNK_LEN]>;
 pub type ChunkCorners<'a> = [Option<[&'a mut Atom; QUARTER_CHUNK_LEN]>; 4];
 pub type ChunkSides<'a> = [Option<[&'a mut Atom; HALF_CHUNK_LEN]>; 4];
 
 pub struct ChunkGroup<'a> {
-    pub center: ChunkCenter<'a>,
+    pub center: &'a mut [Atom],
     pub corners: ChunkCorners<'a>,
     pub sides: ChunkSides<'a>,
     /// Position of the center chunk.
@@ -41,7 +42,7 @@ impl<'a> ChunkGroup<'a> {
         let mut pos = idx.0;
         match idx.1 {
             // Center
-            4 => Some(&self.center.as_ref().unwrap()[idx.0.d1()]),
+            4 => Some(&self.center[idx.0.d1()]),
             // Corners
             0 | 2 | 6 | 8 => {
                 // Offset position
@@ -94,7 +95,7 @@ impl<'a> ChunkGroup<'a> {
         let mut pos = idx.0;
         match idx.1 {
             // Center
-            4 => Some(&mut self.center.as_mut().unwrap()[idx.0.d1()]),
+            4 => Some(&mut self.center[idx.0.d1()]),
             // Corners
             0 | 2 | 6 | 8 => {
                 // Offset position
@@ -229,7 +230,7 @@ pub fn local_to_global(pos: (IVec2, i32)) -> IVec2 {
     IVec2::new(global_x, global_y)
 }
 
-//This function gets the chunk groups and spawns a scope to update them
+//This function gets and updates the chunk groups parallely
 pub fn update_chunk_groups<'a>(
     chunks: &'a mut HashMap<IVec2, Chunk>,
     (x_toff, y_toff): (i32, i32),
@@ -240,7 +241,6 @@ pub fn update_chunk_groups<'a>(
         &'a Sender<DeferredDirtyRectUpdate>,
     ),
     update: (u8, &'a Materials),
-
     scope: &Scope<'a, '_, ()>,
 ) {
     puffin::profile_function!();
@@ -248,31 +248,42 @@ pub fn update_chunk_groups<'a>(
     let (dirty_update_rect_send, dirty_render_rect_send) = senders;
     let (dt, materials) = update;
 
-    let mut chunk_groups = vec![];
-    let mut indices = HashMap::new();
-
     for chunk_pos in dirty_rects.keys() {
-        let same_x = (chunk_pos.x + x_toff + manager_pos.x.abs() % 2) % 2 == 0;
-        let same_y = (chunk_pos.y + y_toff + manager_pos.y.abs() % 2) % 2 == 0;
-
-        if !same_x || !same_y || !chunks.contains_key(chunk_pos) {
-            continue;
+        //Get chunks mutable reference from it's pointer
+        let chunks_ptr: *mut HashMap<IVec2, Chunk> = chunks;
+        let chunks;
+        unsafe {
+            chunks = chunks_ptr.as_mut().unwrap();
         }
 
-        let mut chunk_group = ChunkGroup {
-            center: None,
-            sides: [None, None, None, None],
-            corners: [None, None, None, None],
-            center_pos: *chunk_pos,
-        };
-        indices.insert(chunk_pos, chunk_groups.len());
+        scope.spawn(async move {
+            //If not a center chunk in our current update step, or we don't have the chunk, continue
+            let same_x = (chunk_pos.x + x_toff + manager_pos.x.abs() % 2) % 2 == 0;
+            let same_y = (chunk_pos.y + y_toff + manager_pos.y.abs() % 2) % 2 == 0;
 
-        for (x_off, y_off) in (-1..=1).cartesian_product(-1..=1) {
-            let off = ivec2(x_off, y_off);
+            if !same_x || !same_y || !chunks.contains_key(chunk_pos) {
+                return;
+            }
+
+            //Get center and create group
+            let first = chunks.get_mut(chunk_pos).unwrap().atoms.as_mut_ptr();
+            let center;
             unsafe {
+                center = slice::from_raw_parts_mut(first, CHUNK_LEN);
+            }
+
+            let mut chunk_group = ChunkGroup {
+                center,
+                sides: [None, None, None, None],
+                corners: [None, None, None, None],
+                center_pos: *chunk_pos,
+            };
+
+            //Get chunk surroundings
+            for (x_off, y_off) in (-1..=1).cartesian_product(-1..=1) {
+                let off = ivec2(x_off, y_off);
+
                 match (x_off, y_off) {
-                    // CENTER
-                    (0, 0) => {}
                     // UP and DOWN
                     (0, -1) | (0, 1) => {
                         let Some(chunk) = chunks.get_mut(&(*chunk_pos + off)) else {
@@ -281,12 +292,16 @@ pub fn update_chunk_groups<'a>(
 
                         let mut start_ptr = chunk.atoms.as_mut_ptr();
                         if y_off == -1 {
-                            start_ptr = start_ptr.add(HALF_CHUNK_LEN);
+                            unsafe {
+                                start_ptr = start_ptr.add(HALF_CHUNK_LEN);
+                            }
                         }
 
                         let mut atoms = vec![];
                         for i in 0..HALF_CHUNK_LEN {
-                            atoms.push(start_ptr.add(i).as_mut().unwrap());
+                            unsafe {
+                                atoms.push(start_ptr.add(i).as_mut().unwrap());
+                            }
                         }
 
                         chunk_group.sides[if y_off == -1 { 0 } else { 3 }] =
@@ -312,7 +327,9 @@ pub fn update_chunk_groups<'a>(
                                 add_off += HALF_CHUNK_LENGHT;
                             }
 
-                            atoms.push(start_ptr.add(i + add_off).as_mut().unwrap());
+                            unsafe {
+                                atoms.push(start_ptr.add(i + add_off).as_mut().unwrap());
+                            }
                         }
 
                         chunk_group.sides[if x_off == -1 { 1 } else { 2 }] =
@@ -341,7 +358,9 @@ pub fn update_chunk_groups<'a>(
                                 add_off += HALF_CHUNK_LENGHT;
                             }
 
-                            atoms.push(start_ptr.add(i + add_off).as_mut().unwrap());
+                            unsafe {
+                                atoms.push(start_ptr.add(i + add_off).as_mut().unwrap());
+                            }
                         }
 
                         let corner_idx = match (x_off, y_off) {
@@ -355,37 +374,23 @@ pub fn update_chunk_groups<'a>(
 
                         chunk_group.corners[corner_idx] = Some(atoms.try_into().unwrap());
                     }
-
+                    // CENTER
+                    (0, 0) => { /*We alredy got the center*/ }
                     _ => unreachable!(),
                 }
             }
-        }
 
-        chunk_groups.push(chunk_group);
-    }
-
-    //TODO This can maybe be done with a par_iter_mut()
-    for (chunk_pos, chunk) in chunks.iter_mut() {
-        if let Some(i) = indices.get(chunk_pos) {
-            let chunk_group;
-            unsafe {
-                chunk_group = chunk_groups.as_mut_ptr().add(*i).as_mut().unwrap();
-            }
-            chunk_group.center = Some(&mut chunk.atoms);
-            let rect = dirty_rects.get(chunk_pos).unwrap();
-
-            scope.spawn(async move {
-                update_chunks(
-                    &mut UpdateChunksType {
-                        group: chunk_group,
-                        dirty_update_rect_send,
-                        dirty_render_rect_send,
-                        materials,
-                    },
-                    dt,
-                    rect,
-                )
-            });
-        }
+            let rect = dirty_rects.get(&chunk_group.center_pos).unwrap();
+            update_chunks(
+                &mut UpdateChunksType {
+                    group: &mut chunk_group,
+                    dirty_update_rect_send,
+                    dirty_render_rect_send,
+                    materials,
+                },
+                dt,
+                rect,
+            )
+        });
     }
 }
