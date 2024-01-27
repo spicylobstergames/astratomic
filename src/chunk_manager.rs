@@ -111,7 +111,7 @@ impl ChunkManager {
     }
 }
 
-impl Drop for ChunkManager {
+/*impl Drop for ChunkManager {
     fn drop(&mut self) {
         let file = File::open("assets/world/world").unwrap();
         let mut buffered = BufReader::new(file);
@@ -130,7 +130,7 @@ impl Drop for ChunkManager {
         let mut buffered = BufWriter::new(file);
         bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
     }
-}
+}*/
 
 impl std::ops::Index<ChunkPos> for ChunkManager {
     type Output = Atom;
