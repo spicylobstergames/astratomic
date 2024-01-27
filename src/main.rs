@@ -69,7 +69,7 @@ fn main() {
             ParticlesPlugin,
             MaterialsPlugin,
             CameraPlugin,
-            RigidbodyPlugin,
+            //RigidbodyPlugin,
         ))
         .add_plugins((
             RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(6.),
