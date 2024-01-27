@@ -397,19 +397,27 @@ pub fn update_chunk_groups<'a>(
 
 #[test]
 fn update_test() {
-    use std::io::Read;
-
     //Get Chunk Manager
     let mut chunk_manager = ChunkManager::default();
     chunk_manager.pos = ivec2(-16, -16);
 
     //Update
     //Get materials
-    let mut file = File::open("assets/atoms.ron").unwrap();
-    let mut file_str = String::new();
-    file.read_to_string(&mut file_str).unwrap();
-    let vec: Vec<Material> = ron::from_str(&file_str).unwrap();
-    let materials = &Materials(vec);
+    let materials = &Materials(vec![
+        Material::Void,
+        Material::Object,
+        Material::Powder {
+            inertial_resistance: 0.1,
+        },
+        Material::Liquid { flow: 5 },
+        Material::Powder {
+            inertial_resistance: 0.92,
+        },
+        Material::Liquid { flow: 1 },
+        Material::Solid,
+        Material::Solid,
+        Material::Solid,
+    ]);
 
     //Get dirty rects
     let mut dirty_rects = HashMap::new();
@@ -417,7 +425,9 @@ fn update_test() {
         .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + LOAD_HEIGHT)
     {
         let index = ivec2(x, y);
-        chunk_manager.chunks.insert(index, Chunk::new(Handle::default(), index));
+        chunk_manager
+            .chunks
+            .insert(index, Chunk::new(Handle::default(), index));
         dirty_rects.insert(index, URect::new(0, 0, 63, 63));
     }
 
