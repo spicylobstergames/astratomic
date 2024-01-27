@@ -401,29 +401,7 @@ fn update_test() {
 
     //Get Chunk Manager
     let mut chunk_manager = ChunkManager::default();
-
-    let (width, height) = (LOAD_WIDTH, LOAD_HEIGHT);
-
     chunk_manager.pos = ivec2(-16, -16);
-
-    let file_chunks: HashMap<IVec2, Chunk>;
-    let file = File::open("assets/world/world").unwrap();
-    let mut buffered = BufReader::new(file);
-    file_chunks = bincode::deserialize_from(&mut buffered).unwrap();
-
-    for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + width)
-        .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + height)
-    {
-        let index = ivec2(x, y);
-        let chunk;
-        if let Some(file_chunk) = file_chunks.get(&index) {
-            chunk = file_chunk.clone();
-        } else {
-            chunk = Chunk::new(Handle::default(), index);
-        }
-
-        chunk_manager.chunks.insert(index, chunk);
-    }
 
     //Update
     //Get materials
@@ -438,7 +416,9 @@ fn update_test() {
     for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + LOAD_WIDTH)
         .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + LOAD_HEIGHT)
     {
-        dirty_rects.insert(ivec2(x, y), URect::new(0, 0, 63, 63));
+        let index = ivec2(x, y);
+        chunk_manager.chunks.insert(index, Chunk::new(Handle::default(), index));
+        dirty_rects.insert(index, URect::new(0, 0, 63, 63));
     }
 
     let manager_pos = ivec2(chunk_manager.pos.x, chunk_manager.pos.y);
