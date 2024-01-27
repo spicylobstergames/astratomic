@@ -442,15 +442,19 @@ fn update_test() {
     let (dirty_render_rects_send, _) = async_channel::unbounded::<DeferredDirtyRectUpdate>();
     let dirty_render_rect_send = &dirty_render_rects_send;
 
-    compute_pool.scope(|scope| {
-        update_chunk_groups(
-            &mut chunk_manager.chunks,
-            (0, 0),
-            &dirty_rects,
-            manager_pos,
-            (dirty_update_rect_send, dirty_render_rect_send),
-            (dt, materials),
-            scope,
-        );
+    compute_pool.scope(|deferred_scope: &Scope<'_, '_, ()>| {
+        
+
+        compute_pool.scope(|scope| {
+            update_chunk_groups(
+                &mut chunk_manager.chunks,
+                (0, 0),
+                &dirty_rects,
+                manager_pos,
+                (dirty_update_rect_send, dirty_render_rect_send),
+                (dt, materials),
+                scope,
+            );
+        });
     });
 }
