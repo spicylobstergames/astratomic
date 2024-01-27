@@ -396,7 +396,7 @@ pub fn update_chunk_groups<'a>(
 }
 
 #[test]
-fn it_works() {
+fn update_test() {
     use std::io::Read;
 
     //Get Chunk Manager
@@ -407,15 +407,9 @@ fn it_works() {
     chunk_manager.pos = ivec2(-16, -16);
 
     let file_chunks: HashMap<IVec2, Chunk>;
-    if let Ok(file) = File::open("assets/world/world") {
-        let mut buffered = BufReader::new(file);
-        file_chunks = bincode::deserialize_from(&mut buffered).unwrap();
-    } else {
-        file_chunks = HashMap::new();
-        let file = File::create("assets/world/world").unwrap();
-        let mut buffered = BufWriter::new(file);
-        bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
-    }
+    let file = File::open("assets/world/world").unwrap();
+    let mut buffered = BufReader::new(file);
+    file_chunks = bincode::deserialize_from(&mut buffered).unwrap();
 
     for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + width)
         .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + height)
