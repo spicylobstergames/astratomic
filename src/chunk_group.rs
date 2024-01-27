@@ -431,20 +431,17 @@ fn update_test() {
 
     let manager_pos = ivec2(chunk_manager.pos.x, chunk_manager.pos.y);
     let dt = 0;
-    
+
     //Update
     let compute_pool = ComputeTaskPool::get();
     // Create channel for sending dirty update rects
-    let (dirty_update_rects_send, _) =
-        async_channel::unbounded::<DeferredDirtyRectUpdate>();
+    let (dirty_update_rects_send, _) = async_channel::unbounded::<DeferredDirtyRectUpdate>();
     let dirty_update_rect_send = &dirty_update_rects_send;
 
     // Create channel for sending dirty render rect updates
-    let (dirty_render_rects_send, _) =
-        async_channel::unbounded::<DeferredDirtyRectUpdate>();
+    let (dirty_render_rects_send, _) = async_channel::unbounded::<DeferredDirtyRectUpdate>();
     let dirty_render_rect_send = &dirty_render_rects_send;
 
-    
     for (y_toff, x_toff) in rand_range(0..2)
         .into_iter()
         .cartesian_product(rand_range(0..2).into_iter())
