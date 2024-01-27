@@ -96,11 +96,12 @@ pub fn add_rigidbodies(
     }
 }
 
-pub fn fill_rigidbodies(
+pub fn update_rigidibodies(
     mut chunk_manager: ResMut<ChunkManager>,
     mut rigidbodies: Query<(&Transform, &mut Rigidbody)>,
     mut transforms: Query<&mut Transform, Without<Rigidbody>>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+    mut dirty_rects: ResMut<DirtyRects>,
 ) {
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
@@ -131,6 +132,8 @@ pub fn fill_rigidbodies(
 
             let rotated_atom = rotated[y * width + x];
             if materials[rotated_atom.id].is_solid() {
+                update_dirty_rects_3x3(&mut dirty_rects.current, chunk_pos);
+
                 if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
                     if materials[atom.id].is_void() {
                         *atom = Atom::object();
@@ -192,7 +195,11 @@ pub fn extract_images(
                 data: vec![0; (rigibody.texture_lenght().pow(2) * 4) as usize].to_smallvec(),
                 id: text_update.id,
                 origin: Origin3d::ZERO,
-                size: text_update.size,
+                size: Extent3d {
+                    width: rigibody.texture_lenght(),
+                    height: rigibody.texture_lenght(),
+                    depth_or_array_layers: 1,
+                },
             });
             extracted_updates.push(text_update.clone());
         }
@@ -271,7 +278,7 @@ impl Plugin for RigidbodyPlugin {
             .add_systems(
                 FixedUpdate,
                 (
-                    fill_rigidbodies.before(chunk_manager_update),
+                    update_rigidibodies.before(chunk_manager_update),
                     unfill_rigidbodies.after(chunk_manager_update),
                 )
                     .run_if(in_state(GameState::Game)),
