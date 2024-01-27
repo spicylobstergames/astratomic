@@ -241,7 +241,6 @@ pub fn update_chunk_groups<'a>(
         &'a Sender<DeferredDirtyRectUpdate>,
     ),
     update: (u8, &'a Materials),
-    scope: &Scope<'a, '_, ()>,
 ) {
     puffin::profile_function!();
 
@@ -433,7 +432,6 @@ fn update_test() {
     let dt = 0;
 
     //Update
-    let compute_pool = ComputeTaskPool::get();
     // Create channel for sending dirty update rects
     let (dirty_update_rects_send, _) = async_channel::unbounded::<DeferredDirtyRectUpdate>();
     let dirty_update_rect_send = &dirty_update_rects_send;
@@ -442,7 +440,7 @@ fn update_test() {
     let (dirty_render_rects_send, _) = async_channel::unbounded::<DeferredDirtyRectUpdate>();
     let dirty_render_rect_send = &dirty_render_rects_send;
 
-    compute_pool.scope(|scope| {
+
         update_chunk_groups(
             &mut chunk_manager.chunks,
             (0, 0),
@@ -450,7 +448,7 @@ fn update_test() {
             manager_pos,
             (dirty_update_rect_send, dirty_render_rect_send),
             (dt, materials),
-            scope,
+
         );
-    });
+
 }
