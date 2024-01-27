@@ -1,7 +1,7 @@
 use bevy::render::render_resource::*;
 use std::collections::HashSet;
 
-use crate::prelude::*;
+use crate::{prelude::*, rigidbody};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct Chunk {
@@ -10,6 +10,8 @@ pub struct Chunk {
 
     #[serde(skip)]
     pub texture: Handle<Image>,
+    #[serde(skip)]
+    pub entity: Option<Entity>,
 }
 
 impl Default for Chunk {
@@ -17,6 +19,7 @@ impl Default for Chunk {
         Self {
             atoms: [Atom::default(); CHUNK_LEN],
             texture: Handle::default(),
+            entity: None,
         }
     }
 }
@@ -49,7 +52,11 @@ impl Chunk {
             }
         }
 
-        Chunk { atoms, texture }
+        Chunk {
+            atoms,
+            texture,
+            entity: None,
+        }
     }
 
     pub fn new_image() -> Image {
@@ -79,5 +86,30 @@ impl Chunk {
             .collect();
 
         self.update_image_positions(image, &positions)
+    }
+
+    pub fn get_collider(&self, materials: &Materials) -> Option<Collider> {
+        rigidbody::get_collider(
+            &self.get_values(materials),
+            CHUNK_LENGHT as u32,
+            CHUNK_LENGHT as u32,
+            (0., 0.),
+        )
+    }
+
+    pub fn get_values(&self, materials: &Materials) -> Vec<f64> {
+        let mut values = vec![];
+
+        for row in self.atoms.chunks(CHUNK_LENGHT) {
+            for atom in row {
+                if materials[atom].is_solid() {
+                    values.push(1.)
+                } else {
+                    values.push(0.)
+                }
+            }
+        }
+
+        values
     }
 }

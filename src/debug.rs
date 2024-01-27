@@ -182,6 +182,7 @@ impl Plugin for DebugPlugin {
         )
         .add_systems(PreUpdate, delete_image.run_if(in_state(GameState::Game)))
         .add_plugins(WorldInspectorPlugin::new())
+        .add_plugins(RapierDebugRenderPlugin::default())
         //Frame on console
         .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
         .init_resource::<PreviousMousePos>();

@@ -163,7 +163,7 @@ impl DirtyRects {
 }
 
 #[derive(Component)]
-pub struct ChunkTextures;
+pub struct ChunksParent;
 
 pub fn manager_setup(
     mut commands: Commands,
@@ -203,16 +203,96 @@ pub fn manager_setup(
 
     commands
         .spawn((
-            Name::new("Chunks textures"),
+            Name::new("Chunks"),
             VisibilityBundle::default(),
             TransformBundle::from_transform(Transform::from_translation(vec3(
                 0.,
                 0.,
                 AUTOMATA_LAYER,
             ))),
-            ChunkTextures,
+            ChunksParent,
         ))
         .push_children(&images_vec);
+}
+
+pub fn add_colliders(
+    mut commands: Commands,
+    chunk_manager: Res<ChunkManager>,
+    chunks: Query<(Entity, &ChunkComponent)>,
+    rigidbodies: Query<(&Transform, &Rigidbody)>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+) {
+    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+
+    let mut rects = vec![];
+
+    for (transform, rigidbody) in &rigidbodies {
+        let l = std::f32::consts::SQRT_2 * (rigidbody.width as f32).max(rigidbody.height as f32);
+
+        let angle = std::f32::consts::FRAC_PI_4 + std::f32::consts::PI;
+        let mut top_left = transform.translation.xy();
+        top_left.y *= -1.;
+        top_left += vec2(angle.cos(), angle.sin()) * l / 2.;
+
+        let angle = std::f32::consts::FRAC_PI_4;
+        let mut down_right = transform.translation.xy();
+        down_right.y *= -1.;
+        down_right += vec2(angle.cos(), angle.sin()) * l / 2.;
+
+        /*{
+            //Some debug visualization
+            let mut top_left = top_left;
+            top_left.y *= -1.;
+            gizmos.circle_2d(top_left, 10., Color::RED);
+
+            let mut down_right = down_right;
+            down_right.y *= -1.;
+            gizmos.circle_2d(down_right, 10., Color::BLACK);
+        }*/
+
+        top_left /= CHUNK_LENGHT as f32;
+        down_right /= CHUNK_LENGHT as f32;
+
+        const LOADING_OFF: i32 = 2;
+        let bounds_rect = IRect::new(
+            top_left.x as i32 - LOADING_OFF,
+            top_left.y as i32 - LOADING_OFF,
+            down_right.x as i32 + LOADING_OFF,
+            down_right.y as i32 + LOADING_OFF,
+        );
+
+        rects.push(bounds_rect);
+    }
+
+    if !rects.is_empty() {
+        'chunks: for (ent, pos) in &chunks {
+            for (i, rect) in rects.iter().enumerate() {
+                //If on bounds continue by breaking this loop
+                if rect.contains(pos.0) {
+                    break;
+                } else if i == rects.len() - 1 {
+                    //If none contains, remove collider and go to next chunk
+                    //Remove collider
+                    if let Some(mut entity) = commands.get_entity(ent) {
+                        entity.remove::<Collider>();
+                        entity.remove::<bevy_rapier2d::prelude::RigidBody>();
+                    }
+                    continue 'chunks;
+                }
+            }
+
+            if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
+                let collider = chunk.get_collider(materials);
+
+                if let Some(collider) = collider {
+                    commands
+                        .entity(ent)
+                        .insert(collider)
+                        .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
+                }
+            }
+        }
+    }
 }
 
 pub fn chunk_manager_update(
@@ -268,16 +348,6 @@ pub fn chunk_manager_update(
 
         // Spawn a task on the deferred scope for handling deferred dirty render rects.
         deferred_scope.spawn(async move {
-            //Update all rendering, used when debugging
-            /*
-            for x in 0..CHUNKS_WIDTH {
-                for y in 0..CHUNKS_HEIGHT {
-                    render_dirty_rects
-                        .insert(IVec2::new(x as i32, y as i32), URect::new(0, 0, 63, 63));
-                }
-            }
-            */
-
             // Loop through deferred tasks
             while let Ok(update) = dirty_render_rects_recv.recv().await {
                 update_dirty_rects(render_dirty_rects, update.chunk_pos);
@@ -390,6 +460,9 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
     }
 }
 
+#[derive(Component)]
+pub struct ChunkComponent(pub IVec2);
+
 //Still needs to add the return entity to a parent
 pub fn add_chunk(
     commands: &mut Commands,
@@ -410,25 +483,31 @@ pub fn add_chunk(
     //Update chunk image
     let image = images.get_mut(&chunk.texture).unwrap();
     chunk.update_all(image);
-    chunk_manager.chunks.insert(index, chunk);
 
     //Spawn Image
-    commands
-        .spawn(SpriteBundle {
-            texture: texture_copy,
-            sprite: Sprite {
-                anchor: Anchor::TopLeft,
+    let entity = commands
+        .spawn((
+            SpriteBundle {
+                texture: texture_copy,
+                sprite: Sprite {
+                    anchor: Anchor::TopLeft,
+                    ..Default::default()
+                },
+                transform: Transform::from_xyz(pos.x, pos.y, 0.),
                 ..Default::default()
             },
-            transform: Transform::from_xyz(pos.x, pos.y, 0.),
-            ..Default::default()
-        })
-        .id()
+            ChunkComponent(index),
+        ))
+        .id();
+    chunk.entity = Some(entity);
+
+    chunk_manager.chunks.insert(index, chunk);
+    entity
 }
 
 pub fn update_manager_pos(
     mut commands: Commands,
-    chunk_textures: Query<Entity, With<ChunkTextures>>,
+    chunk_textures: Query<Entity, With<ChunksParent>>,
     image_entities: Query<(&Parent, Entity, &Handle<Image>)>,
     player: Query<&Actor, With<Player>>,
     resources: (
@@ -510,16 +589,17 @@ pub fn update_manager_pos(
 }
 
 #[derive(Resource, Default, Deref, DerefMut)]
-struct ExtractedTextureUpdates(Vec<ExtractedTextureUpdate>);
+pub struct ExtractedTextureUpdates(pub Vec<ExtractedTextureUpdate>);
 
-struct ExtractedTextureUpdate {
-    id: AssetId<Image>,
+#[derive(Clone)]
+pub struct ExtractedTextureUpdate {
+    pub id: AssetId<Image>,
     // TODO: determine a good size for the data smallvec array.
     // The size of the array determines how many bytes we can store before it overflows and has
     // to make a heap allocation. 256 is enough to store an 8x8 pixel dirty rect.
-    data: SmallVec<[u8; 256]>,
-    origin: Origin3d,
-    size: Extent3d,
+    pub data: SmallVec<[u8; 256]>,
+    pub origin: Origin3d,
+    pub size: Extent3d,
 }
 
 fn extract_chunk_texture_updates(
@@ -598,7 +678,10 @@ impl Plugin for ChunkManagerPlugin {
                 FixedUpdate,
                 chunk_manager_update.run_if(in_state(GameState::Game)),
             )
-            .add_systems(Update, update_manager_pos.run_if(in_state(GameState::Game)))
+            .add_systems(
+                Update,
+                (update_manager_pos, add_colliders).run_if(in_state(GameState::Game)),
+            )
             .add_systems(
                 PreUpdate,
                 clear_render_rect.run_if(in_state(GameState::Game)),

@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::prelude::*;
 
-#[derive(Clone, Copy, Default, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Default, PartialEq, Debug, Serialize, Deserialize, Eq)]
 pub struct Atom {
     pub color: [u8; 4],
     pub id: u8,

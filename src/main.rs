@@ -18,12 +18,13 @@ mod menu;
 mod particles;
 mod player;
 mod puffin_plugin;
+mod rigidbody;
 mod prelude {
     pub use crate::GameState;
     pub use crate::{
         actors::*, animation::*, atom::*, camera::*, chunk::*, chunk_group::*, chunk_manager::*,
         consts::*, debug::*, geom_tools::*, manager_api::*, materials::*, menu::*, particles::*,
-        player::*, puffin_plugin::*,
+        player::*, puffin_plugin::*, rigidbody::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -42,6 +43,9 @@ mod prelude {
     pub use std::io::Write;
     pub use std::io::{BufReader, BufWriter};
     pub use std::sync::{Arc, RwLock};
+
+    pub use bevy_rapier2d::prelude::*;
+    pub use contour::ContourBuilder;
 
     pub use crate::materials::Material;
     pub use bevy_egui::EguiContext;
@@ -65,12 +69,16 @@ fn main() {
             ParticlesPlugin,
             MaterialsPlugin,
             CameraPlugin,
+            RigidbodyPlugin,
+        ))
+        .add_plugins((
+            RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(6.),
             MenuPlugin,
         ))
         .add_systems(Startup, setup);
 
     if args.contains(&"-d".to_string()) || args.contains(&"--debug".to_string()) {
-        app.add_plugins(DebugPlugin);
+        app.add_plugins((DebugPlugin,));
     }
 
     if args.contains(&"-p".to_string()) || args.contains(&"--profiling".to_string()) {

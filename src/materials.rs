@@ -118,7 +118,10 @@ impl AssetLoader for MaterialsLoader {
     }
 }
 
-pub fn setup(mut materials_handle: ResMut<MaterialsHandle>, asset_server: Res<AssetServer>) {
+pub fn materials_setup(
+    mut materials_handle: ResMut<MaterialsHandle>,
+    asset_server: Res<AssetServer>,
+) {
     materials_handle.0 = asset_server.load("atoms.ron");
 }
 
@@ -128,6 +131,6 @@ impl Plugin for MaterialsPlugin {
         app.init_asset::<Materials>()
             .init_resource::<MaterialsHandle>()
             .init_asset_loader::<MaterialsLoader>()
-            .add_systems(Startup, setup);
+            .add_systems(Startup, materials_setup);
     }
 }
