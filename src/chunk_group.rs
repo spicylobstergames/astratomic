@@ -394,3 +394,123 @@ pub fn update_chunk_groups<'a>(
         });
     }
 }
+
+#[test]
+fn it_works() {
+    use std::io::Read;
+
+    //Get Chunk Manager
+    let mut chunk_manager = ChunkManager::default();
+
+    let (width, height) = (LOAD_WIDTH, LOAD_HEIGHT);
+
+    chunk_manager.pos = ivec2(-16, -16);
+
+    let file_chunks: HashMap<IVec2, Chunk>;
+    if let Ok(file) = File::open("assets/world/world") {
+        let mut buffered = BufReader::new(file);
+        file_chunks = bincode::deserialize_from(&mut buffered).unwrap();
+    } else {
+        file_chunks = HashMap::new();
+        let file = File::create("assets/world/world").unwrap();
+        let mut buffered = BufWriter::new(file);
+        bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
+    }
+
+    for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + width)
+        .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + height)
+    {
+        let index = ivec2(x, y);
+        let chunk;
+        if let Some(file_chunk) = file_chunks.get(&index) {
+            chunk = file_chunk.clone();
+        } else {
+            chunk = Chunk::new(Handle::default(), index);
+        }
+
+        chunk_manager.chunks.insert(index, chunk);
+    }
+
+    //Update
+    //Get materials
+    let mut file = File::open("assets/atoms.ron").unwrap();
+    let mut file_str = String::new();
+    file.read_to_string(&mut file_str).unwrap();
+    let vec: Vec<Material> = ron::from_str(&file_str).unwrap();
+    let materials = &Materials(vec);
+
+    //Get dirty rects
+    let mut dirty_rects = HashMap::new();
+    for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + LOAD_WIDTH)
+        .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + LOAD_HEIGHT)
+    {
+        dirty_rects.insert(ivec2(x, y), URect::new(0, 0, 63, 63));
+    }
+
+    let manager_pos = ivec2(chunk_manager.pos.x, chunk_manager.pos.y);
+    let dt = 0;
+    let new_dirty_rects = &mut HashMap::new();
+    let render_dirty_rects = &mut HashMap::new();
+
+    let compute_pool = ComputeTaskPool::get();
+
+    // Create channel for sending dirty update rects
+    let (dirty_update_rects_send, dirty_update_rects_recv) =
+        async_channel::unbounded::<DeferredDirtyRectUpdate>();
+    let dirty_update_rect_send = &dirty_update_rects_send;
+
+    // Create channel for sending dirty render rect updates
+    let (dirty_render_rects_send, dirty_render_rects_recv) =
+        async_channel::unbounded::<DeferredDirtyRectUpdate>();
+    let dirty_render_rect_send = &dirty_render_rects_send;
+
+    // Create a scope in which we handle deferred updates and update chunks.
+    compute_pool.scope(|deferred_scope| {
+        // Spawn a task on the deferred scope for handling the deferred dirty update rects.
+        deferred_scope.spawn(async move {
+            // Clear the new dirty rects so we can update a fresh list
+            *new_dirty_rects = HashMap::new();
+
+            // Loop through deferred tasks
+            while let Ok(update) = dirty_update_rects_recv.recv().await {
+                if update.awake_surrouding {
+                    update_dirty_rects_3x3(new_dirty_rects, update.chunk_pos);
+                } else {
+                    update_dirty_rects(new_dirty_rects, update.chunk_pos)
+                }
+            }
+        });
+
+        // Spawn a task on the deferred scope for handling deferred dirty render rects.
+        deferred_scope.spawn(async move {
+            // Loop through deferred tasks
+            while let Ok(update) = dirty_render_rects_recv.recv().await {
+                update_dirty_rects(render_dirty_rects, update.chunk_pos);
+            }
+        });
+
+        // Run the 4 update steps in checker like pattern
+        for (y_toff, x_toff) in rand_range(0..2)
+            .into_iter()
+            .cartesian_product(rand_range(0..2).into_iter())
+        {
+            puffin::profile_scope!("Update step scope.");
+
+            compute_pool.scope(|scope| {
+                update_chunk_groups(
+                    &mut chunk_manager.chunks,
+                    (x_toff, y_toff),
+                    &dirty_rects,
+                    manager_pos,
+                    (dirty_update_rect_send, dirty_render_rect_send),
+                    (dt, materials),
+                    scope,
+                );
+            });
+        }
+
+        // Close the deferred updates channel so that our deferred update task will complete.
+        dirty_update_rect_send.close();
+        dirty_render_rect_send.close();
+    });
+}
