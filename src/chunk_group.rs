@@ -399,9 +399,7 @@ pub fn update_chunk_groups<'a>(
 fn update_test() {
     //Get Chunk Manager
     let mut chunk_manager = ChunkManager::default();
-    chunk_manager.pos = ivec2(-16, -16);
 
-    //Update
     //Get materials
     let materials = &Materials(vec![
         Material::Void,
@@ -419,10 +417,10 @@ fn update_test() {
         Material::Solid,
     ]);
 
-    //Get dirty rects
+    //Add some chunks with full dirty rects
     let mut dirty_rects = HashMap::new();
-    for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + 8)
-        .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + 6)
+    for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + 1)
+        .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + 1)
     {
         let index = ivec2(x, y);
         chunk_manager
@@ -436,8 +434,8 @@ fn update_test() {
     let new_dirty_rects = &mut HashMap::new();
     let render_dirty_rects = &mut HashMap::new();
 
+    //Update
     let compute_pool = ComputeTaskPool::get();
-
     // Create channel for sending dirty update rects
     let (dirty_update_rects_send, dirty_update_rects_recv) =
         async_channel::unbounded::<DeferredDirtyRectUpdate>();
@@ -478,8 +476,6 @@ fn update_test() {
             .into_iter()
             .cartesian_product(rand_range(0..2).into_iter())
         {
-            puffin::profile_scope!("Update step scope.");
-
             compute_pool.scope(|scope| {
                 update_chunk_groups(
                     &mut chunk_manager.chunks,
