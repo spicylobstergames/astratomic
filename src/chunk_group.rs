@@ -421,8 +421,8 @@ fn update_test() {
 
     //Get dirty rects
     let mut dirty_rects = HashMap::new();
-    for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + LOAD_WIDTH)
-        .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + LOAD_HEIGHT)
+    for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + 8)
+        .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + 6)
     {
         let index = ivec2(x, y);
         chunk_manager
