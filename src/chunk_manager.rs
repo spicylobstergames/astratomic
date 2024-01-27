@@ -111,7 +111,7 @@ impl ChunkManager {
     }
 }
 
-/*impl Drop for ChunkManager {
+impl Drop for ChunkManager {
     fn drop(&mut self) {
         let file = File::open("assets/world/world").unwrap();
         let mut buffered = BufReader::new(file);
@@ -130,7 +130,7 @@ impl ChunkManager {
         let mut buffered = BufWriter::new(file);
         bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
     }
-}*/
+}
 
 impl std::ops::Index<ChunkPos> for ChunkManager {
     type Output = Atom;
@@ -361,7 +361,17 @@ pub fn chunk_manager_update(
         {
             puffin::profile_scope!("Update step scope.");
 
-
+            compute_pool.scope(|scope| {
+                update_chunk_groups(
+                    &mut chunk_manager.chunks,
+                    (x_toff, y_toff),
+                    dirty_rects,
+                    manager_pos,
+                    (dirty_update_rect_send, dirty_render_rect_send),
+                    (dt, materials),
+                    scope,
+                );
+            });
         }
 
         // Close the deferred updates channel so that our deferred update task will complete.
