@@ -431,66 +431,34 @@ fn update_test() {
 
     let manager_pos = ivec2(chunk_manager.pos.x, chunk_manager.pos.y);
     let dt = 0;
-    let new_dirty_rects = &mut HashMap::new();
-    let render_dirty_rects = &mut HashMap::new();
-
+    
     //Update
     let compute_pool = ComputeTaskPool::get();
     // Create channel for sending dirty update rects
-    let (dirty_update_rects_send, dirty_update_rects_recv) =
+    let (dirty_update_rects_send, _) =
         async_channel::unbounded::<DeferredDirtyRectUpdate>();
     let dirty_update_rect_send = &dirty_update_rects_send;
 
     // Create channel for sending dirty render rect updates
-    let (dirty_render_rects_send, dirty_render_rects_recv) =
+    let (dirty_render_rects_send, _) =
         async_channel::unbounded::<DeferredDirtyRectUpdate>();
     let dirty_render_rect_send = &dirty_render_rects_send;
 
-    // Create a scope in which we handle deferred updates and update chunks.
-    compute_pool.scope(|deferred_scope| {
-        // Spawn a task on the deferred scope for handling the deferred dirty update rects.
-        deferred_scope.spawn(async move {
-            // Clear the new dirty rects so we can update a fresh list
-            *new_dirty_rects = HashMap::new();
-
-            // Loop through deferred tasks
-            while let Ok(update) = dirty_update_rects_recv.recv().await {
-                if update.awake_surrouding {
-                    update_dirty_rects_3x3(new_dirty_rects, update.chunk_pos);
-                } else {
-                    update_dirty_rects(new_dirty_rects, update.chunk_pos)
-                }
-            }
+    
+    for (y_toff, x_toff) in rand_range(0..2)
+        .into_iter()
+        .cartesian_product(rand_range(0..2).into_iter())
+    {
+        compute_pool.scope(|scope| {
+            update_chunk_groups(
+                &mut chunk_manager.chunks,
+                (x_toff, y_toff),
+                &dirty_rects,
+                manager_pos,
+                (dirty_update_rect_send, dirty_render_rect_send),
+                (dt, materials),
+                scope,
+            );
         });
-
-        // Spawn a task on the deferred scope for handling deferred dirty render rects.
-        deferred_scope.spawn(async move {
-            // Loop through deferred tasks
-            while let Ok(update) = dirty_render_rects_recv.recv().await {
-                update_dirty_rects(render_dirty_rects, update.chunk_pos);
-            }
-        });
-
-        // Run the 4 update steps in checker like pattern
-        for (y_toff, x_toff) in rand_range(0..2)
-            .into_iter()
-            .cartesian_product(rand_range(0..2).into_iter())
-        {
-            compute_pool.scope(|scope| {
-                update_chunk_groups(
-                    &mut chunk_manager.chunks,
-                    (x_toff, y_toff),
-                    &dirty_rects,
-                    manager_pos,
-                    (dirty_update_rect_send, dirty_render_rect_send),
-                    (dt, materials),
-                    scope,
-                );
-            });
-        }
-
-        // Close the deferred updates channel so that our deferred update task will complete.
-        dirty_update_rect_send.close();
-        dirty_render_rect_send.close();
-    });
+    }
 }
