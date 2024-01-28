@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use geo::{Simplify, TriangulateEarcut};
+use geo::{Simplify, SimplifyVwPreserve, TriangulateEarcut};
 use itertools::Itertools;
 
 #[derive(Component)]
@@ -12,7 +12,7 @@ pub struct Rigidbody {
 }
 
 #[derive(Component, Default)]
-pub struct RigidbodyHandle(pub Handle<Image>);
+pub struct RigidbodyHandle(Handle<Image>, Vec2);
 
 #[derive(Component)]
 pub struct Hydrated;
@@ -20,7 +20,10 @@ pub struct Hydrated;
 //TODO Add rigidbody file
 pub fn load_images(mut commands: Commands, server: Res<AssetServer>) {
     let image: Handle<Image> = server.load("tree.png");
-    commands.spawn(RigidbodyHandle(image.clone()));
+    commands.spawn(RigidbodyHandle(image.clone(), vec2(64., -64.)));
+
+    let image: Handle<Image> = server.load("player/player_tool.png");
+    commands.spawn(RigidbodyHandle(image.clone(), vec2(0., 0.)));
 }
 
 pub fn add_rigidbodies(
@@ -50,7 +53,7 @@ pub fn add_rigidbodies(
                     anchor: bevy::sprite::Anchor::TopLeft,
                     ..Default::default()
                 },
-                transform: Transform::from_xyz(0., 64., RIGIDBODY_LAYER),
+                transform: Transform::from_xyz(handle.1.x, -handle.1.y, RIGIDBODY_LAYER),
                 ..Default::default()
             });
 
@@ -148,7 +151,7 @@ pub fn get_collider(values: &[f64], width: u32, height: u32) -> Option<Collider>
     let res = c.contours(values, &[0.5]).unwrap();
     let mut colliders = vec![];
     for countour in res {
-        let geometry = countour.geometry().simplify(&2.0);
+        let geometry = countour.geometry().simplify_vw_preserve(&1.5);
 
         for polygon in geometry {
             let triangles = polygon.earcut_triangles();

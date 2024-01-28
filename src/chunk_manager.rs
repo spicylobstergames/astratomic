@@ -218,7 +218,8 @@ pub fn manager_setup(
 pub fn add_colliders(
     mut commands: Commands,
     chunk_manager: Res<ChunkManager>,
-    chunks: Query<(Entity, &ChunkComponent)>,
+    chunks_with: Query<(Entity, &ChunkComponent), With<Collider>>,
+    chunks_without: Query<(Entity, &ChunkComponent), Without<Collider>>,
     rigidbodies: Query<(&Transform, &Rigidbody)>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
@@ -227,7 +228,6 @@ pub fn add_colliders(
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     let mut rects = vec![];
-
     for (transform, rigidbody) in &rigidbodies {
         let l = std::f32::consts::SQRT_2 * (rigidbody.width as f32).max(rigidbody.height as f32);
 
@@ -266,32 +266,44 @@ pub fn add_colliders(
         rects.push(bounds_rect);
     }
 
-    if !rects.is_empty() {
-        'chunks: for (ent, pos) in &chunks {
-            for (i, rect) in rects.iter().enumerate() {
-                //If on bounds continue by breaking this loop
-                if rect.contains(pos.0) {
-                    break;
-                } else if i == rects.len() - 1 {
-                    //If none contains, remove collider and go to next chunk
-                    //Remove collider
-                    if let Some(mut entity) = commands.get_entity(ent) {
-                        entity.remove::<Collider>();
-                        entity.remove::<bevy_rapier2d::prelude::RigidBody>();
-                    }
-                    continue 'chunks;
-                }
+    if rects.is_empty() {
+        return;
+    }
+
+    for (ent, pos) in &chunks_with {
+        let mut contains = false;
+        for rect in rects.iter() {
+            if rect.contains(pos.0) {
+                contains = true;
+                break;
             }
+        }
 
-            if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
-                let collider = chunk.get_collider(materials);
+        if !contains {
+            //If none contains, remove collider and go to next chunk
+            //Remove collider
+            if let Some(mut entity) = commands.get_entity(ent) {
+                entity.remove::<Collider>();
+                entity.remove::<bevy_rapier2d::prelude::RigidBody>();
+            }
+        }
+    }
 
-                if let Some(collider) = collider {
-                    commands
-                        .entity(ent)
-                        .insert(collider)
-                        .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
+    for (ent, pos) in &chunks_without {
+        for rect in rects.iter() {
+            if rect.contains(pos.0) {
+                if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
+                    let collider = chunk.get_collider(materials);
+
+                    if let Some(collider) = collider {
+                        commands
+                            .entity(ent)
+                            .insert(collider)
+                            .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
+                    }
                 }
+
+                break;
             }
         }
     }
