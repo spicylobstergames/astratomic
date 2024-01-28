@@ -1,5 +1,5 @@
 use crate::prelude::*;
-use geo::{Simplify, SimplifyVwPreserve, TriangulateEarcut};
+use geo::{SimplifyVwPreserve, TriangulateEarcut};
 use itertools::Itertools;
 
 #[derive(Component)]
@@ -24,6 +24,8 @@ pub fn load_images(mut commands: Commands, server: Res<AssetServer>) {
 
     let image: Handle<Image> = server.load("player/player_tool.png");
     commands.spawn(RigidbodyHandle(image.clone(), vec2(0., 0.)));
+    let image: Handle<Image> = server.load("player/jetpack.png");
+    commands.spawn(RigidbodyHandle(image.clone(), vec2(-64., 0.)));
 }
 
 pub fn add_rigidbodies(
