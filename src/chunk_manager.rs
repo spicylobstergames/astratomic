@@ -222,6 +222,8 @@ pub fn add_colliders(
     rigidbodies: Query<(&Transform, &Rigidbody)>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
+    puffin::profile_function!();
+
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     let mut rects = vec![];
