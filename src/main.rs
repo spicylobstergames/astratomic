@@ -69,10 +69,10 @@ fn main() {
             ParticlesPlugin,
             MaterialsPlugin,
             CameraPlugin,
-            //RigidbodyPlugin,
+            RigidbodyPlugin,
         ))
         .add_plugins((
-            RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(6.),
+            RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.),
             MenuPlugin,
         ))
         .add_systems(Startup, setup);

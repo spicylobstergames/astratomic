@@ -128,8 +128,8 @@ pub fn render_dirty_rects(mut commands: Commands, dirty_rects: Res<DirtyRects>) 
     }
 }
 
-fn render_actors(mut commands: Commands, actors: Query<&Actor>) {
-    for actor in actors.iter() {
+fn render_actors(mut commands: Commands, actors: Query<(&Actor, &Transform)>) {
+    for (actor, transform) in actors.iter() {
         commands
             .spawn(SpriteBundle {
                 sprite: Sprite {
@@ -138,11 +138,7 @@ fn render_actors(mut commands: Commands, actors: Query<&Actor>) {
                     anchor: Anchor::TopLeft,
                     ..default()
                 },
-                transform: Transform::from_translation(Vec3::new(
-                    actor.pos.x as f32,
-                    -actor.pos.y as f32,
-                    1.,
-                )),
+                transform: *transform,
                 ..default()
             })
             .insert(DeleteImage);

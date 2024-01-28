@@ -19,13 +19,14 @@ impl Default for Player {
     }
 }
 
+/*TODO Find a way to redo this
 impl Drop for Actor {
     fn drop(&mut self) {
         let file = File::create("assets/world/player").unwrap();
         let mut buffered = BufWriter::new(file);
         bincode::serialize_into(&mut buffered, &self.pos).unwrap();
     }
-}
+}*/
 
 #[derive(Default)]
 pub enum PlayerState {
@@ -61,7 +62,6 @@ pub fn player_setup(
     let player_actor = Actor {
         height: 17,
         width: 10,
-        pos,
         vel: vec2(0., 0.),
     };
 
@@ -70,7 +70,11 @@ pub fn player_setup(
         TextureAtlas::from_grid(player_handle, Vec2::new(24.0, 24.0), 8, 5, None, None);
     let player_atlas_handle = texture_atlases.add(player_atlas);
     let animation_indices = AnimationIndices { first: 0, last: 1 };
-    let player_transform = GlobalTransform::from_xyz(5. * 3., -8. * 3., PLAYER_LAYER);
+    let player_transform = GlobalTransform::from_xyz(
+        5. * 3. + pos.x as f32,
+        -8. * 3. + pos.y as f32,
+        PLAYER_LAYER,
+    );
 
     let tool_handle = asset_server.load("player/player_tool.png");
     let tool_bundle = SpriteBundle {
@@ -106,7 +110,9 @@ pub fn player_setup(
             },
             animation_indices,
             AnimationTimer(Timer::from_seconds(0.1, TimerMode::Repeating)),
-            bevy_rapier2d::prelude::RigidBody::Fixed,
+            bevy_rapier2d::prelude::Velocity::zero(),
+            bevy_rapier2d::prelude::GravityScale(0.),
+            bevy_rapier2d::prelude::RigidBody::Dynamic,
             bevy_rapier2d::prelude::LockedAxes::ROTATION_LOCKED,
             bevy_rapier2d::prelude::Collider::cuboid(
                 player_actor.width as f32 / 2.,
@@ -119,13 +125,13 @@ pub fn player_setup(
 /// Updates player
 pub fn update_player(
     input: (Res<Inputs>, EventReader<MouseWheel>),
-    mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices)>,
+    mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices, &Transform)>,
     chunk_manager: ResMut<ChunkManager>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
     time: Res<Time>,
     mut zoom: ResMut<Zoom>,
 ) {
-    let (mut actor, mut player, mut anim_idxs) = player.single_mut();
+    let (mut actor, mut player, mut anim_idxs, transform) = player.single_mut();
     let (inputs, mut scroll_evr) = input;
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
@@ -143,7 +149,12 @@ pub fn update_player(
     let x = inputs.right - inputs.left;
     actor.vel.x = x * RUN_SPEED;
 
-    let on_ground = on_ground(&chunk_manager, &actor, materials);
+    let on_ground = on_ground(
+        &chunk_manager,
+        &actor,
+        &transform.world_pos().as_ivec2(),
+        materials,
+    );
 
     // Refuel
     if on_ground {
@@ -352,13 +363,6 @@ pub fn tool_system(
     }
 }
 
-pub fn update_player_sprite(mut query: Query<(&mut Transform, &Actor), With<Player>>) {
-    let (mut transform, actor) = query.single_mut();
-    let top_corner_vec = vec3(actor.pos.x as f32, -actor.pos.y as f32, 2.);
-    let center_vec = top_corner_vec + vec3(actor.width as f32 / 2., -8., 0.);
-    transform.translation = center_vec;
-}
-
 #[derive(Resource, Default)]
 pub struct SavingTask(pub Option<Task<()>>);
 
@@ -428,7 +432,6 @@ impl Plugin for PlayerPlugin {
             FixedUpdate,
             (
                 update_player.before(update_actors),
-                update_player_sprite.after(update_actors),
                 tool_system.before(chunk_manager_update),
                 clear_input.after(update_player).after(tool_system),
             )
