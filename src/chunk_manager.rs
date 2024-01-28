@@ -218,80 +218,117 @@ pub fn manager_setup(
 pub fn add_colliders(
     mut commands: Commands,
     chunk_manager: Res<ChunkManager>,
-    chunks: Query<(Entity, &ChunkComponent)>,
-    rigidbodies: Query<(&Transform, &Rigidbody)>,
+    chunks: Query<(Entity, &ChunkComponent), Without<Collider>>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+    has_collider: Res<HasCollider>,
 ) {
-    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+    puffin::profile_function!();
 
-    let mut rects = vec![];
+    let Some(materials) = materials.0.get(materials.1 .0.clone()) else {
+        return;
+    };
 
+    if has_collider.0.is_empty() {
+        return;
+    }
+
+    for (ent, pos) in &chunks {
+        for rect in has_collider.0.iter() {
+            if rect.contains(pos.0) {
+                if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
+                    let collider = chunk.get_collider(materials);
+
+                    if let Some(collider) = collider {
+                        commands
+                            .entity(ent)
+                            .insert(collider)
+                            .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
+                    }
+                }
+
+                break;
+            }
+        }
+    }
+}
+
+pub fn remove_colliders(
+    mut commands: Commands,
+    chunks: Query<(Entity, &ChunkComponent), With<Collider>>,
+    has_collider: Res<HasCollider>,
+) {
+    if has_collider.0.is_empty() {
+        return;
+    }
+
+    for (ent, pos) in &chunks {
+        let mut contains = false;
+        for rect in has_collider.0.iter() {
+            if rect.contains(pos.0) {
+                contains = true;
+                break;
+            }
+        }
+
+        if !contains {
+            //If none contains, remove collider and go to next chunk
+            //Remove collider
+            if let Some(mut entity) = commands.get_entity(ent) {
+                entity.remove::<Collider>();
+                entity.remove::<bevy_rapier2d::prelude::RigidBody>();
+            }
+        }
+    }
+}
+
+pub fn update_has_collider(
+    mut has_collider: ResMut<HasCollider>,
+    rigidbodies: Query<(&Transform, &Rigidbody)>,
+) {
+    has_collider.0 = vec![];
     for (transform, rigidbody) in &rigidbodies {
-        let l = std::f32::consts::SQRT_2 * (rigidbody.width as f32).max(rigidbody.height as f32);
+        let angle = -transform.rotation.to_euler(EulerRot::XYZ).2;
+        let mut center = transform.translation.xy();
+        center.y *= -1.;
+        center += vec2(rigidbody.width as f32, rigidbody.height as f32)
+            .rotate(Vec2::from_angle(angle))
+            / 2.;
 
+        let l = std::f32::consts::SQRT_2 * (rigidbody.width as f32).max(rigidbody.height as f32);
         let angle = std::f32::consts::FRAC_PI_4 + std::f32::consts::PI;
-        let mut top_left = transform.translation.xy();
-        top_left.y *= -1.;
+        let mut top_left = center;
         top_left += vec2(angle.cos(), angle.sin()) * l / 2.;
 
         let angle = std::f32::consts::FRAC_PI_4;
-        let mut down_right = transform.translation.xy();
-        down_right.y *= -1.;
+        let mut down_right = center;
         down_right += vec2(angle.cos(), angle.sin()) * l / 2.;
 
         /*{
             //Some debug visualization
             let mut top_left = top_left;
             top_left.y *= -1.;
-            gizmos.circle_2d(top_left, 10., Color::RED);
+            gizmos.circle_2d(top_left, 5., Color::RED);
 
             let mut down_right = down_right;
             down_right.y *= -1.;
-            gizmos.circle_2d(down_right, 10., Color::BLACK);
+            gizmos.circle_2d(down_right, 5., Color::BLACK);
         }*/
+
+        const LOADING_OFF: f32 = 1.5;
+        top_left -= vec2(CHUNK_LENGHT as f32, CHUNK_LENGHT as f32) * LOADING_OFF;
+        down_right += vec2(CHUNK_LENGHT as f32, CHUNK_LENGHT as f32) * LOADING_OFF;
 
         top_left /= CHUNK_LENGHT as f32;
         down_right /= CHUNK_LENGHT as f32;
 
-        const LOADING_OFF: i32 = 2;
         let bounds_rect = IRect::new(
-            top_left.x as i32 - LOADING_OFF,
-            top_left.y as i32 - LOADING_OFF,
-            down_right.x as i32 + LOADING_OFF,
-            down_right.y as i32 + LOADING_OFF,
+            top_left.x as i32,
+            top_left.y as i32,
+            down_right.x as i32,
+            down_right.y as i32,
         );
 
-        rects.push(bounds_rect);
-    }
-
-    if !rects.is_empty() {
-        'chunks: for (ent, pos) in &chunks {
-            for (i, rect) in rects.iter().enumerate() {
-                //If on bounds continue by breaking this loop
-                if rect.contains(pos.0) {
-                    break;
-                } else if i == rects.len() - 1 {
-                    //If none contains, remove collider and go to next chunk
-                    //Remove collider
-                    if let Some(mut entity) = commands.get_entity(ent) {
-                        entity.remove::<Collider>();
-                        entity.remove::<bevy_rapier2d::prelude::RigidBody>();
-                    }
-                    continue 'chunks;
-                }
-            }
-
-            if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
-                let collider = chunk.get_collider(materials);
-
-                if let Some(collider) = collider {
-                    commands
-                        .entity(ent)
-                        .insert(collider)
-                        .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
-                }
-            }
-        }
+        has_collider.0.push(bounds_rect);
     }
 }
 
@@ -670,6 +707,9 @@ fn clear_render_rect(mut dirty_rects: ResMut<DirtyRects>) {
     dirty_rects.render = HashMap::new();
 }
 
+#[derive(Resource, Default)]
+pub struct HasCollider(pub Vec<IRect>);
+
 pub struct ChunkManagerPlugin;
 impl Plugin for ChunkManagerPlugin {
     fn build(&self, app: &mut App) {
@@ -680,12 +720,19 @@ impl Plugin for ChunkManagerPlugin {
             )
             .add_systems(
                 Update,
-                (update_manager_pos, add_colliders).run_if(in_state(GameState::Game)),
+                (
+                    update_manager_pos,
+                    add_colliders.after(update_has_collider),
+                    remove_colliders.after(update_has_collider),
+                    update_has_collider,
+                )
+                    .run_if(in_state(GameState::Game)),
             )
             .add_systems(
                 PreUpdate,
                 clear_render_rect.run_if(in_state(GameState::Game)),
             )
+            .init_resource::<HasCollider>()
             .init_resource::<ChunkManager>()
             .init_resource::<DirtyRects>();
 

@@ -51,6 +51,7 @@ pub const _CAMERA_SPEED: f32 = 10.;
 pub const PLAYER_LAYER: f32 = 1.;
 pub const PARTICLE_LAYER: f32 = 10.;
 pub const AUTOMATA_LAYER: f32 = 100.;
+pub const RIGIDBODY_LAYER: f32 = 1000.;
 
 //Buttons
 pub const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
