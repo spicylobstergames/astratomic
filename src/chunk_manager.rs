@@ -284,7 +284,6 @@ pub fn remove_colliders(
 pub fn update_has_collider(
     mut has_collider: ResMut<HasCollider>,
     rigidbodies: Query<(&Transform, &Rigidbody)>,
-    mut gizmos: Gizmos,
 ) {
     has_collider.0 = vec![];
     for (transform, rigidbody) in &rigidbodies {
