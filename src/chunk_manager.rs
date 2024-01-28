@@ -304,7 +304,7 @@ pub fn update_has_collider(
         let mut down_right = center;
         down_right += vec2(angle.cos(), angle.sin()) * l / 2.;
 
-        {
+        /*{
             //Some debug visualization
             let mut top_left = top_left;
             top_left.y *= -1.;
@@ -313,7 +313,7 @@ pub fn update_has_collider(
             let mut down_right = down_right;
             down_right.y *= -1.;
             gizmos.circle_2d(down_right, 5., Color::BLACK);
-        }
+        }*/
 
         const LOADING_OFF: f32 = 1.5;
         top_left -= vec2(CHUNK_LENGHT as f32, CHUNK_LENGHT as f32) * LOADING_OFF;
