@@ -34,7 +34,9 @@ pub fn add_rigidbodies(
     handles: Query<(Entity, &RigidbodyHandle), Without<Hydrated>>,
 ) {
     for (ent, handle) in &handles {
-        let image = images.get(handle.0.clone()).unwrap().clone();
+        let Some(image) = images.get(handle.0.clone()) else {
+            continue;
+        };
 
         let rigidbody = Rigidbody {
             atoms: image_atoms(&image),
@@ -48,7 +50,10 @@ pub fn add_rigidbodies(
         commands
             .spawn(collider)
             .insert(rigidbody)
-            .insert(bevy_rapier2d::prelude::RigidBody::Dynamic)
+            .insert(RapierRigidbody::Dynamic)
+            .insert(bevy_rapier2d::prelude::Velocity::zero())
+            .insert(bevy_rapier2d::prelude::ExternalImpulse::default())
+            .insert(ReadMassProperties::default())
             .insert(SpriteBundle {
                 texture: handle.0.clone(),
                 sprite: Sprite {
@@ -64,8 +69,15 @@ pub fn add_rigidbodies(
 }
 
 pub fn update_rigidibodies(
+    mut commands: Commands,
     mut chunk_manager: ResMut<ChunkManager>,
-    mut rigidbodies: Query<(&Transform, &mut Rigidbody)>,
+    mut rigidbodies: Query<(
+        &Transform,
+        &mut Rigidbody,
+        &Velocity,
+        &mut ExternalImpulse,
+        &ReadMassProperties,
+    )>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
     mut dirty_rects: ResMut<DirtyRects>,
 ) {
@@ -73,7 +85,7 @@ pub fn update_rigidibodies(
 
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
-    for (transform, mut rigidbody) in &mut rigidbodies {
+    for (transform, mut rigidbody, velocity, mut external_impulse, mass_prop) in &mut rigidbodies {
         let (width, height) = (rigidbody.width as usize, rigidbody.height as usize);
         let angle = -transform.rotation.to_euler(EulerRot::XYZ).2;
         let mut top_left = transform.translation.xy();
@@ -89,9 +101,36 @@ pub fn update_rigidibodies(
                 update_dirty_rects_3x3(&mut dirty_rects.current, chunk_pos);
 
                 if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                    if materials[atom.id].is_void() {
-                        *atom = Atom::object();
+                    if !materials[atom.id].is_solid() && !materials[atom.id].is_object() {
+                        if materials[atom.id].is_liquid() || materials[atom.id].is_powder() {
+                            let mut point = pos;
+                            point.y *= -1.;
+
+                            let center_of_mass =
+                                mass_prop.local_center_of_mass + transform.translation.xy();
+                            let vel_point =
+                                velocity.linear_velocity_at_point(point, center_of_mass);
+
+                            //Apply impulse to rigidbody
+                            *external_impulse += ExternalImpulse::at_point(
+                                -vel_point * mass_prop.mass * 0.05,
+                                point,
+                                center_of_mass,
+                            );
+
+                            //Displace atom or make it a particle
+                            commands.spawn(Particle {
+                                atom: *atom,
+                                velocity: vel_point,
+                                pos: pos.round(),
+                                ..Default::default()
+                            });
+
+                            update_dirty_rects(&mut dirty_rects.render, chunk_pos);
+                        }
+
                         rigidbody.filled.push(chunk_pos);
+                        *atom = Atom::object();
                     }
                 }
             }
