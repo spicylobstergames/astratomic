@@ -152,13 +152,10 @@ pub fn update_particles(
 
                                 if particle.state == PartState::Normal
                                     && !materials[atom.id].is_void()
-                                    && !materials[atom.id].is_object()
                                 {
                                     //Hit something!
                                     //If our previous pos is free
-                                    if materials[prev_atom.id].is_void()
-                                        || materials[prev_atom.id].is_object()
-                                    {
+                                    if materials[prev_atom.id].is_void() {
                                         particle_send
                                             .try_send(DeferredParticleUpdate {
                                                 remove: Some((
@@ -178,7 +175,6 @@ pub fn update_particles(
                                     break;
                                 } else if particle.state == PartState::Looking
                                     && materials[prev_atom.id].is_void()
-                                    || materials[prev_atom.id].is_object()
                                 {
                                     particle_send
                                         .try_send(DeferredParticleUpdate {

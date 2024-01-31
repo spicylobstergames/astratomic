@@ -278,11 +278,14 @@ pub fn tool_system(
             let n = 6;
 
             for i in 0..=n {
-                let angle = fastrand::f32() * std::f32::consts::TAU;
+                let rand_angle = fastrand::f32() * std::f32::consts::TAU;
 
-                let vec = new_tool_front - bound_slope * 2.
+                let mut vec = new_tool_front - bound_slope * 2.
                     + bound_slope * 2.5 * i as f32 / n as f32
-                    + vec2(angle.cos(), angle.sin());
+                    + vec2(rand_angle.cos(), rand_angle.sin());
+
+                vec += tool_slope * 7. * angle.sin().max(0.);
+
                 let chunk_pos = global_to_chunk(vec.as_ivec2());
                 if let (Some(atom), tool_atom) = (
                     chunk_manager.get_mut_atom(chunk_pos),
@@ -429,7 +432,9 @@ impl Plugin for PlayerPlugin {
             (
                 update_player.before(update_actors),
                 update_player_sprite.after(update_actors),
-                tool_system.before(chunk_manager_update),
+                tool_system
+                    .before(chunk_manager_update)
+                    .before(update_particles),
                 clear_input.after(update_player).after(tool_system),
             )
                 .run_if(in_state(GameState::Game)),

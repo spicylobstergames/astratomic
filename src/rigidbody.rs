@@ -39,13 +39,13 @@ pub fn add_rigidbodies(
         };
 
         let rigidbody = Rigidbody {
-            atoms: image_atoms(&image),
+            atoms: image_atoms(image),
             height: image.height() as u8,
             width: image.width() as u8,
             filled: vec![],
         };
 
-        let collider = get_collider(&image_values(&image), image.width(), image.height()).unwrap();
+        let collider = get_collider(&image_values(image), image.width(), image.height()).unwrap();
 
         commands
             .spawn(collider)
@@ -71,13 +71,7 @@ pub fn add_rigidbodies(
 pub fn update_rigidibodies(
     mut commands: Commands,
     mut chunk_manager: ResMut<ChunkManager>,
-    mut rigidbodies: Query<(
-        &Transform,
-        &mut Rigidbody,
-        &Velocity,
-        &mut ExternalImpulse,
-        &ReadMassProperties,
-    )>,
+    mut rigidbodies: Query<(&Transform, &mut Rigidbody, &Velocity, &ReadMassProperties)>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
     mut dirty_rects: ResMut<DirtyRects>,
 ) {
@@ -85,11 +79,14 @@ pub fn update_rigidibodies(
 
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
-    for (transform, mut rigidbody, velocity, mut external_impulse, mass_prop) in &mut rigidbodies {
+    for (transform, mut rigidbody, velocity, mass_prop) in &mut rigidbodies {
         let (width, height) = (rigidbody.width as usize, rigidbody.height as usize);
         let angle = -transform.rotation.to_euler(EulerRot::XYZ).2;
         let mut top_left = transform.translation.xy();
         top_left.y *= -1.;
+
+        //let mut stop_count = 0;
+        //let mut total = 0;
 
         //This fills the chunks with Object atoms
         for (y, x) in (0..height).cartesian_product(0..width) {
@@ -99,6 +96,7 @@ pub fn update_rigidibodies(
             let rotated_atom = rigidbody.atoms[y * width + x];
             if materials[&rotated_atom].is_solid() {
                 update_dirty_rects_3x3(&mut dirty_rects.current, chunk_pos);
+                //total += 1;
 
                 if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
                     if !materials[atom.id].is_solid() && !materials[atom.id].is_object() {
@@ -111,21 +109,21 @@ pub fn update_rigidibodies(
                             let vel_point =
                                 velocity.linear_velocity_at_point(point, center_of_mass);
 
-                            //Apply impulse to rigidbody
+                            /*Apply impulse to rigidbody
                             *external_impulse += ExternalImpulse::at_point(
-                                -vel_point * mass_prop.mass * 0.05,
+                                vel_point / mass_prop.mass,
                                 point,
                                 center_of_mass,
-                            );
+                            );*/
 
-                            //Displace atom or make it a particle
+                            //Spawn particle
                             commands.spawn(Particle {
                                 atom: *atom,
-                                velocity: vel_point,
+                                velocity: vel_point.normalize_or_zero()
+                                    * (vel_point.length() * mass_prop.mass / 1000.).min(16.),
                                 pos: pos.round(),
                                 ..Default::default()
                             });
-
                             update_dirty_rects(&mut dirty_rects.render, chunk_pos);
                         }
 
@@ -135,6 +133,13 @@ pub fn update_rigidibodies(
                 }
             }
         }
+
+        /*
+        let stop_treshold = total as f32 * STOP_RATE;
+        let new_gravity = ((stop_treshold - stop_count as f32) / stop_treshold).clamp(0., 1.);
+
+        gravity_scale.0 = new_gravity;
+        */
     }
 }
 
@@ -221,7 +226,9 @@ impl Plugin for RigidbodyPlugin {
             .add_systems(
                 FixedUpdate,
                 (
-                    update_rigidibodies.before(chunk_manager_update),
+                    update_rigidibodies
+                        .before(chunk_manager_update)
+                        .before(update_particles),
                     unfill_rigidbodies.after(chunk_manager_update),
                 )
                     .run_if(in_state(GameState::Game)),

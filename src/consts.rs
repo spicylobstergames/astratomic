@@ -49,11 +49,14 @@ pub const _CAMERA_SPEED: f32 = 10.;
 
 //Layers
 pub const PLAYER_LAYER: f32 = 1.;
-pub const AUTOMATA_LAYER: f32 = 10.;
-pub const RIGIDBODY_LAYER: f32 = 100.;
-pub const PARTICLE_LAYER: f32 = 1000.;
+pub const PARTICLE_LAYER: f32 = 10.;
+pub const AUTOMATA_LAYER: f32 = 100.;
+pub const RIGIDBODY_LAYER: f32 = 1000.;
 
 //Buttons
 pub const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);
 pub const HOVERED_BUTTON: Color = Color::rgb(0.25, 0.25, 0.25);
 pub const PRESSED_BUTTON: Color = Color::rgb(0.35, 0.75, 0.35);
+
+//How much the rigidbody needs to be submerged to totally cut of gravity
+//pub const STOP_RATE: f32 = 0.05;
