@@ -49,6 +49,8 @@ mod prelude {
 
     pub use crate::materials::Material;
     pub use bevy_egui::EguiContext;
+
+    pub use bevy_rapier2d::prelude::RigidBody as RapierRigidbody;
 }
 
 use prelude::*;
@@ -72,7 +74,7 @@ fn main() {
             RigidbodyPlugin,
         ))
         .add_plugins((
-            RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(6.),
+            RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.),
             MenuPlugin,
         ))
         .add_systems(Startup, setup);
