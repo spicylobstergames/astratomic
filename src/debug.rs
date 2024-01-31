@@ -209,6 +209,71 @@ fn rect_inner(size: Vec2) -> [Vec2; 4] {
     [tl, tr, br, bl]
 }
 
+pub fn grab_rigidbodies(
+    mut commands: Commands,
+    rigidbodies: Query<(&mut Transform, Entity, &Collider), With<Rigidbody>>,
+    mut transforms: Query<&mut Transform, (With<ImpulseJoint>, Without<Rigidbody>)>,
+    window: Query<&Window>,
+    camera_q: Query<(&Camera, &GlobalTransform)>,
+    mut grabbed: ResMut<Grabbed>,
+    input: Res<Input<KeyCode>>,
+) {
+    let (camera, camera_transform) = camera_q.single();
+    let window = window.single();
+
+    if input.pressed(KeyCode::R) {
+        if let Some(world_position) = window
+            .cursor_position()
+            .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
+            .map(|ray| ray.origin.truncate())
+        {
+            if let Some(grabbed_ent) = grabbed.0 {
+                //Update pos
+                let mut transform = transforms.get_mut(grabbed_ent).unwrap();
+                transform.translation.x = world_position.x;
+                transform.translation.y = world_position.y;
+            } else {
+                //Add joint
+                for (transform, entity, collider) in &rigidbodies {
+                    if collider.contains_point(
+                        transform.translation.xy(),
+                        transform.rotation.to_euler(EulerRot::XYZ).2,
+                        world_position,
+                    ) {
+                        let anchor = (world_position - transform.translation.xy()).rotate(
+                            Vec2::from_angle(-transform.rotation.to_euler(EulerRot::XYZ).2),
+                        );
+                        let joint = RevoluteJointBuilder::new()
+                            .local_anchor1(anchor)
+                            .local_anchor2(Vec2::ZERO);
+
+                        let move_ent = commands
+                            .spawn(RigidBody::KinematicPositionBased)
+                            .insert(ImpulseJoint::new(entity, joint))
+                            .insert(TransformBundle::from_transform(Transform::from_xyz(
+                                world_position.x,
+                                world_position.y,
+                                0.,
+                            )))
+                            .id();
+
+                        grabbed.0 = Some(move_ent);
+
+                        break;
+                    }
+                }
+            }
+        }
+    } else {
+        if let Some(ent) = grabbed.0.take() {
+            commands.entity(ent).despawn_recursive()
+        }
+    }
+}
+
+#[derive(Resource, Default)]
+pub struct Grabbed(Option<Entity>);
+
 pub struct DebugPlugin;
 impl Plugin for DebugPlugin {
     fn build(&self, app: &mut App) {
@@ -219,6 +284,7 @@ impl Plugin for DebugPlugin {
                 brush.after(chunk_manager_update),
                 render_actors.after(update_actors),
                 prev_mpos.after(brush),
+                grab_rigidbodies,
                 //_camera
             )
                 .run_if(in_state(GameState::Game)),
@@ -227,6 +293,7 @@ impl Plugin for DebugPlugin {
         .add_plugins(RapierDebugRenderPlugin::default())
         //Frame on console
         .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
+        .init_resource::<Grabbed>()
         .init_resource::<PreviousMousePos>();
     }
 }
