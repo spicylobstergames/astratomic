@@ -87,7 +87,7 @@ pub fn update_rigidibodies(
 
         //let mut stop_count = 0;
         //let mut total = 0;
-
+      
         //This fills the chunks with Object atoms
         for (y, x) in (0..height).cartesian_product(0..width) {
             let pos = top_left + vec2(x as f32, y as f32).rotate(Vec2::from_angle(angle));
@@ -133,7 +133,7 @@ pub fn update_rigidibodies(
                 }
             }
         }
-
+      
         /*
         let stop_treshold = total as f32 * STOP_RATE;
         let new_gravity = ((stop_treshold - stop_count as f32) / stop_treshold).clamp(0., 1.);

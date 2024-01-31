@@ -291,7 +291,7 @@ impl Plugin for DebugPlugin {
         .add_plugins(RapierDebugRenderPlugin::default())
         //Frame on console
         .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))
-        .init_resource::<PreviousMousePos>()
-        .init_resource::<Grabbed>();
+        .init_resource::<Grabbed>()
+        .init_resource::<PreviousMousePos>();
     }
 }
