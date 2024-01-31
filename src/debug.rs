@@ -264,10 +264,8 @@ pub fn grab_rigidbodies(
                 }
             }
         }
-    } else {
-        if let Some(ent) = grabbed.0.take() {
-            commands.entity(ent).despawn_recursive()
-        }
+    } else if let Some(ent) = grabbed.0.take() {
+        commands.entity(ent).despawn_recursive()
     }
 }
 
