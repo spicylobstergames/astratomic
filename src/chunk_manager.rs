@@ -327,6 +327,7 @@ pub fn update_has_collider(
             down_right.x as i32,
             down_right.y as i32,
         );
+        
         has_collider.0.push(bounds_rect);
     }
 }

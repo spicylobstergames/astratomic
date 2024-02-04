@@ -257,8 +257,6 @@ pub fn update_chunk_groups<'a>(
         }
 
         scope.spawn(async move {
-            puffin::profile_scope!("Get chunk group");
-
             //If not a center chunk in our current update step, or we don't have the chunk, continue
             let same_x = (chunk_pos.x + x_toff + manager_pos.x.abs() % 2) % 2 == 0;
             let same_y = (chunk_pos.y + y_toff + manager_pos.y.abs() % 2) % 2 == 0;
