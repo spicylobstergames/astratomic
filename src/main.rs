@@ -49,6 +49,8 @@ mod prelude {
 
     pub use crate::materials::Material;
     pub use bevy_egui::EguiContext;
+
+    pub use bevy_rapier2d::prelude::RigidBody as RapierRigidbody;
 }
 
 use prelude::*;

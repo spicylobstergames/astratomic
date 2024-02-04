@@ -302,7 +302,9 @@ impl Plugin for ActorsPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                fill_actors.before(chunk_manager_update),
+                fill_actors
+                    .before(chunk_manager_update)
+                    .before(update_particles),
                 unfill_actors.after(chunk_manager_update),
                 update_actors.after(unfill_actors),
             )
