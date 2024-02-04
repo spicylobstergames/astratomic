@@ -120,7 +120,7 @@ pub fn update_rigidibodies(
                             commands.spawn(Particle {
                                 atom: *atom,
                                 velocity: vel_point.normalize_or_zero()
-                                    * (vel_point.length() * mass_prop.mass / 1000.).min(16.),
+                                    * vel_point.length().clamp(0., 8.),
                                 pos: pos.round(),
                                 ..Default::default()
                             });
