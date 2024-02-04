@@ -56,7 +56,7 @@ pub const RIGIDBODY_LAYER: f32 = 1000.;
 
 //Rapier2d collision groups
 pub const RIGIDBODY_GROUP: Group = Group::GROUP_1;
-pub const WORLD_GROUP: Group = Group::GROUP_2;
+//pub const WORLD_GROUP: Group = Group::GROUP_2;
 pub const ACTOR_GROUP: Group = Group::GROUP_3;
 
 //Buttons

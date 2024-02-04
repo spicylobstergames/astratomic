@@ -17,7 +17,7 @@ pub fn fill_actors(
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     for (actor, transform) in actors.iter() {
-        let actor_pos = transform.world_pos(&actor).as_ivec2();
+        let actor_pos = transform.world_pos(actor).as_ivec2();
 
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
@@ -42,7 +42,7 @@ pub fn unfill_actors(
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     for (actor, transform) in actors.iter() {
-        let actor_pos = transform.world_pos(&actor).as_ivec2();
+        let actor_pos = transform.world_pos(actor).as_ivec2();
 
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {

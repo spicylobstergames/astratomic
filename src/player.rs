@@ -437,7 +437,6 @@ impl Plugin for PlayerPlugin {
             FixedUpdate,
             (
                 update_player.before(update_actors),
-                update_player_sprite.after(update_actors),
                 tool_system
                     .before(chunk_manager_update)
                     .before(update_particles),
