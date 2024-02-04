@@ -17,7 +17,7 @@ pub fn fill_actors(
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     for (actor, transform) in actors.iter() {
-        let actor_pos = transform.world_pos().as_ivec2();
+        let actor_pos = transform.world_pos(&actor).as_ivec2();
 
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
@@ -42,7 +42,7 @@ pub fn unfill_actors(
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     for (actor, transform) in actors.iter() {
-        let actor_pos = transform.world_pos().as_ivec2();
+        let actor_pos = transform.world_pos(&actor).as_ivec2();
 
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
@@ -86,7 +86,7 @@ pub fn update_actors(
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
     for (mut actor, mut transform) in actors.iter_mut() {
-        let mut actor_pos = transform.world_pos().as_ivec2();
+        let mut actor_pos = transform.world_pos(&actor).as_ivec2();
         let mut prev = actor_pos;
         for v in Line::new(actor_pos, actor.vel.as_ivec2()) {
             let move_hor = match (prev.x != v.x, prev.y != v.y) {
@@ -181,7 +181,7 @@ pub fn update_actors(
             prev = v;
         }
 
-        transform.update_world_pos(&actor_pos.as_vec2())
+        transform.update_world_pos(&actor, &actor_pos.as_vec2())
     }
 }
 
@@ -271,26 +271,28 @@ pub fn move_y(
 }
 
 pub trait WorldPos {
-    fn world_pos(&self) -> Vec2;
+    fn world_pos(&self, actor: &Actor) -> Vec2;
 }
 
 impl WorldPos for Transform {
-    fn world_pos(&self) -> Vec2 {
+    fn world_pos(&self, actor: &Actor) -> Vec2 {
         let mut pos = self.translation.xy();
         pos.y *= -1.;
+
+        pos -= vec2(actor.width as f32, actor.height as f32) / 2.;
 
         pos
     }
 }
 
 pub trait UpdateWorldPos {
-    fn update_world_pos(&mut self, world_pos: &Vec2);
+    fn update_world_pos(&mut self, actor: &Actor, world_pos: &Vec2);
 }
 
 impl UpdateWorldPos for Transform {
-    fn update_world_pos(&mut self, world_pos: &Vec2) {
-        self.translation.x = world_pos.x;
-        self.translation.y = -world_pos.y;
+    fn update_world_pos(&mut self, actor: &Actor, world_pos: &Vec2) {
+        self.translation.x = world_pos.x + actor.width as f32 / 2.;
+        self.translation.y = -world_pos.y - actor.height as f32 / 2.;
     }
 }
 

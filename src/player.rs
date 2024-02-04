@@ -118,6 +118,8 @@ pub fn player_setup(
                 player_actor.width as f32 / 2.,
                 player_actor.height as f32 / 2.,
             ),
+            SolverGroups::new(ACTOR_GROUP, RIGIDBODY_GROUP),
+            CollisionGroups::new(Group::NONE, RIGIDBODY_GROUP),
         ))
         .add_child(tool_ent);
 }
@@ -152,7 +154,7 @@ pub fn update_player(
     let on_ground = on_ground(
         &chunk_manager,
         &actor,
-        &transform.world_pos().as_ivec2(),
+        &transform.world_pos(&actor).as_ivec2(),
         materials,
     );
 

@@ -130,6 +130,8 @@ pub fn render_dirty_rects(mut commands: Commands, dirty_rects: Res<DirtyRects>) 
 
 fn render_actors(mut commands: Commands, actors: Query<(&Actor, &Transform)>) {
     for (actor, transform) in actors.iter() {
+        let pos = transform.world_pos(&actor);
+
         commands
             .spawn(SpriteBundle {
                 sprite: Sprite {
@@ -138,7 +140,7 @@ fn render_actors(mut commands: Commands, actors: Query<(&Actor, &Transform)>) {
                     anchor: Anchor::TopLeft,
                     ..default()
                 },
-                transform: *transform,
+                transform: Transform::from_xyz(pos.x, -pos.y, 1.),
                 ..default()
             })
             .insert(DeleteImage);

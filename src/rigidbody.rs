@@ -90,6 +90,10 @@ pub fn add_rigidbodies(
             .spawn(collider)
             .insert(rigidbody)
             .insert(bevy_rapier2d::prelude::RigidBody::Dynamic)
+            .insert(CollisionGroups::new(
+                RIGIDBODY_GROUP,
+                ACTOR_GROUP.union(WORLD_GROUP),
+            ))
             .insert(TransformBundle::default());
 
         commands.entity(ent).insert(Hydrated);

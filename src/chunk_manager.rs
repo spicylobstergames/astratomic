@@ -288,6 +288,7 @@ pub fn add_colliders(
                     commands
                         .entity(ent)
                         .insert(collider)
+                        .insert(CollisionGroups::new(WORLD_GROUP, RIGIDBODY_GROUP))
                         .insert(bevy_rapier2d::prelude::RigidBody::Fixed);
                 }
             }
@@ -509,7 +510,7 @@ pub fn update_manager_pos(
     mut commands: Commands,
     chunk_textures: Query<Entity, With<ChunksParent>>,
     image_entities: Query<(&Parent, Entity, &Handle<Image>)>,
-    player: Query<&Transform, With<Player>>,
+    player: Query<(&Actor, &Transform), With<Player>>,
     resources: (
         ResMut<SavingTask>,
         ResMut<ChunkManager>,
@@ -519,7 +520,8 @@ pub fn update_manager_pos(
 ) {
     let (mut saving_task, mut chunk_manager, mut images) = resources;
 
-    let mut player_pos = player.single().world_pos().as_ivec2();
+    let (actor, transform) = player.single();
+    let mut player_pos = transform.world_pos(actor).as_ivec2();
     if player_pos.x < 0 {
         player_pos.x -= CHUNK_LENGHT as i32
     }
