@@ -4,23 +4,24 @@ use crate::prelude::*;
 pub struct Actor {
     pub width: u8,
     pub height: u8,
-    pub pos: IVec2,
     pub vel: Vec2,
 }
 
 //Called before simulations
 pub fn fill_actors(
     mut chunk_manager: ResMut<ChunkManager>,
-    actors: Query<&Actor>,
+    actors: Query<(&Actor, &Transform)>,
     mut dirty_rects: ResMut<DirtyRects>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
-    for actor in actors.iter() {
+    for (actor, transform) in actors.iter() {
+        let actor_pos = transform.world_pos(actor).as_ivec2();
+
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
-                let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
+                let pos = global_to_chunk(actor_pos + ivec2(x_off, y_off));
                 if let Some(atom) = chunk_manager.get_mut_atom(pos) {
                     if materials[atom.id].is_void() {
                         *atom = Atom::object();
@@ -35,15 +36,17 @@ pub fn fill_actors(
 //Called after simulation, before actor update
 pub fn unfill_actors(
     mut chunk_manager: ResMut<ChunkManager>,
-    actors: Query<&Actor>,
+    actors: Query<(&Actor, &Transform)>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
-    for actor in actors.iter() {
+    for (actor, transform) in actors.iter() {
+        let actor_pos = transform.world_pos(actor).as_ivec2();
+
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
-                let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
+                let pos = global_to_chunk(actor_pos + ivec2(x_off, y_off));
                 if let Some(atom) = chunk_manager.get_mut_atom(pos) {
                     if materials[atom.id].is_object() {
                         *atom = Atom::default();
@@ -54,9 +57,14 @@ pub fn unfill_actors(
     }
 }
 
-pub fn on_ground(chunk_manager: &ChunkManager, actor: &Actor, materials: &Materials) -> bool {
+pub fn on_ground(
+    chunk_manager: &ChunkManager,
+    actor: &Actor,
+    pos: &IVec2,
+    materials: &Materials,
+) -> bool {
     for x_off in 0..actor.width {
-        let chunk_pos = global_to_chunk(actor.pos + ivec2(x_off as i32, actor.height as i32));
+        let chunk_pos = global_to_chunk(*pos + ivec2(x_off as i32, actor.height as i32));
 
         if let Some(atom) = chunk_manager.get_atom(&chunk_pos) {
             if materials[atom].is_powder() || materials[atom].is_solid() {
@@ -72,14 +80,15 @@ pub fn on_ground(chunk_manager: &ChunkManager, actor: &Actor, materials: &Materi
 
 pub fn update_actors(
     mut chunk_manager: ResMut<ChunkManager>,
-    mut actors: Query<&mut Actor>,
+    mut actors: Query<(&mut Actor, &mut Transform)>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let materials = materials.0.get(materials.1 .0.clone()).unwrap();
 
-    for mut actor in actors.iter_mut() {
-        let mut prev = actor.pos;
-        for v in Line::new(actor.pos, actor.vel.as_ivec2()) {
+    for (mut actor, mut transform) in actors.iter_mut() {
+        let mut actor_pos = transform.world_pos(&actor).as_ivec2();
+        let mut prev = actor_pos;
+        for v in Line::new(actor_pos, actor.vel.as_ivec2()) {
             let move_hor = match (prev.x != v.x, prev.y != v.y) {
                 (true, false) => true,
                 (false, true) => false,
@@ -91,23 +100,31 @@ pub fn update_actors(
                 let moved_x = move_x(
                     &mut chunk_manager,
                     &mut actor,
+                    &mut actor_pos,
                     (v.x - prev.x).signum(),
                     materials,
                 );
-                if on_ground(&chunk_manager, &actor, materials) {
-                    let starting_y = actor.pos.y;
+                if on_ground(&chunk_manager, &actor, &actor_pos, materials) {
+                    let starting_y = actor_pos.y;
                     match moved_x {
                         //If we can't move to the left or right
                         //Check if we can get up a stair-like structure
                         false => {
                             for i in 1..=UP_WALK_HEIGHT {
-                                let moved_y = move_y(&mut chunk_manager, &mut actor, -1, materials);
+                                let moved_y = move_y(
+                                    &mut chunk_manager,
+                                    &mut actor,
+                                    &mut actor_pos,
+                                    -1,
+                                    materials,
+                                );
                                 //Abort if we couldn't move up, or if we moved up but couldn't move sideways on the last step
                                 if !moved_y
                                     || i == UP_WALK_HEIGHT
                                         && !move_x(
                                             &mut chunk_manager,
                                             &mut actor,
+                                            &mut actor_pos,
                                             (v.x - prev.x).signum(),
                                             materials,
                                         )
@@ -115,6 +132,7 @@ pub fn update_actors(
                                     abort_stair(
                                         &mut chunk_manager,
                                         &mut actor,
+                                        &mut actor_pos,
                                         starting_y,
                                         1,
                                         materials,
@@ -127,14 +145,20 @@ pub fn update_actors(
                         //Check if we can snap back to the ground
                         true => {
                             for i in 1..=DOWN_WALK_HEIGHT {
-                                if !move_y(&mut chunk_manager, &mut actor, 1, materials)
-                                    && on_ground(&chunk_manager, &actor, materials)
+                                if !move_y(
+                                    &mut chunk_manager,
+                                    &mut actor,
+                                    &mut actor_pos,
+                                    1,
+                                    materials,
+                                ) && on_ground(&chunk_manager, &actor, &actor_pos, materials)
                                 {
                                     break;
                                 } else if i == DOWN_WALK_HEIGHT {
                                     abort_stair(
                                         &mut chunk_manager,
                                         &mut actor,
+                                        &mut actor_pos,
                                         starting_y,
                                         -1,
                                         materials,
@@ -148,6 +172,7 @@ pub fn update_actors(
                 move_y(
                     &mut chunk_manager,
                     &mut actor,
+                    &mut actor_pos,
                     (v.y - prev.y).signum(),
                     materials,
                 );
@@ -155,30 +180,34 @@ pub fn update_actors(
 
             prev = v;
         }
+
+        transform.update_world_pos(&actor, &actor_pos.as_vec2())
     }
 }
 
 pub fn abort_stair(
     chunk_manager: &mut ChunkManager,
     actor: &mut Actor,
+    actor_pos: &mut IVec2,
     starting_y: i32,
     dir: i32,
     materials: &Materials,
 ) {
-    for _ in 0..(starting_y - actor.pos.y) {
-        move_y(chunk_manager, actor, dir, materials);
+    for _ in 0..(starting_y - actor_pos.y) {
+        move_y(chunk_manager, actor, actor_pos, dir, materials);
     }
 }
 
 pub fn move_x(
     chunk_manager: &mut ChunkManager,
     actor: &mut Actor,
+    actor_pos: &mut IVec2,
     dir: i32,
     materials: &Materials,
 ) -> bool {
     //Check if we can move
     for y_off in 0..actor.height as i32 {
-        let pos = actor.pos
+        let pos = *actor_pos
             + if dir > 0 {
                 // Moving right
                 ivec2(actor.width as i32, y_off)
@@ -200,7 +229,7 @@ pub fn move_x(
         }
     }
 
-    actor.pos.x += dir;
+    actor_pos.x += dir;
 
     true
 }
@@ -208,12 +237,13 @@ pub fn move_x(
 pub fn move_y(
     chunk_manager: &mut ChunkManager,
     actor: &mut Actor,
+    actor_pos: &mut IVec2,
     dir: i32,
     materials: &Materials,
 ) -> bool {
     //Check if we can move
     for x_off in 0..actor.width as i32 {
-        let pos = actor.pos
+        let pos = *actor_pos
             + if dir > 0 {
                 // Moving down
                 ivec2(x_off, actor.height as i32)
@@ -235,9 +265,35 @@ pub fn move_y(
         }
     }
 
-    actor.pos.y += dir;
+    actor_pos.y += dir;
 
     true
+}
+
+pub trait WorldPos {
+    fn world_pos(&self, actor: &Actor) -> Vec2;
+}
+
+impl WorldPos for Transform {
+    fn world_pos(&self, actor: &Actor) -> Vec2 {
+        let mut pos = self.translation.xy();
+        pos.y *= -1.;
+
+        pos -= vec2(actor.width as f32, actor.height as f32) / 2.;
+
+        pos
+    }
+}
+
+pub trait UpdateWorldPos {
+    fn update_world_pos(&mut self, actor: &Actor, world_pos: &Vec2);
+}
+
+impl UpdateWorldPos for Transform {
+    fn update_world_pos(&mut self, actor: &Actor, world_pos: &Vec2) {
+        self.translation.x = world_pos.x + actor.width as f32 / 2.;
+        self.translation.y = -world_pos.y - actor.height as f32 / 2.;
+    }
 }
 
 pub struct ActorsPlugin;

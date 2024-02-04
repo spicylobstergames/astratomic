@@ -1,4 +1,5 @@
 use bevy::prelude::Color;
+use bevy_rapier2d::geometry::Group;
 
 // Chunk Length consts
 // Chunk length MUST be divisible by 4
@@ -52,6 +53,11 @@ pub const PLAYER_LAYER: f32 = 1.;
 pub const PARTICLE_LAYER: f32 = 10.;
 pub const AUTOMATA_LAYER: f32 = 100.;
 pub const RIGIDBODY_LAYER: f32 = 1000.;
+
+//Rapier2d collision groups
+pub const RIGIDBODY_GROUP: Group = Group::GROUP_1;
+//pub const WORLD_GROUP: Group = Group::GROUP_2;
+pub const ACTOR_GROUP: Group = Group::GROUP_3;
 
 //Buttons
 pub const NORMAL_BUTTON: Color = Color::rgb(0.15, 0.15, 0.15);

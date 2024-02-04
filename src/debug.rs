@@ -162,11 +162,12 @@ pub fn _delete_image(mut commands: Commands, debug_images: Query<Entity, With<De
 #[derive(Component)]
 pub struct DeleteImage;
 
-fn render_actors(mut gizmos: Gizmos, actors: Query<&Actor>) {
-    for actor in actors.iter() {
+fn render_actors(mut gizmos: Gizmos, actors: Query<(&Transform, &Actor)>) {
+    for (transform, actor) in actors.iter() {
+        let pos = transform.translation.xy();
+
         gizmos.rect_2d(
-            vec2(actor.pos.x as f32, -actor.pos.y as f32)
-                + vec2(actor.width as f32, -(actor.height as f32)) / 2.,
+            pos + vec2(actor.width as f32, -(actor.height as f32)) / 2.,
             0.,
             Vec2::new(actor.width as f32, actor.height as f32),
             Color::rgba(0.75, 0.25, 0.25, 0.2),
