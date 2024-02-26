@@ -233,7 +233,7 @@ pub fn tool_system(
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite), With<Tool>>,
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
-    querys: (Query<&Window>, Query<(&mut TextureAtlas, &Player)>),
+    querys: (Query<&Window>, Query<(&mut Sprite, &Player)>),
     resources: (ResMut<ChunkManager>, ResMut<DirtyRects>, Res<Inputs>),
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
@@ -379,10 +379,10 @@ pub fn get_input(
     }
 
     //Movement
-    if keys.pressed(KeyCode::A) {
+    if keys.pressed(KeyCode::KeyA) {
         inputs.left = 1.;
     }
-    if keys.pressed(KeyCode::D) {
+    if keys.pressed(KeyCode::KeyD) {
         inputs.right = 1.;
     }
 
@@ -395,13 +395,13 @@ pub fn get_input(
     }
 
     //Numbers, to select atoms
-    if keys.just_pressed(KeyCode::Key1) {
+    if keys.just_pressed(KeyCode::Digit1) {
         inputs.numbers[0] = true;
-    } else if keys.just_pressed(KeyCode::Key2) {
+    } else if keys.just_pressed(KeyCode::Digit2) {
         inputs.numbers[1] = true;
-    } else if keys.just_pressed(KeyCode::Key3) {
+    } else if keys.just_pressed(KeyCode::Digit3) {
         inputs.numbers[2] = true;
-    } else if keys.just_pressed(KeyCode::Key4) {
+    } else if keys.just_pressed(KeyCode::Digit4) {
         inputs.numbers[3] = true;
     }
 }

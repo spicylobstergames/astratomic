@@ -1,4 +1,4 @@
-use bevy::render::render_resource::*;
+use bevy::render::{render_asset::RenderAssetUsages, render_resource::*};
 use std::collections::HashSet;
 
 use crate::{prelude::*, rigidbody};
@@ -69,6 +69,7 @@ impl Chunk {
             TextureDimension::D2,
             vec![0; CHUNK_LENGHT.pow(2) * 4],
             TextureFormat::Rgba8UnormSrgb,
+            RenderAssetUsages::RENDER_WORLD
         )
     }
 

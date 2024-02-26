@@ -29,8 +29,8 @@ rotsprite = "0.1"
 
 egui                = "0.25"
 bevy_egui           = "0.25"
-puffin              = "0.19"
-puffin_egui         = "0.25"
+puffin              = "0.18"
+puffin_egui         = "0.26"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy_dylib = "0.13"

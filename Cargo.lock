@@ -287,7 +287,7 @@ dependencies = [
  "fastrand 2.0.1",
  "geo",
  "itertools 0.12.0",
- "puffin",
+ "puffin 0.18.1",
  "puffin_egui",
  "rand",
  "ron",
@@ -4433,6 +4433,18 @@ checksum = "d135ede8821cf6376eb7a64148901e1690b788c11ae94dc297ae917dbc91dc0e"
 
 [[package]]
 name = "puffin"
+version = "0.18.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02330f795caafc2007510f742624c10aa813b8c3097c77ff344b1b86eb6be846"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "cfg-if",
+ "once_cell",
+]
+
+[[package]]
+name = "puffin"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9f76ad4bb049fded4e572df72cbb6381ff5d1f41f85c3a04b56e4eca287a02f"
@@ -4449,16 +4461,16 @@ dependencies = [
 
 [[package]]
 name = "puffin_egui"
-version = "0.25.0"
+version = "0.26.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c967110bf23431eb332ef2290419825f5aa915192ff26b56c294019cab3399d"
+checksum = "49058d85ba61f403263d90fe72df1da7f60522a2fcd3a44a4f6acd5459106081"
 dependencies = [
- "egui 0.25.0",
+ "egui 0.26.2",
  "indexmap",
  "natord",
  "once_cell",
  "parking_lot",
- "puffin",
+ "puffin 0.19.0",
  "time",
  "vec1",
  "web-time",
