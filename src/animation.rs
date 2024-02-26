@@ -14,7 +14,7 @@ fn animate_sprite(
     mut query: Query<(
         &AnimationIndices,
         &mut AnimationTimer,
-        &mut TextureAtlasSprite,
+        &mut TextureAtlas,
     )>,
 ) {
     for (indices, mut timer, mut sprite) in &mut query {

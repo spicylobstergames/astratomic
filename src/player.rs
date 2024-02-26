@@ -45,7 +45,7 @@ pub struct ToolFront;
 pub fn player_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     let pos: IVec2;
     if let Ok(file) = File::open("assets/world/player") {
@@ -99,8 +99,8 @@ pub fn player_setup(
             player_actor.clone(),
             Player::default(),
             SpriteSheetBundle {
-                texture_atlas: player_atlas_handle,
-                sprite: TextureAtlasSprite::new(animation_indices.first),
+                atlas: player_atlas_handle,
+                sprite: TextureAtlas::new(animation_indices.first),
                 global_transform: player_transform,
                 ..default()
             },
@@ -233,7 +233,7 @@ pub fn tool_system(
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite), With<Tool>>,
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
-    querys: (Query<&Window>, Query<(&mut TextureAtlasSprite, &Player)>),
+    querys: (Query<&Window>, Query<(&mut TextureAtlas, &Player)>),
     resources: (ResMut<ChunkManager>, ResMut<DirtyRects>, Res<Inputs>),
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
@@ -366,8 +366,8 @@ pub fn update_player_sprite(mut query: Query<(&mut Transform, &Actor), With<Play
 pub struct SavingTask(pub Option<Task<()>>);
 
 pub fn get_input(
-    keys: Res<Input<KeyCode>>,
-    mouse_buttons: Res<Input<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut inputs: ResMut<Inputs>,
 ) {
     //Jump
