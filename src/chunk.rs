@@ -69,7 +69,7 @@ impl Chunk {
             TextureDimension::D2,
             vec![0; CHUNK_LENGHT.pow(2) * 4],
             TextureFormat::Rgba8UnormSrgb,
-            RenderAssetUsages::RENDER_WORLD
+            RenderAssetUsages::RENDER_WORLD,
         )
     }
 

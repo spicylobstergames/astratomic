@@ -66,10 +66,13 @@ pub fn player_setup(
     };
 
     let player_handle = asset_server.load("player/player_sheet.png");
-    let player_atlas =
-        TextureAtlas::from_grid(player_handle, Vec2::new(24.0, 24.0), 8, 5, None, None);
-    let player_atlas_handle = texture_atlases.add(player_atlas);
     let animation_indices = AnimationIndices { first: 0, last: 1 };
+    let player_atlas_layout =
+        TextureAtlasLayout::from_grid(Vec2::new(24.0, 24.0), 8, 5, None, None);
+    let atlas = TextureAtlas {
+        index: animation_indices.first,
+        layout: texture_atlases.add(player_atlas_layout),
+    };
     let player_transform = GlobalTransform::from_xyz(5. * 3., -8. * 3., PLAYER_LAYER);
 
     let tool_handle = asset_server.load("player/player_tool.png");
@@ -99,9 +102,9 @@ pub fn player_setup(
             player_actor.clone(),
             Player::default(),
             SpriteSheetBundle {
-                atlas: player_atlas_handle,
-                sprite: TextureAtlas::new(animation_indices.first),
+                atlas,
                 global_transform: player_transform,
+                texture: player_handle,
                 ..default()
             },
             animation_indices,
