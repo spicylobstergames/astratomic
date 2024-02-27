@@ -257,7 +257,7 @@ dependencies = [
  "fastrand 2.0.1",
  "geo",
  "itertools 0.12.1",
- "puffin 0.18.1",
+ "puffin",
  "puffin_egui",
  "rand",
  "ron",
@@ -3903,18 +3903,6 @@ checksum = "43d84d1d7a6ac92673717f9f6d1518374ef257669c24ebc5ac25d5033828be58"
 
 [[package]]
 name = "puffin"
-version = "0.18.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02330f795caafc2007510f742624c10aa813b8c3097c77ff344b1b86eb6be846"
-dependencies = [
- "anyhow",
- "byteorder",
- "cfg-if",
- "once_cell",
-]
-
-[[package]]
-name = "puffin"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9f76ad4bb049fded4e572df72cbb6381ff5d1f41f85c3a04b56e4eca287a02f"
@@ -3940,7 +3928,7 @@ dependencies = [
  "natord",
  "once_cell",
  "parking_lot",
- "puffin 0.19.0",
+ "puffin",
  "time",
  "vec1",
  "web-time",
