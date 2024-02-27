@@ -45,7 +45,7 @@ pub struct ToolFront;
 pub fn player_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
-    mut texture_atlases: ResMut<Assets<TextureAtlas>>,
+    mut texture_atlases: ResMut<Assets<TextureAtlasLayout>>,
 ) {
     let pos: IVec2;
     if let Ok(file) = File::open("assets/world/player") {
@@ -66,10 +66,13 @@ pub fn player_setup(
     };
 
     let player_handle = asset_server.load("player/player_sheet.png");
-    let player_atlas =
-        TextureAtlas::from_grid(player_handle, Vec2::new(24.0, 24.0), 8, 5, None, None);
-    let player_atlas_handle = texture_atlases.add(player_atlas);
     let animation_indices = AnimationIndices { first: 0, last: 1 };
+    let player_atlas_layout =
+        TextureAtlasLayout::from_grid(Vec2::new(24.0, 24.0), 8, 5, None, None);
+    let atlas = TextureAtlas {
+        index: animation_indices.first,
+        layout: texture_atlases.add(player_atlas_layout),
+    };
     let player_transform = GlobalTransform::from_xyz(5. * 3., -8. * 3., PLAYER_LAYER);
 
     let tool_handle = asset_server.load("player/player_tool.png");
@@ -99,9 +102,9 @@ pub fn player_setup(
             player_actor.clone(),
             Player::default(),
             SpriteSheetBundle {
-                texture_atlas: player_atlas_handle,
-                sprite: TextureAtlasSprite::new(animation_indices.first),
+                atlas,
                 global_transform: player_transform,
+                texture: player_handle,
                 ..default()
             },
             animation_indices,
@@ -233,7 +236,7 @@ pub fn tool_system(
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite), With<Tool>>,
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
-    querys: (Query<&Window>, Query<(&mut TextureAtlasSprite, &Player)>),
+    querys: (Query<&Window>, Query<(&mut Sprite, &Player), Without<Tool>>),
     resources: (ResMut<ChunkManager>, ResMut<DirtyRects>, Res<Inputs>),
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
@@ -366,8 +369,8 @@ pub fn update_player_sprite(mut query: Query<(&mut Transform, &Actor), With<Play
 pub struct SavingTask(pub Option<Task<()>>);
 
 pub fn get_input(
-    keys: Res<Input<KeyCode>>,
-    mouse_buttons: Res<Input<MouseButton>>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut inputs: ResMut<Inputs>,
 ) {
     //Jump
@@ -379,10 +382,10 @@ pub fn get_input(
     }
 
     //Movement
-    if keys.pressed(KeyCode::A) {
+    if keys.pressed(KeyCode::KeyA) {
         inputs.left = 1.;
     }
-    if keys.pressed(KeyCode::D) {
+    if keys.pressed(KeyCode::KeyD) {
         inputs.right = 1.;
     }
 
@@ -395,13 +398,13 @@ pub fn get_input(
     }
 
     //Numbers, to select atoms
-    if keys.just_pressed(KeyCode::Key1) {
+    if keys.just_pressed(KeyCode::Digit1) {
         inputs.numbers[0] = true;
-    } else if keys.just_pressed(KeyCode::Key2) {
+    } else if keys.just_pressed(KeyCode::Digit2) {
         inputs.numbers[1] = true;
-    } else if keys.just_pressed(KeyCode::Key3) {
+    } else if keys.just_pressed(KeyCode::Digit3) {
         inputs.numbers[2] = true;
-    } else if keys.just_pressed(KeyCode::Key4) {
+    } else if keys.just_pressed(KeyCode::Digit4) {
         inputs.numbers[3] = true;
     }
 }

@@ -60,7 +60,7 @@ fn main() {
 
     let mut app = App::new();
 
-    app.add_state::<GameState>()
+    app.init_state::<GameState>()
         .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         //local plugins
         .add_plugins((

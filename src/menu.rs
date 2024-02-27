@@ -124,7 +124,9 @@ fn button_system(
 
                 match *button_type {
                     ButtonType::Start => next_state.set(GameState::Game),
-                    ButtonType::Quit => exit.send(AppExit),
+                    ButtonType::Quit => {
+                        exit.send(AppExit);
+                    }
                 }
             }
             Interaction::Hovered => {

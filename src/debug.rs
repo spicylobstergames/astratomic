@@ -12,7 +12,7 @@ fn brush(
     mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: ResMut<DirtyRects>,
     prev_mpos: Res<PreviousMousePos>,
-    input: (Res<Input<MouseButton>>, Res<Input<KeyCode>>),
+    input: (Res<ButtonInput<MouseButton>>, Res<ButtonInput<KeyCode>>),
 ) {
     let atom;
     if input.0.pressed(MouseButton::Middle) {
@@ -174,9 +174,9 @@ fn render_actors(mut gizmos: Gizmos, actors: Query<&Actor>) {
     }
 }
 
-fn _camera(keys: Res<Input<KeyCode>>, mut camera_q: Query<&mut Transform, With<Camera>>) {
-    let x = -(keys.pressed(KeyCode::A) as u8 as f32) + keys.pressed(KeyCode::D) as u8 as f32;
-    let y = -(keys.pressed(KeyCode::S) as u8 as f32) + keys.pressed(KeyCode::W) as u8 as f32;
+fn _camera(keys: Res<ButtonInput<KeyCode>>, mut camera_q: Query<&mut Transform, With<Camera>>) {
+    let x = -(keys.pressed(KeyCode::KeyA) as u8 as f32) + keys.pressed(KeyCode::KeyD) as u8 as f32;
+    let y = -(keys.pressed(KeyCode::KeyS) as u8 as f32) + keys.pressed(KeyCode::KeyW) as u8 as f32;
 
     let v = Vec2::new(x, y).normalize_or_zero().extend(0.);
     camera_q.single_mut().translation += v * _CAMERA_SPEED;
@@ -186,7 +186,7 @@ pub trait Rect2dGradient {
     fn rect_2d_gradient(&mut self, position: Vec2, rotation: f32, size: Vec2);
 }
 
-impl<'a> Rect2dGradient for Gizmos<'a> {
+impl<'a, 'b> Rect2dGradient for Gizmos<'a, 'b> {
     fn rect_2d_gradient(&mut self, position: Vec2, rotation: f32, size: Vec2) {
         let rotation = Mat2::from_angle(rotation);
         let [tl, tr, br, bl] = rect_inner(size).map(|vec2| position + rotation * vec2);
@@ -216,12 +216,12 @@ pub fn grab_rigidbodies(
     window: Query<&Window>,
     camera_q: Query<(&Camera, &GlobalTransform)>,
     mut grabbed: ResMut<Grabbed>,
-    input: Res<Input<KeyCode>>,
+    input: Res<ButtonInput<KeyCode>>,
 ) {
     let (camera, camera_transform) = camera_q.single();
     let window = window.single();
 
-    if input.pressed(KeyCode::R) {
+    if input.pressed(KeyCode::KeyR) {
         if let Some(world_position) = window
             .cursor_position()
             .and_then(|cursor| camera.viewport_to_world(camera_transform, cursor))
