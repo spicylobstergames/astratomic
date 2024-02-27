@@ -236,7 +236,7 @@ pub fn tool_system(
     mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite), With<Tool>>,
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
-    querys: (Query<&Window>, Query<(&mut Sprite, &Player)>),
+    querys: (Query<&Window>, Query<(&mut Sprite, &Player), Without<Tool>>),
     resources: (ResMut<ChunkManager>, ResMut<DirtyRects>, Res<Inputs>),
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
