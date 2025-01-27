@@ -67,8 +67,7 @@ pub fn player_setup(
 
     let player_handle = asset_server.load("player/player_sheet.png");
     let animation_indices = AnimationIndices { first: 0, last: 1 };
-    let player_atlas_layout =
-        TextureAtlasLayout::from_grid(UVec2::new(24, 24), 8, 5, None, None);
+    let player_atlas_layout = TextureAtlasLayout::from_grid(UVec2::new(24, 24), 8, 5, None, None);
     let atlas = TextureAtlas {
         index: animation_indices.first,
         layout: texture_atlases.add(player_atlas_layout),
