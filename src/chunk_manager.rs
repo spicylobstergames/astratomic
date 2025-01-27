@@ -43,75 +43,76 @@ impl ChunkManager {
         }
     }
 
-    //Still needs to save file chunks to file after this function is called
-    pub fn move_manager(
-        &mut self,
-        commands: &mut Commands,
-        images: &mut ResMut<Assets<Image>>,
-        chunk_textures: &Entity,
-        image_entities: &Query<(&Parent, Entity, &Handle<Image>)>,
-        file_chunks: &mut HashMap<IVec2, Chunk>,
-        move_dir: MoveDir,
-    ) {
-        let (for_load, vec_load, dir, y) = match move_dir {
-            MoveDir::X(dir) => {
-                self.pos.x += dir;
-                (LOAD_HEIGHT, LOAD_WIDTH, dir, false)
-            }
-            MoveDir::Y(dir) => {
-                self.pos.y += dir;
-                (LOAD_WIDTH, LOAD_HEIGHT, dir, true)
-            }
-        };
-
-        let mut images_vec = vec![];
-        let mut to_remove = vec![];
-        for i in 0..for_load {
-            {
-                //Save far chunks
-                let mut to_add = ivec2(if dir == -1 { vec_load } else { -1 }, i);
-                if y {
-                    to_add = to_add.yx()
+    /*    //Still needs to save file chunks to file after this function is called
+        pub fn move_manager(
+            &mut self,
+            commands: &mut Commands,
+            images: &mut ResMut<Assets<Image>>,
+            chunk_textures: &Entity,
+            image_entities: &Query<(&Parent, Entity, &Handle<Image>)>,
+            file_chunks: &mut HashMap<IVec2, Chunk>,
+            move_dir: MoveDir,
+        ) {
+            let (for_load, vec_load, dir, y) = match move_dir {
+                MoveDir::X(dir) => {
+                    self.pos.x += dir;
+                    (LOAD_HEIGHT, LOAD_WIDTH, dir, false)
                 }
-                let pos = self.pos + to_add;
+                MoveDir::Y(dir) => {
+                    self.pos.y += dir;
+                    (LOAD_WIDTH, LOAD_HEIGHT, dir, true)
+                }
+            };
 
-                let changed_chunk = self.chunks.remove(&pos).unwrap();
-                to_remove.push(changed_chunk.texture.clone());
-                images.remove(changed_chunk.texture.clone());
+            let mut images_vec = vec![];
+            let mut to_remove = vec![];
+            for i in 0..for_load {
+                {
+                    //Save far chunks
+                    let mut to_add = ivec2(if dir == -1 { vec_load } else { -1 }, i);
+                    if y {
+                        to_add = to_add.yx()
+                    }
+                    let pos = self.pos + to_add;
 
-                if let Some(chunk) = file_chunks.get_mut(&pos) {
-                    *chunk = changed_chunk;
-                } else {
-                    file_chunks.insert(pos, changed_chunk);
+                    let changed_chunk = self.chunks.remove(&pos).unwrap();
+                    to_remove.push(changed_chunk.texture.clone());
+                    images.remove(changed_chunk.texture.clone());
+
+                    if let Some(chunk) = file_chunks.get_mut(&pos) {
+                        *chunk = changed_chunk;
+                    } else {
+                        file_chunks.insert(pos, changed_chunk);
+                    }
+                }
+
+                {
+                    //Load new chunks
+                    let mut to_add = ivec2(if dir == 1 { vec_load - 1 } else { 0 }, i);
+                    if y {
+                        to_add = to_add.yx()
+                    }
+                    let pos = self.pos + to_add;
+
+                    let chunk = if let Some(file_chunk) = file_chunks.get(&pos) {
+                        file_chunk.clone()
+                    } else {
+                        Chunk::new(Handle::default(), pos)
+                    };
+
+                    images_vec.push(add_chunk(commands, images, self, chunk, pos));
                 }
             }
 
-            {
-                //Load new chunks
-                let mut to_add = ivec2(if dir == 1 { vec_load - 1 } else { 0 }, i);
-                if y {
-                    to_add = to_add.yx()
+            for (parent, ent, handle) in image_entities.iter() {
+                if parent.get() == *chunk_textures && to_remove.contains(handle) {
+                    commands.get_entity(ent).unwrap().despawn();
                 }
-                let pos = self.pos + to_add;
-
-                let chunk = if let Some(file_chunk) = file_chunks.get(&pos) {
-                    file_chunk.clone()
-                } else {
-                    Chunk::new(Handle::default(), pos)
-                };
-
-                images_vec.push(add_chunk(commands, images, self, chunk, pos));
             }
+            let mut chunk_textures = commands.get_entity(*chunk_textures).unwrap();
+            chunk_textures.insert_children(0, &images_vec);
         }
-
-        for (parent, ent, handle) in image_entities.iter() {
-            if parent.get() == *chunk_textures && to_remove.contains(handle) {
-                commands.get_entity(ent).unwrap().despawn();
-            }
-        }
-        let mut chunk_textures = commands.get_entity(*chunk_textures).unwrap();
-        chunk_textures.insert_children(0, &images_vec);
-    }
+    */
 }
 
 impl Drop for ChunkManager {
@@ -539,7 +540,7 @@ pub fn add_chunk(
     chunk_manager.chunks.insert(index, chunk);
     entity
 }
-
+/*
 pub fn update_manager_pos(
     mut commands: Commands,
     chunk_textures: Query<Entity, With<ChunksParent>>,
@@ -625,7 +626,7 @@ pub fn update_manager_pos(
         Poll::Pending => {}
     }
 }
-
+*/
 #[derive(Resource, Default, Deref, DerefMut)]
 pub struct ExtractedTextureUpdates(pub Vec<ExtractedTextureUpdate>);
 
@@ -722,7 +723,7 @@ impl Plugin for ChunkManagerPlugin {
             .add_systems(
                 Update,
                 (
-                    update_manager_pos,
+                    //update_manager_pos,
                     add_colliders.after(update_has_collider),
                     remove_colliders.after(update_has_collider),
                     update_has_collider,
@@ -737,11 +738,11 @@ impl Plugin for ChunkManagerPlugin {
             .init_resource::<ChunkManager>()
             .init_resource::<DirtyRects>();
 
-        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .init_resource::<ExtractedTextureUpdates>()
                 .add_systems(ExtractSchedule, extract_chunk_texture_updates);
-            Image::register_system(
+            GpuImage::register_system(
                 render_app,
                 prepare_chunk_gpu_textures.in_set(RenderSet::PrepareAssets),
             )
