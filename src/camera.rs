@@ -135,7 +135,7 @@ pub fn update_camera(
 ) {
     let transform = query.single();
     let mut camera_transform = camera_q.single_mut();
-    let dt = time.delta_seconds_f64();
+    let dt = time.delta_secs_f64();
     tracking.update(transform.translation.xy(), dt);
     camera_transform.translation = tracking.position.extend(2.0);
 }

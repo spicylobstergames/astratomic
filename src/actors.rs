@@ -15,7 +15,7 @@ pub fn fill_actors(
     mut dirty_rects: ResMut<DirtyRects>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
-    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+    let materials = materials.0.get(&materials.1 .0).unwrap();
 
     for actor in actors.iter() {
         for x_off in 0..actor.width as i32 {
@@ -38,7 +38,7 @@ pub fn unfill_actors(
     actors: Query<&Actor>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
-    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+    let materials = materials.0.get(&materials.1 .0).unwrap();
 
     for actor in actors.iter() {
         for x_off in 0..actor.width as i32 {
@@ -75,7 +75,7 @@ pub fn update_actors(
     mut actors: Query<&mut Actor>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
-    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+    let materials = materials.0.get(&materials.1 .0).unwrap();
 
     for mut actor in actors.iter_mut() {
         let mut prev = actor.pos;

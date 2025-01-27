@@ -31,7 +31,6 @@ mod prelude {
     pub use bevy::math::{ivec2, uvec2, vec2, vec3};
     pub use bevy::prelude::*;
     pub use bevy::tasks::*;
-    pub use bevy::window::PrimaryWindow;
     pub use bevy_async_task::*;
 
     pub use serde::{Deserialize, Serialize};
@@ -48,7 +47,7 @@ mod prelude {
     pub use contour::ContourBuilder;
 
     pub use crate::materials::Material;
-    pub use bevy_egui::EguiContext;
+    //pub use bevy_egui::EguiContext;
 
     pub use bevy_rapier2d::prelude::RigidBody as RapierRigidbody;
 }
@@ -93,12 +92,8 @@ fn main() {
 fn setup(mut commands: Commands, mut time: ResMut<Time<Fixed>>) {
     time.set_timestep_hz(58.);
 
-    let mut camera = Camera2dBundle::default();
-    camera.camera.hdr = true;
-    camera.transform.scale.x = 0.23;
-    camera.transform.scale.y = 0.23;
-
-    commands.spawn(camera);
+    let camera = Camera2d::default();
+    commands.spawn((camera, Transform::from_scale(Vec3::new(0.23, 0.23, 1.))));
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, States)]

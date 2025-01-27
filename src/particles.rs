@@ -37,9 +37,9 @@ pub fn hydrate_particles(
         };
         commands
             .entity(ent)
-            .insert(SpriteBundle {
-                sprite: Sprite {
-                    color: Color::rgba(
+            .insert((
+                Sprite {
+                    color: Color::srgba(
                         particle.atom.color[0] as f32 / 255. * mult,
                         particle.atom.color[1] as f32 / 255. * mult,
                         particle.atom.color[2] as f32 / 255. * mult,
@@ -48,13 +48,12 @@ pub fn hydrate_particles(
                     custom_size: Some(Vec2::new(1.0, 1.0)),
                     ..default()
                 },
-                transform: Transform::from_translation(Vec3::new(
+                Transform::from_translation(Vec3::new(
                     particle.pos.x,
                     -particle.pos.y,
                     PARTICLE_LAYER,
                 )),
-                ..default()
-            })
+            ))
             .insert(Hydrated);
     }
 }
@@ -67,7 +66,7 @@ pub fn update_particles(
     mut dirty_rects: ResMut<DirtyRects>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
-    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+    let materials = materials.0.get(&materials.1 .0).unwrap();
 
     let compute_pool = ComputeTaskPool::get();
 
