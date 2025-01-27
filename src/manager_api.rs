@@ -108,7 +108,7 @@ pub fn swapable(
         atom_material == Material::Void
             || (ids
                 .iter()
-                .any(|&(id, prob)| id == atom.id && rand::thread_rng().gen_range(0.0..1.0) < prob)
+                .any(|&(id, prob)| id == atom.id && rand::rng().random_range(0.0..1.0) < prob)
                 && atom.updated_at != dt)
             || (atom_material.is_object() && material.is_liquid())
     } else {
@@ -136,7 +136,7 @@ pub fn down_neigh(
         neigh.1 = IVec2::new(x, 1);
     }
 
-    if rand::thread_rng().gen() {
+    if rand::rng().random() {
         neigh.swap(1, 2)
     }
 
@@ -158,7 +158,7 @@ pub fn side_neigh(
         neigh.1 = IVec2::new(x, 0);
     }
 
-    if rand::thread_rng().gen() {
+    if rand::rng().random() {
         neigh.swap(0, 1)
     }
 

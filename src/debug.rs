@@ -1,10 +1,7 @@
 use crate::prelude::*;
-use bevy::sprite::Anchor;
 
 use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
-//use bevy_inspector_egui::quick::WorldInspectorPlugin;
-
-//TODO add a debug mode
+use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
 fn brush(
     window: Query<&Window>,
@@ -129,6 +126,7 @@ pub fn render_dirty_rects_gizmos(mut gizmos: Gizmos, dirty_rects: Res<DirtyRects
     }
 }
 
+/* TODO: Add this to a egui debug menu
 pub fn _render_dirty_rects_image(mut commands: Commands, dirty_rects: Res<DirtyRects>) {
     let (dirty_update, render_update) = (&dirty_rects.new, &dirty_rects.render);
 
@@ -166,9 +164,10 @@ pub fn _delete_image(mut commands: Commands, debug_images: Query<Entity, With<De
         commands.entity(image).despawn();
     }
 }
+*/
 
-#[derive(Component)]
-pub struct DeleteImage;
+//#[derive(Component)]
+//pub struct DeleteImage;
 
 fn render_actors(mut gizmos: Gizmos, actors: Query<&Actor>) {
     for actor in actors.iter() {
@@ -195,7 +194,7 @@ pub trait Rect2dGradient {
     fn rect_2d_gradient(&mut self, position: Vec2, rotation: f32, size: Vec2);
 }
 
-impl<'a, 'b> Rect2dGradient for Gizmos<'a, 'b> {
+impl Rect2dGradient for Gizmos<'_, '_> {
     fn rect_2d_gradient(&mut self, position: Vec2, rotation: f32, size: Vec2) {
         let rotation = Mat2::from_angle(rotation);
         let [tl, tr, br, bl] = rect_inner(size).map(|vec2| position + rotation * vec2);
@@ -296,7 +295,7 @@ impl Plugin for DebugPlugin {
             )
                 .run_if(in_state(GameState::Game)),
         )
-        //.add_plugins(WorldInspectorPlugin::new())
+        .add_plugins(WorldInspectorPlugin::new())
         .add_plugins(RapierDebugRenderPlugin::default())
         //Frame on console
         .add_plugins((LogDiagnosticsPlugin::default(), FrameTimeDiagnosticsPlugin))

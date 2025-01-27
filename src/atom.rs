@@ -42,63 +42,63 @@ impl Atom {
             2 => {
                 //Sand
                 atom.color = [
-                    (230 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-                    (197 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-                    (92 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    (230 + rand::rng().random_range(-20_i16..20_i16)) as u8,
+                    (197 + rand::rng().random_range(-20_i16..20_i16)) as u8,
+                    (92 + rand::rng().random_range(-20_i16..20_i16)) as u8,
                     255,
                 ];
             }
             3 => {
                 //Water
                 atom.color = [
-                    (20 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-                    (125 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-                    (204 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
+                    (20 + rand::rng().random_range(-20_i16..20_i16)) as u8,
+                    (125 + rand::rng().random_range(-20_i16..20_i16)) as u8,
+                    (204 + rand::rng().random_range(-20_i16..20_i16)) as u8,
                     150,
                 ];
             }
             4 => {
                 //Gravel
                 atom.color = [
-                    (110 + rand::thread_rng().gen_range(-12_i16..12_i16)) as u8,
-                    (110 + rand::thread_rng().gen_range(-12_i16..12_i16)) as u8,
-                    (110 + rand::thread_rng().gen_range(-12_i16..12_i16)) as u8,
+                    (110 + rand::rng().random_range(-12_i16..12_i16)) as u8,
+                    (110 + rand::rng().random_range(-12_i16..12_i16)) as u8,
+                    (110 + rand::rng().random_range(-12_i16..12_i16)) as u8,
                     255,
                 ];
             }
             5 => {
                 //Lava
                 atom.color = [
-                    (245 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
-                    (140 + rand::thread_rng().gen_range(-20_i16..20_i16)) as u8,
-                    (10 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
+                    (245 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (140 + rand::rng().random_range(-20_i16..20_i16)) as u8,
+                    (10 + rand::rng().random_range(-10_i16..10_i16)) as u8,
                     255,
                 ];
             }
             6 => {
                 //Grass
                 atom.color = [
-                    (30 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
-                    (170 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
-                    (10 + rand::thread_rng().gen_range(-5_i16..5_i16)) as u8,
+                    (30 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (170 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (10 + rand::rng().random_range(-5_i16..5_i16)) as u8,
                     255,
                 ];
             }
             7 => {
                 //Dirt
                 atom.color = [
-                    (120 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
-                    (70 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
-                    (40 + rand::thread_rng().gen_range(-5_i16..5_i16)) as u8,
+                    (120 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (70 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (40 + rand::rng().random_range(-5_i16..5_i16)) as u8,
                     255,
                 ];
             }
             8 => {
                 //Rock
                 atom.color = [
-                    (80 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
-                    (80 + rand::thread_rng().gen_range(-10_i16..10_i16)) as u8,
-                    (80 + rand::thread_rng().gen_range(-5_i16..5_i16)) as u8,
+                    (80 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (80 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (80 + rand::rng().random_range(-5_i16..5_i16)) as u8,
                     255,
                 ];
             }
@@ -153,7 +153,7 @@ pub fn update_powder(
             set_vel(
                 chunks,
                 cur_pos,
-                Vec2::from_angle(rand::thread_rng().gen_range(-PI / 2.0..PI / 2.))
+                Vec2::from_angle(rand::rng().random_range(-PI / 2.0..PI / 2.))
                     .rotate(vel * 0.3 * 1. * (1. - inertial_resistance))
                     .as_ivec2(),
             );

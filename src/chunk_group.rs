@@ -15,7 +15,7 @@ pub struct ChunkGroup<'a> {
     pub center_pos: IVec2,
 }
 
-impl<'a> ChunkGroup<'a> {
+impl ChunkGroup<'_> {
     pub fn group_to_chunk(center_pos: IVec2, group_idx: i32) -> IVec2 {
         let x_diff = group_idx % 3 - 1;
         let y_diff = group_idx / 3 - 1;

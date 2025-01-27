@@ -8,7 +8,8 @@ default-run = "astratomic"
 
 [dependencies]
 bevy                = {version = "0.15", features =["file_watcher"]}
-rand                = { version = "0.8", features = ["small_rng"] }
+bevy-inspector-egui = "0.28.1"
+rand                = { version = "0.9", features = ["small_rng"] }
 fastrand            = "2.0"
 async-channel       = "2.1"
 smallvec            = "1.12"
