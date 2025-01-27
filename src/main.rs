@@ -59,8 +59,7 @@ fn main() {
 
     let mut app = App::new();
 
-    app.init_state::<GameState>()
-        .add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+    app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         //local plugins
         .add_plugins((
             ChunkManagerPlugin,
@@ -76,7 +75,8 @@ fn main() {
             RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.),
             MenuPlugin,
         ))
-        .add_systems(Startup, setup);
+        .add_systems(Startup, setup)
+        .init_state::<GameState>();
 
     if args.contains(&"-d".to_string()) || args.contains(&"--debug".to_string()) {
         app.add_plugins((DebugPlugin,));
@@ -91,9 +91,7 @@ fn main() {
 
 fn setup(mut commands: Commands, mut time: ResMut<Time<Fixed>>) {
     time.set_timestep_hz(58.);
-
-    let camera = Camera2d::default();
-    commands.spawn((camera, Transform::from_scale(Vec3::new(0.23, 0.23, 1.))));
+    commands.spawn((Camera2d, Transform::from_scale(Vec3::new(0.23, 0.23, 1.))));
 }
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, States)]

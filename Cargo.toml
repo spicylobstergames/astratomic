@@ -28,6 +28,8 @@ rotsprite = "0.1"
 
 puffin              = "0.19"
 
+thiserror = "2.0"
+
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 bevy_dylib = "0.15"
 
