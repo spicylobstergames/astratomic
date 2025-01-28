@@ -12,7 +12,6 @@ pub const QUARTER_CHUNK_LEN: usize = CHUNK_LEN / 4;
 // Actor consts
 
 pub const UP_WALK_HEIGHT: usize = 3;
-pub const DOWN_WALK_HEIGHT: usize = 4;
 
 // Player consts
 pub const FUEL_MAX: f32 = 50.;

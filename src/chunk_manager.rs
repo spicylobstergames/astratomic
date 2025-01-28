@@ -586,43 +586,43 @@ pub fn update_manager_pos(
                 (chunks, new_diff)
             });
         }
-    }
+    } else {
+        match task_executor.poll() {
+            Poll::Ready(v) => {
+                if let Ok((mut file_chunks, diff)) = v {
+                    let chunk_textures = chunk_textures.single();
+                    for _ in 0..diff.x.abs() {
+                        chunk_manager.move_manager(
+                            &mut commands,
+                            &mut images,
+                            &chunk_textures,
+                            &image_entities,
+                            &mut file_chunks,
+                            MoveDir::X(diff.x.signum()),
+                        );
+                    }
 
-    match task_executor.poll() {
-        Poll::Ready(v) => {
-            if let Ok((mut file_chunks, diff)) = v {
-                let chunk_textures = chunk_textures.single();
-                for _ in 0..diff.x.abs() {
-                    chunk_manager.move_manager(
-                        &mut commands,
-                        &mut images,
-                        &chunk_textures,
-                        &image_entities,
-                        &mut file_chunks,
-                        MoveDir::X(diff.x.signum()),
-                    );
+                    for _ in 0..diff.y.abs() {
+                        chunk_manager.move_manager(
+                            &mut commands,
+                            &mut images,
+                            &chunk_textures,
+                            &image_entities,
+                            &mut file_chunks,
+                            MoveDir::Y(diff.y.signum()),
+                        );
+                    }
+
+                    let pool = AsyncComputeTaskPool::get();
+                    saving_task.0 = Some(pool.spawn(async move {
+                        let file = File::create("assets/world/world").unwrap();
+                        let mut buffered = BufWriter::new(file);
+                        bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
+                    }));
                 }
-
-                for _ in 0..diff.y.abs() {
-                    chunk_manager.move_manager(
-                        &mut commands,
-                        &mut images,
-                        &chunk_textures,
-                        &image_entities,
-                        &mut file_chunks,
-                        MoveDir::Y(diff.y.signum()),
-                    );
-                }
-
-                let pool = AsyncComputeTaskPool::get();
-                saving_task.0 = Some(pool.spawn(async move {
-                    let file = File::create("assets/world/world").unwrap();
-                    let mut buffered = BufWriter::new(file);
-                    bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
-                }));
             }
+            Poll::Pending => {}
         }
-        Poll::Pending => {}
     }
 }
 

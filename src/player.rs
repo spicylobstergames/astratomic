@@ -1,3 +1,4 @@
+use bevy::color::palettes::css::*;
 use bevy::sprite::Anchor;
 
 use crate::prelude::*;
@@ -42,6 +43,9 @@ pub struct Tool;
 #[derive(Component)]
 pub struct ToolFront;
 
+#[derive(Component)]
+pub struct Life(f32);
+
 pub fn player_setup(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
@@ -63,6 +67,7 @@ pub fn player_setup(
         width: 10,
         pos,
         vel: vec2(0., 0.),
+        colliding: None,
     };
 
     let player_handle = asset_server.load("player/player_sheet.png");
@@ -106,22 +111,64 @@ pub fn player_setup(
                 player_actor.width as f32 / 2.,
                 player_actor.height as f32 / 2.,
             ),
+            Life(100.),
         ))
         .add_child(tool_ent);
+
+    //Life
+    commands.spawn((
+        Node {
+            width: Val::Px(180.),
+            height: Val::Px(20.),
+            border: UiRect::left(Val::Px(180.)),
+            margin: UiRect::all(Val::Px(20.)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            ..default()
+        },
+        BackgroundColor(MAROON.into()),
+        BorderColor(RED.into()),
+        Outline {
+            width: Val::Px(6.),
+            offset: Val::Px(6.),
+            color: Color::WHITE,
+        },
+        PlayerLifeNode,
+    ));
 }
+
+#[derive(Component)]
+pub struct PlayerLifeNode;
 
 /// Updates player
 pub fn update_player(
     input: (Res<Inputs>, EventReader<MouseWheel>),
-    mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices)>,
+    mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices, &mut Life)>,
+    mut player_life_node: Query<&mut Node, With<PlayerLifeNode>>,
     chunk_manager: ResMut<ChunkManager>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
     time: Res<Time>,
     mut zoom: ResMut<Zoom>,
 ) {
-    let (mut actor, mut player, mut anim_idxs) = player.single_mut();
+    let (mut actor, mut player, mut anim_idxs, mut life) = player.single_mut();
     let (inputs, mut scroll_evr) = input;
     let materials = materials.0.get(&materials.1 .0).unwrap();
+    let mut player_life_node = player_life_node.single_mut();
+
+    //Fall Damage
+    if let Some(speed) = actor.colliding {
+        if speed >= 5. {
+            life.0 -= speed;
+        }
+    }
+
+    //Death
+    if life.0 <= 0. {
+        println!("DEADDD!!")
+    }
+
+    //Life
+    player_life_node.border.left = Val::Px(180. * life.0 / 100.);
 
     // Gravity
     if actor.vel.y < TERM_VEL as f32 {
@@ -423,7 +470,7 @@ impl Plugin for PlayerPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                update_player.before(update_actors),
+                update_player.after(update_actors),
                 update_player_sprite.after(update_actors),
                 tool_system
                     .before(chunk_manager_update)

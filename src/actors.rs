@@ -6,6 +6,7 @@ pub struct Actor {
     pub height: u8,
     pub pos: IVec2,
     pub vel: Vec2,
+    pub colliding: Option<f32>,
 }
 
 //Called before simulations
@@ -78,6 +79,8 @@ pub fn update_actors(
     let materials = materials.0.get(&materials.1 .0).unwrap();
 
     for mut actor in actors.iter_mut() {
+        actor.colliding = None;
+
         let mut prev = actor.pos;
         for v in Line::new(actor.pos, actor.vel.as_ivec2()) {
             let move_hor = match (prev.x != v.x, prev.y != v.y) {
@@ -96,61 +99,45 @@ pub fn update_actors(
                 );
                 if on_ground(&chunk_manager, &actor, materials) {
                     let starting_y = actor.pos.y;
-                    match moved_x {
+                    if !moved_x {
                         //If we can't move to the left or right
                         //Check if we can get up a stair-like structure
-                        false => {
-                            for i in 1..=UP_WALK_HEIGHT {
-                                let moved_y = move_y(&mut chunk_manager, &mut actor, -1, materials);
-                                //Abort if we couldn't move up, or if we moved up but couldn't move sideways on the last step
-                                if !moved_y
-                                    || i == UP_WALK_HEIGHT
-                                        && !move_x(
-                                            &mut chunk_manager,
-                                            &mut actor,
-                                            (v.x - prev.x).signum(),
-                                            materials,
-                                        )
-                                {
-                                    abort_stair(
+                        for i in 1..=UP_WALK_HEIGHT {
+                            let moved_y = move_y(&mut chunk_manager, &mut actor, -1, materials);
+                            //Abort if we couldn't move up, or if we moved up but couldn't move sideways on the last step
+                            if !moved_y
+                                || i == UP_WALK_HEIGHT
+                                    && !move_x(
                                         &mut chunk_manager,
                                         &mut actor,
-                                        starting_y,
-                                        1,
+                                        (v.x - prev.x).signum(),
                                         materials,
-                                    );
-                                    break;
-                                }
-                            }
-                        }
-                        //If we can move to the left or right
-                        //Check if we can snap back to the ground
-                        true => {
-                            for i in 1..=DOWN_WALK_HEIGHT {
-                                if !move_y(&mut chunk_manager, &mut actor, 1, materials)
-                                    && on_ground(&chunk_manager, &actor, materials)
-                                {
-                                    break;
-                                } else if i == DOWN_WALK_HEIGHT {
-                                    abort_stair(
-                                        &mut chunk_manager,
-                                        &mut actor,
-                                        starting_y,
-                                        -1,
-                                        materials,
-                                    );
-                                }
+                                    )
+                            {
+                                abort_stair(
+                                    &mut chunk_manager,
+                                    &mut actor,
+                                    starting_y,
+                                    1,
+                                    materials,
+                                );
+                                break;
                             }
                         }
                     }
                 }
             } else {
-                move_y(
+                let prev_vel = actor.vel.length();
+                let moved_y = move_y(
                     &mut chunk_manager,
                     &mut actor,
                     (v.y - prev.y).signum(),
                     materials,
                 );
+
+                if !moved_y && (v.y - prev.y).signum() != 0 && actor.colliding.is_none() {
+                    actor.colliding = Some(prev_vel);
+                }
             }
 
             prev = v;
