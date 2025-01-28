@@ -1,6 +1,9 @@
+use std::task::Poll;
+
 use bevy::render::render_asset::{RenderAssetDependency, RenderAssets};
 use bevy::render::render_resource::{Extent3d, ImageCopyTexture, ImageDataLayout, Origin3d};
 use bevy::render::renderer::RenderQueue;
+use bevy::render::texture::GpuImage;
 use bevy::render::{Extract, RenderApp, RenderSet};
 use bevy::sprite::Anchor;
 use itertools::Itertools;
@@ -46,7 +49,7 @@ impl ChunkManager {
         commands: &mut Commands,
         images: &mut ResMut<Assets<Image>>,
         chunk_textures: &Entity,
-        image_entities: &Query<(&Parent, Entity, &Handle<Image>)>,
+        image_entities: &Query<(&Parent, Entity, &Sprite)>,
         file_chunks: &mut HashMap<IVec2, Chunk>,
         move_dir: MoveDir,
     ) {
@@ -74,7 +77,7 @@ impl ChunkManager {
 
                 let changed_chunk = self.chunks.remove(&pos).unwrap();
                 to_remove.push(changed_chunk.texture.clone());
-                images.remove(changed_chunk.texture.clone());
+                images.remove(&changed_chunk.texture);
 
                 if let Some(chunk) = file_chunks.get_mut(&pos) {
                     *chunk = changed_chunk;
@@ -102,7 +105,7 @@ impl ChunkManager {
         }
 
         for (parent, ent, handle) in image_entities.iter() {
-            if parent.get() == *chunk_textures && to_remove.contains(handle) {
+            if parent.get() == *chunk_textures && to_remove.contains(&handle.image) {
                 commands.get_entity(ent).unwrap().despawn();
             }
         }
@@ -204,15 +207,11 @@ pub fn manager_setup(
     commands
         .spawn((
             Name::new("Chunks"),
-            VisibilityBundle::default(),
-            TransformBundle::from_transform(Transform::from_translation(vec3(
-                0.,
-                0.,
-                AUTOMATA_LAYER,
-            ))),
+            Visibility::Visible,
+            Transform::from_translation(vec3(0., 0., AUTOMATA_LAYER)),
             ChunksParent,
         ))
-        .push_children(&images_vec);
+        .insert_children(0, &images_vec);
 }
 
 pub fn add_colliders(
@@ -224,7 +223,7 @@ pub fn add_colliders(
 ) {
     puffin::profile_function!();
 
-    let Some(materials) = materials.0.get(materials.1 .0.clone()) else {
+    let Some(materials) = materials.0.get(&materials.1 .0) else {
         return;
     };
 
@@ -350,7 +349,7 @@ pub fn chunk_manager_update(
     } = &mut *dirty_rects_resource;
 
     //Get materials
-    let materials = &materials.0.get(materials.1 .0.clone()).unwrap();
+    let materials = &materials.0.get(&materials.1 .0).unwrap();
 
     let manager_pos = ivec2(chunk_manager.pos.x, chunk_manager.pos.y);
 
@@ -524,17 +523,16 @@ pub fn add_chunk(
     //Spawn Image
     let entity = commands
         .spawn((
-            SpriteBundle {
-                texture: texture_copy,
-                sprite: Sprite {
-                    anchor: Anchor::TopLeft,
-                    ..Default::default()
-                },
-                transform: Transform::from_xyz(pos.x, pos.y, 0.),
+            Sprite {
+                image: texture_copy,
+
+                anchor: Anchor::TopLeft,
+
                 ..Default::default()
             },
             ChunkComponent(index),
         ))
+        .insert(Transform::from_xyz(pos.x, pos.y, 0.))
         .id();
     chunk.entity = Some(entity);
 
@@ -545,7 +543,7 @@ pub fn add_chunk(
 pub fn update_manager_pos(
     mut commands: Commands,
     chunk_textures: Query<Entity, With<ChunksParent>>,
-    image_entities: Query<(&Parent, Entity, &Handle<Image>)>,
+    image_entities: Query<(&Parent, Entity, &Sprite)>,
     player: Query<&Actor, With<Player>>,
     resources: (
         ResMut<SavingTask>,
@@ -569,59 +567,62 @@ pub fn update_manager_pos(
     let diff_y = player_pos.y - chunk_manager.pos.y - LOAD_HEIGHT / 2;
     let new_diff = ivec2(diff_x, diff_y);
 
+    if task_executor.is_idle() {
+        if let Some(task) = &saving_task.0 {
+            if task.is_finished() {
+                saving_task.0 = None;
+            } else {
+                return;
+            }
+        }
+
+        if new_diff != IVec2::ZERO {
+            task_executor.start(async move {
+                let file = File::open("assets/world/world").unwrap();
+                let mut buffered = BufReader::new(file);
+
+                let chunks: HashMap<IVec2, Chunk> =
+                    bincode::deserialize_from(&mut buffered).unwrap();
+                (chunks, new_diff)
+            });
+        }
+    }
+
     match task_executor.poll() {
-        AsyncTaskStatus::Idle => {
-            if let Some(task) = &saving_task.0 {
-                if task.is_finished() {
-                    saving_task.0 = None;
-                } else {
-                    return;
+        Poll::Ready(v) => {
+            if let Ok((mut file_chunks, diff)) = v {
+                let chunk_textures = chunk_textures.single();
+                for _ in 0..diff.x.abs() {
+                    chunk_manager.move_manager(
+                        &mut commands,
+                        &mut images,
+                        &chunk_textures,
+                        &image_entities,
+                        &mut file_chunks,
+                        MoveDir::X(diff.x.signum()),
+                    );
                 }
-            }
 
-            if new_diff != IVec2::ZERO {
-                task_executor.start(async move {
-                    let file = File::open("assets/world/world").unwrap();
-                    let mut buffered = BufReader::new(file);
+                for _ in 0..diff.y.abs() {
+                    chunk_manager.move_manager(
+                        &mut commands,
+                        &mut images,
+                        &chunk_textures,
+                        &image_entities,
+                        &mut file_chunks,
+                        MoveDir::Y(diff.y.signum()),
+                    );
+                }
 
-                    let chunks: HashMap<IVec2, Chunk> =
-                        bincode::deserialize_from(&mut buffered).unwrap();
-                    (chunks, new_diff)
-                });
+                let pool = AsyncComputeTaskPool::get();
+                saving_task.0 = Some(pool.spawn(async move {
+                    let file = File::create("assets/world/world").unwrap();
+                    let mut buffered = BufWriter::new(file);
+                    bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
+                }));
             }
         }
-        AsyncTaskStatus::Finished((mut file_chunks, diff)) => {
-            let chunk_textures = chunk_textures.single();
-            for _ in 0..diff.x.abs() {
-                chunk_manager.move_manager(
-                    &mut commands,
-                    &mut images,
-                    &chunk_textures,
-                    &image_entities,
-                    &mut file_chunks,
-                    MoveDir::X(diff.x.signum()),
-                );
-            }
-
-            for _ in 0..diff.y.abs() {
-                chunk_manager.move_manager(
-                    &mut commands,
-                    &mut images,
-                    &chunk_textures,
-                    &image_entities,
-                    &mut file_chunks,
-                    MoveDir::Y(diff.y.signum()),
-                );
-            }
-
-            let pool = AsyncComputeTaskPool::get();
-            saving_task.0 = Some(pool.spawn(async move {
-                let file = File::create("assets/world/world").unwrap();
-                let mut buffered = BufWriter::new(file);
-                bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
-            }));
-        }
-        AsyncTaskStatus::Pending => {}
+        Poll::Pending => {}
     }
 }
 
@@ -677,7 +678,7 @@ fn extract_chunk_texture_updates(
 
 fn prepare_chunk_gpu_textures(
     queue: Res<RenderQueue>,
-    image_render_assets: Res<RenderAssets<Image>>,
+    image_render_assets: Res<RenderAssets<GpuImage>>,
     mut extracted_updates: ResMut<ExtractedTextureUpdates>,
 ) {
     for update in extracted_updates.drain(..) {
@@ -736,11 +737,11 @@ impl Plugin for ChunkManagerPlugin {
             .init_resource::<ChunkManager>()
             .init_resource::<DirtyRects>();
 
-        if let Ok(render_app) = app.get_sub_app_mut(RenderApp) {
+        if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
                 .init_resource::<ExtractedTextureUpdates>()
                 .add_systems(ExtractSchedule, extract_chunk_texture_updates);
-            Image::register_system(
+            GpuImage::register_system(
                 render_app,
                 prepare_chunk_gpu_textures.in_set(RenderSet::PrepareAssets),
             )

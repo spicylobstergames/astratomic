@@ -17,15 +17,12 @@ fn spawn_menu_buttons(mut commands: Commands, asset_server: Res<AssetServer>) {
     let background = asset_server.load("images/menu_background.png");
 
     commands.spawn((
-        SpriteBundle {
-            texture: background.clone(),
-            ..Default::default()
-        },
+        Sprite::from(background.clone()),
         Background(background),
         MenuUI,
     ));
 
-    let button_style: Style = Style {
+    let button_style = Node {
         width: Val::Px(150.0),
         height: Val::Px(65.0),
         border: UiRect::all(Val::Px(5.0)),
@@ -34,7 +31,7 @@ fn spawn_menu_buttons(mut commands: Commands, asset_server: Res<AssetServer>) {
         ..default()
     };
 
-    let ui_style = Style {
+    let ui_style = Node {
         width: Val::Percent(100.0),
         height: Val::Percent(100.0),
         align_items: AlignItems::Center,
@@ -44,43 +41,30 @@ fn spawn_menu_buttons(mut commands: Commands, asset_server: Res<AssetServer>) {
         ..default()
     };
 
-    let text_style = TextStyle {
+    let text_style = TextFont {
         font_size: 40.0,
-        color: Color::rgb(0.9, 0.9, 0.9),
         ..Default::default()
     };
+    let text_color = TextColor(Color::srgb(0.9, 0.9, 0.9));
 
     commands
-        .spawn(NodeBundle {
-            style: ui_style,
-            ..default()
-        })
+        .spawn(ui_style)
         .insert(MenuUI)
         .with_children(|parent| {
             //Start
             parent
-                .spawn(ButtonBundle {
-                    style: button_style.clone(),
-                    border_color: BorderColor(Color::BLACK),
-                    background_color: NORMAL_BUTTON.into(),
-                    ..default()
-                })
+                .spawn((Button, button_style.clone()))
                 .insert(ButtonType::Start)
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section("Start", text_style.clone()));
+                    parent.spawn((Text::new("Start"), text_style.clone(), text_color));
                 });
 
             //Quit
             parent
-                .spawn(ButtonBundle {
-                    style: button_style,
-                    border_color: BorderColor(Color::BLACK),
-                    background_color: NORMAL_BUTTON.into(),
-                    ..default()
-                })
+                .spawn((Button, button_style))
                 .insert(ButtonType::Quit)
                 .with_children(|parent| {
-                    parent.spawn(TextBundle::from_section("Quit", text_style));
+                    parent.spawn((Text::new("Quit"), text_style, text_color));
                 });
         });
 }
@@ -91,7 +75,7 @@ fn background_system(
     window: Query<&Window>,
 ) {
     let (mut transform, handle) = background.single_mut();
-    let Some(image) = images.get(handle.0.clone()) else {
+    let Some(image) = images.get(&handle.0) else {
         return;
     };
     let window = window.single();
@@ -120,12 +104,12 @@ fn button_system(
         match *interaction {
             Interaction::Pressed => {
                 *color = PRESSED_BUTTON.into();
-                border_color.0 = Color::RED;
+                border_color.0 = Color::srgb(1., 0., 0.);
 
                 match *button_type {
                     ButtonType::Start => next_state.set(GameState::Game),
                     ButtonType::Quit => {
-                        exit.send(AppExit);
+                        exit.send(AppExit::Success);
                     }
                 }
             }

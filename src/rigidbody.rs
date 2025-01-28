@@ -34,7 +34,7 @@ pub fn add_rigidbodies(
     handles: Query<(Entity, &RigidbodyHandle), Without<Hydrated>>,
 ) {
     for (ent, handle) in &handles {
-        let Some(image) = images.get(handle.0.clone()) else {
+        let Some(image) = images.get(&handle.0) else {
             continue;
         };
 
@@ -54,15 +54,18 @@ pub fn add_rigidbodies(
             .insert(bevy_rapier2d::prelude::Velocity::zero())
             .insert(bevy_rapier2d::prelude::ExternalImpulse::default())
             .insert(ReadMassProperties::default())
-            .insert(SpriteBundle {
-                texture: handle.0.clone(),
-                sprite: Sprite {
-                    anchor: bevy::sprite::Anchor::TopLeft,
-                    ..Default::default()
-                },
-                transform: Transform::from_xyz(handle.1.x, -handle.1.y, RIGIDBODY_LAYER),
+            .insert(Sprite {
+                image: handle.0.clone(),
+
+                anchor: bevy::sprite::Anchor::TopLeft,
+
                 ..Default::default()
-            });
+            })
+            .insert(Transform::from_xyz(
+                handle.1.x,
+                -handle.1.y,
+                RIGIDBODY_LAYER,
+            ));
 
         commands.entity(ent).insert(Hydrated);
     }
@@ -77,7 +80,7 @@ pub fn update_rigidibodies(
 ) {
     puffin::profile_function!();
 
-    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+    let materials = materials.0.get(&materials.1 .0).unwrap();
 
     for (transform, mut rigidbody, velocity, mass_prop) in &mut rigidbodies {
         let (width, height) = (rigidbody.width as usize, rigidbody.height as usize);
@@ -148,7 +151,7 @@ pub fn unfill_rigidbodies(
     mut rigidbodies: Query<&mut Rigidbody>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
-    let materials = materials.0.get(materials.1 .0.clone()).unwrap();
+    let materials = materials.0.get(&materials.1 .0).unwrap();
 
     for mut rigidbody in &mut rigidbodies {
         while let Some(chunk_pos) = rigidbody.filled.pop() {
@@ -192,7 +195,7 @@ pub fn image_atoms(image: &Image) -> Vec<Atom> {
 }
 
 pub fn get_collider(values: &[f64], width: u32, height: u32) -> Option<Collider> {
-    let c = ContourBuilder::new(width, height, false);
+    let c = ContourBuilder::new(width as usize, height as usize, false);
 
     let res = c.contours(values, &[0.5]).unwrap();
     let mut colliders = vec![];
