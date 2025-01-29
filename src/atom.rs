@@ -124,7 +124,7 @@ pub fn update_powder(
 
     // Get atom speed
     let mut speed = get_speed(chunks, cur_pos);
-    if speed < TERM_VEL {
+    if speed < ATOM_TERM_VEL {
         speed += GRAVITY;
         set_speed(chunks, cur_pos, speed);
     }
@@ -177,7 +177,7 @@ pub fn update_liquid(
 
     // Get fall speed
     let mut speed = get_speed(chunks, pos);
-    if speed < TERM_VEL {
+    if speed < ATOM_TERM_VEL {
         speed += GRAVITY;
         set_speed(chunks, pos, speed);
     }
@@ -234,7 +234,7 @@ pub fn update_atom(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet
 
     // Add gravity
     let mut vel = get_vel(chunks, cur_pos);
-    if vel.y < TERM_VEL as i32 {
+    if vel.y < ATOM_TERM_VEL as i32 {
         vel += GRAVITY as i32 * IVec2::Y;
         set_vel(chunks, cur_pos, vel);
     }

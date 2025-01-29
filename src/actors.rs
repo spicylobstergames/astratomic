@@ -12,23 +12,31 @@ pub struct Actor {
 //Called before simulations
 pub fn fill_actors(
     mut chunk_manager: ResMut<ChunkManager>,
-    actors: Query<&Actor>,
+    actors: Query<(&Actor, Entity)>,
     mut dirty_rects: ResMut<DirtyRects>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+    mut ev_damage: EventWriter<DamageEvent>,
 ) {
     let materials = materials.0.get(&materials.1 .0).unwrap();
+    let mut damages = 0.;
 
-    for actor in actors.iter() {
+    for (actor, ent) in actors.iter() {
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
                 let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
                 if let Some(atom) = chunk_manager.get_mut_atom(pos) {
                     if materials[atom.id].is_void() {
                         *atom = Atom::object();
+                    } else if let Some(damage) = materials[atom.id].damage() {
+                        damages += damage / (actor.width * actor.height) as f32;
                     }
                 }
                 update_dirty_rects_3x3(&mut dirty_rects.current, pos);
             }
+        }
+
+        if damages > 0. {
+            ev_damage.send(DamageEvent::new(ent, damages));
         }
     }
 }

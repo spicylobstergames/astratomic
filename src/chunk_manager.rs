@@ -458,7 +458,7 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
                     Material::Powder {
                         inertial_resistance,
                     } => update_powder(chunks, pos, dt, inertial_resistance),
-                    Material::Liquid { flow } => update_liquid(chunks, pos, flow, dt),
+                    Material::Liquid { flow, .. } => update_liquid(chunks, pos, flow, dt),
                     _ => HashSet::new(),
                 },
             )

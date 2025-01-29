@@ -1,4 +1,5 @@
 use bevy::color::palettes::css::*;
+use bevy::color::palettes::tailwind::*;
 use bevy::sprite::Anchor;
 
 use crate::prelude::*;
@@ -33,7 +34,8 @@ pub enum PlayerState {
     #[default]
     Idle,
     Walking,
-    Jumping(f64),
+    Dead,
+    Jumping(f32),
     Jetpack(bool),
 }
 
@@ -135,50 +137,64 @@ pub fn player_setup(
         },
         PlayerLifeNode,
     ));
+
+    //Fuel
+    commands.spawn((
+        Node {
+            width: Val::Px(20.),
+            height: Val::Px(180.),
+            border: UiRect::top(Val::Px(180.)),
+            margin: UiRect::all(Val::Px(20.)),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            justify_self: JustifySelf::End,
+            ..default()
+        },
+        BackgroundColor(LIGHT_GOLDENROD_YELLOW.into()),
+        BorderColor(YELLOW.into()),
+        Outline {
+            width: Val::Px(6.),
+            offset: Val::Px(6.),
+            color: Color::WHITE,
+        },
+        PlayerFuelNode,
+    ));
+}
+
+#[derive(Event)]
+pub struct DamageEvent {
+    ent: Entity,
+    damage: f32,
+}
+
+impl DamageEvent {
+    pub fn new(ent: Entity, damage: f32) -> Self {
+        Self { ent, damage }
+    }
 }
 
 #[derive(Component)]
 pub struct PlayerLifeNode;
 
-/// Updates player
+#[derive(Component)]
+pub struct PlayerFuelNode;
+
+/// Updates player input stuff
 pub fn update_player(
     input: (Res<Inputs>, EventReader<MouseWheel>),
-    mut player: Query<(&mut Actor, &mut Player, &mut AnimationIndices, &mut Life)>,
-    mut player_life_node: Query<&mut Node, With<PlayerLifeNode>>,
+    mut player: Query<(&mut Actor, &mut Player)>,
     chunk_manager: ResMut<ChunkManager>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
     time: Res<Time>,
     mut zoom: ResMut<Zoom>,
 ) {
-    let (mut actor, mut player, mut anim_idxs, mut life) = player.single_mut();
+    let (mut actor, mut player) = player.single_mut();
+    if matches!(player.state, PlayerState::Dead) {
+        return;
+    }
+
     let (inputs, mut scroll_evr) = input;
     let materials = materials.0.get(&materials.1 .0).unwrap();
-    let mut player_life_node = player_life_node.single_mut();
-
-    //Fall Damage
-    if let Some(speed) = actor.colliding {
-        if speed >= 5. {
-            life.0 -= speed;
-        }
-    }
-
-    //Death
-    if life.0 <= 0. {
-        println!("DEADDD!!")
-    }
-
-    //Life
-    player_life_node.border.left = Val::Px(180. * life.0 / 100.);
-
-    // Gravity
-    if actor.vel.y < TERM_VEL as f32 {
-        actor.vel.y += 1.
-            * if matches!(player.state, PlayerState::Jetpack { .. }) {
-                0.4
-            } else {
-                1.
-            };
-    }
 
     // Movement
     let x = inputs.right - inputs.left;
@@ -203,7 +219,7 @@ pub fn update_player(
     if inputs.jump_just_pressed {
         if on_ground {
             actor.vel.y -= JUMP_MAG;
-            player.state = PlayerState::Jumping(time.elapsed_secs_wrapped_f64());
+            player.state = PlayerState::Jumping(time.elapsed_secs_wrapped());
         } else {
             player.state = PlayerState::Jetpack(true);
             actor.vel.y = 0.;
@@ -212,7 +228,7 @@ pub fn update_player(
 
     //Jump higher when holding space
     if let PlayerState::Jumping(jump_start) = player.state {
-        if inputs.jump_pressed && time.elapsed_secs_wrapped_f64() - jump_start < TIME_JUMP_PRESSED {
+        if inputs.jump_pressed && time.elapsed_secs_wrapped() - jump_start < TIME_JUMP_PRESSED {
             actor.vel.y -= PRESSED_JUMP_MAG
         }
     }
@@ -233,20 +249,6 @@ pub fn update_player(
         *up = new_up
     };
 
-    //Animation
-    (anim_idxs.first, anim_idxs.last) = match player.state {
-        PlayerState::Idle => (0, 1),
-        PlayerState::Walking => (8, 11),
-        PlayerState::Jumping { .. } => (16, 23),
-        PlayerState::Jetpack(up) => {
-            if up {
-                (24, 26)
-            } else {
-                (32, 32)
-            }
-        }
-    };
-
     //Zoom
     for ev in scroll_evr.read() {
         if ev.unit == MouseScrollUnit::Line {
@@ -264,6 +266,215 @@ pub fn update_player(
         player.atom_id = 4;
     } else if inputs.numbers[3] {
         player.atom_id = 5;
+    }
+}
+
+// Update player non controllable stuff
+pub fn update_player_nc(
+    mut nodes: (
+        Query<&mut Node, (With<PlayerLifeNode>, Without<PlayerFuelNode>)>,
+        Query<&mut Node, (With<PlayerFuelNode>, Without<PlayerLifeNode>)>,
+    ),
+    mut player: Query<(
+        &mut Actor,
+        &mut Player,
+        &mut AnimationIndices,
+        &Life,
+        Entity,
+    )>,
+    mut ev_damage: EventWriter<DamageEvent>,
+) {
+    let (mut player_life_node, mut player_fuel_node) = (nodes.0.single_mut(), nodes.1.single_mut());
+    let (mut actor, mut player, mut anim_idxs, life, ent) = player.single_mut();
+
+    // Gravity
+    if actor.vel.y < PLAYER_TERM_VEL as f32 {
+        actor.vel.y += 0.6
+            * if matches!(player.state, PlayerState::Jetpack { .. }) {
+                0.4
+            } else {
+                0.6
+            };
+    }
+
+    //Animation
+    (anim_idxs.first, anim_idxs.last) = match player.state {
+        PlayerState::Idle => (0, 1),
+        PlayerState::Walking => (8, 11),
+        PlayerState::Jumping { .. } => (16, 23),
+        PlayerState::Jetpack(up) => {
+            if up {
+                (24, 26)
+            } else {
+                (32, 32)
+            }
+        }
+        PlayerState::Dead => (0, 0), //TODO
+    };
+
+    //Fall Damage
+    if let Some(speed) = actor.colliding {
+        if speed >= 10. {
+            ev_damage.send(DamageEvent::new(ent, speed * 3.));
+        }
+    }
+
+    //Death
+    if life.0 <= 0. {
+        player.state = PlayerState::Dead;
+    }
+
+    //Life
+    player_life_node.border.left = Val::Px(180. * life.0 / 100.);
+
+    //Fuel
+    player_fuel_node.border.top = Val::Px(180. * player.fuel / FUEL_MAX);
+}
+
+#[derive(Component)]
+pub struct DamageFeedTimer(Timer);
+
+pub fn damage_feed(
+    mut commands: Commands,
+    mut sprite_query: Query<(Entity, &mut Sprite, &mut Life), Without<DamageFeedTimer>>,
+    mut timer_query: Query<(Entity, &mut Sprite, &mut DamageFeedTimer)>,
+    mut ev_damage: EventReader<DamageEvent>,
+    time: Res<Time>,
+) {
+    for ev in ev_damage.read() {
+        let sprite = sprite_query.get_mut(ev.ent);
+        if let Ok((ent, mut sprite, mut life)) = sprite {
+            sprite.color = RED_500.into();
+            commands.entity(ent).insert(DamageFeedTimer(Timer::new(
+                Duration::from_secs_f32(DAMAGE_FEED_TIME),
+                TimerMode::Once,
+            )));
+            life.0 -= ev.damage;
+            if life.0 <= 0. {
+                life.0 = 0.;
+            }
+        }
+    }
+
+    for (ent, mut sprite, mut timer) in timer_query.iter_mut() {
+        timer.0.tick(time.delta());
+
+        if timer.0.finished() {
+            sprite.color = Color::WHITE;
+            commands.entity(ent).remove::<DamageFeedTimer>();
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct RespawnUI;
+
+#[derive(Component)]
+pub enum ButtonType {
+    Restart,
+    Quit,
+}
+
+pub fn dead(
+    mut commands: Commands,
+    mut player: Query<(&mut Player, &mut Life, &mut Actor)>,
+    respawn_ui: Query<Entity, With<RespawnUI>>,
+    mut interaction_query: Query<
+        (
+            &Interaction,
+            &mut BackgroundColor,
+            &mut BorderColor,
+            &ButtonType,
+        ),
+        (Changed<Interaction>, With<Button>),
+    >,
+    mut exit: EventWriter<AppExit>,
+) {
+    let (mut player, mut life, mut actor) = player.single_mut();
+    if !matches!(player.state, PlayerState::Dead) {
+        return;
+    } else if respawn_ui.is_empty() {
+        //Spawn UI
+        let button_style = Node {
+            width: Val::Px(180.0),
+            height: Val::Px(45.0),
+            border: UiRect::all(Val::Px(5.0)),
+            justify_content: JustifyContent::Center,
+            align_items: AlignItems::Center,
+            ..default()
+        };
+
+        let ui_style = Node {
+            width: Val::Percent(100.0),
+            height: Val::Percent(100.0),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::Center,
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(15.),
+            ..default()
+        };
+
+        let text_style = TextFont {
+            font_size: 20.0,
+            ..Default::default()
+        };
+        let text_color = TextColor(Color::srgb(0.9, 0.9, 0.9));
+
+        commands
+            .spawn((
+                ui_style,
+                ImageNode::solid_color(Color::srgba(0., 0., 0., 0.9)),
+            ))
+            .insert(RespawnUI)
+            .with_children(|parent| {
+                //Restart
+                parent
+                    .spawn((Button, button_style.clone()))
+                    .insert(ButtonType::Restart)
+                    .with_children(|parent| {
+                        parent.spawn((Text::new("Restart"), text_style.clone(), text_color));
+                    });
+
+                //Quit
+                parent
+                    .spawn((Button, button_style))
+                    .insert(ButtonType::Quit)
+                    .with_children(|parent| {
+                        parent.spawn((Text::new("Quit"), text_style, text_color));
+                    });
+            });
+    }
+    for (interaction, mut color, mut border_color, button_type) in &mut interaction_query {
+        match *interaction {
+            Interaction::Pressed => {
+                *color = PRESSED_BUTTON.into();
+                border_color.0 = Color::srgb(1., 0., 0.);
+
+                match *button_type {
+                    ButtonType::Restart => {
+                        player.state = PlayerState::Idle;
+                        life.0 = 100.;
+                        actor.pos = IVec2::new(0, 24);
+
+                        for ent in respawn_ui.iter() {
+                            commands.entity(ent).despawn_recursive()
+                        }
+                        return;
+                    }
+                    ButtonType::Quit => {
+                        exit.send(AppExit::Success);
+                    }
+                }
+            }
+            Interaction::Hovered => {
+                *color = HOVERED_BUTTON.into();
+                border_color.0 = Color::WHITE;
+            }
+            Interaction::None => {
+                *color = NORMAL_BUTTON.into();
+                border_color.0 = Color::BLACK;
+            }
+        }
     }
 }
 
@@ -289,6 +500,10 @@ pub fn tool_system(
     let Some(cursor_position) = window.cursor_position() else {
         return;
     };
+
+    if matches!(player.state, PlayerState::Dead) {
+        return;
+    }
 
     // Calculate a world position based on the cursor's position.
     let Ok(world_position) = camera.viewport_to_world_2d(camera_gtransform, cursor_position) else {
@@ -470,7 +685,10 @@ impl Plugin for PlayerPlugin {
         app.add_systems(
             FixedUpdate,
             (
-                update_player.after(update_actors),
+                update_player.before(update_actors),
+                update_player_nc,
+                damage_feed,
+                dead,
                 update_player_sprite.after(update_actors),
                 tool_system
                     .before(chunk_manager_update)
@@ -482,6 +700,7 @@ impl Plugin for PlayerPlugin {
         .add_systems(PreUpdate, get_input.run_if(in_state(GameState::Game)))
         .init_resource::<SavingTask>()
         .init_resource::<Inputs>()
+        .add_event::<DamageEvent>()
         .add_systems(OnEnter(GameState::Game), player_setup.after(manager_setup));
     }
 }
