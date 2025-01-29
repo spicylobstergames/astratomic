@@ -266,6 +266,8 @@ pub fn update_player(
         player.atom_id = 4;
     } else if inputs.numbers[3] {
         player.atom_id = 5;
+    } else if inputs.numbers[4] {
+        player.atom_id = 9;
     }
 }
 
@@ -658,6 +660,8 @@ pub fn get_input(
         inputs.numbers[2] = true;
     } else if keys.just_pressed(KeyCode::Digit4) {
         inputs.numbers[3] = true;
+    } else if keys.just_pressed(KeyCode::Digit5) {
+        inputs.numbers[4] = true;
     }
 }
 
@@ -676,7 +680,7 @@ pub struct Inputs {
     jump_pressed: bool,
     jump_just_pressed: bool,
 
-    numbers: [bool; 4],
+    numbers: [bool; 5],
 }
 
 pub struct PlayerPlugin;

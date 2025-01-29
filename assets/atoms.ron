@@ -10,11 +10,13 @@
     //4 Gravel
     Powder ( inertial_resistance: 0.92),
     //5 Lava
-    Liquid ( flow: 1, damage: 10.0 ),
+    Liquid ( flow: 1, damage: 15.0 ),
     //6 Grass
     Solid,
     //7 Dirt
     Solid,
     //8 Rock
     Solid,
+    //9 Acid
+    Liquid ( flow: 5, damage: 3.0 ),
 ])

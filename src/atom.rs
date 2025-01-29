@@ -102,6 +102,15 @@ impl Atom {
                     255,
                 ];
             }
+            9 => {
+                //Acid
+                atom.color = [
+                    (10 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (230 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (40 + rand::rng().random_range(-5_i16..5_i16)) as u8,
+                    255,
+                ];
+            }
             _ => panic!("Atom not found, invalid ID."),
         }
 
