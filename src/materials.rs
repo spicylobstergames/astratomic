@@ -16,6 +16,7 @@ pub enum Material {
     },
     Liquid {
         flow: u8,
+        damage: f32,
     },
     Gas,
     Object,
@@ -42,6 +43,14 @@ impl Material {
 
     pub fn is_solid(&self) -> bool {
         matches!(self, Material::Solid)
+    }
+
+    pub fn damage(&self) -> Option<f32> {
+        if let Material::Liquid { damage, .. } = self {
+            Some(*damage)
+        } else {
+            None
+        }
     }
 }
 

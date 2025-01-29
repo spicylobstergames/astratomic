@@ -6,28 +6,37 @@ pub struct Actor {
     pub height: u8,
     pub pos: IVec2,
     pub vel: Vec2,
+    pub colliding: Option<f32>,
 }
 
 //Called before simulations
 pub fn fill_actors(
     mut chunk_manager: ResMut<ChunkManager>,
-    actors: Query<&Actor>,
+    actors: Query<(&Actor, Entity)>,
     mut dirty_rects: ResMut<DirtyRects>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+    mut ev_damage: EventWriter<DamageEvent>,
 ) {
     let materials = materials.0.get(&materials.1 .0).unwrap();
+    let mut damages = 0.;
 
-    for actor in actors.iter() {
+    for (actor, ent) in actors.iter() {
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
                 let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
                 if let Some(atom) = chunk_manager.get_mut_atom(pos) {
                     if materials[atom.id].is_void() {
                         *atom = Atom::object();
+                    } else if let Some(damage) = materials[atom.id].damage() {
+                        damages += damage / (actor.width * actor.height) as f32;
                     }
                 }
                 update_dirty_rects_3x3(&mut dirty_rects.current, pos);
             }
+        }
+
+        if damages > 0. {
+            ev_damage.send(DamageEvent::new(ent, damages));
         }
     }
 }
@@ -78,6 +87,8 @@ pub fn update_actors(
     let materials = materials.0.get(&materials.1 .0).unwrap();
 
     for mut actor in actors.iter_mut() {
+        actor.colliding = None;
+
         let mut prev = actor.pos;
         for v in Line::new(actor.pos, actor.vel.as_ivec2()) {
             let move_hor = match (prev.x != v.x, prev.y != v.y) {
@@ -96,61 +107,45 @@ pub fn update_actors(
                 );
                 if on_ground(&chunk_manager, &actor, materials) {
                     let starting_y = actor.pos.y;
-                    match moved_x {
+                    if !moved_x {
                         //If we can't move to the left or right
                         //Check if we can get up a stair-like structure
-                        false => {
-                            for i in 1..=UP_WALK_HEIGHT {
-                                let moved_y = move_y(&mut chunk_manager, &mut actor, -1, materials);
-                                //Abort if we couldn't move up, or if we moved up but couldn't move sideways on the last step
-                                if !moved_y
-                                    || i == UP_WALK_HEIGHT
-                                        && !move_x(
-                                            &mut chunk_manager,
-                                            &mut actor,
-                                            (v.x - prev.x).signum(),
-                                            materials,
-                                        )
-                                {
-                                    abort_stair(
+                        for i in 1..=UP_WALK_HEIGHT {
+                            let moved_y = move_y(&mut chunk_manager, &mut actor, -1, materials);
+                            //Abort if we couldn't move up, or if we moved up but couldn't move sideways on the last step
+                            if !moved_y
+                                || i == UP_WALK_HEIGHT
+                                    && !move_x(
                                         &mut chunk_manager,
                                         &mut actor,
-                                        starting_y,
-                                        1,
+                                        (v.x - prev.x).signum(),
                                         materials,
-                                    );
-                                    break;
-                                }
-                            }
-                        }
-                        //If we can move to the left or right
-                        //Check if we can snap back to the ground
-                        true => {
-                            for i in 1..=DOWN_WALK_HEIGHT {
-                                if !move_y(&mut chunk_manager, &mut actor, 1, materials)
-                                    && on_ground(&chunk_manager, &actor, materials)
-                                {
-                                    break;
-                                } else if i == DOWN_WALK_HEIGHT {
-                                    abort_stair(
-                                        &mut chunk_manager,
-                                        &mut actor,
-                                        starting_y,
-                                        -1,
-                                        materials,
-                                    );
-                                }
+                                    )
+                            {
+                                abort_stair(
+                                    &mut chunk_manager,
+                                    &mut actor,
+                                    starting_y,
+                                    1,
+                                    materials,
+                                );
+                                break;
                             }
                         }
                     }
                 }
             } else {
-                move_y(
+                let prev_vel = actor.vel.length();
+                let moved_y = move_y(
                     &mut chunk_manager,
                     &mut actor,
                     (v.y - prev.y).signum(),
                     materials,
                 );
+
+                if !moved_y && (v.y - prev.y).signum() != 0 && actor.colliding.is_none() {
+                    actor.colliding = Some(prev_vel);
+                }
             }
 
             prev = v;

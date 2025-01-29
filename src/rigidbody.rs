@@ -18,7 +18,7 @@ pub struct RigidbodyHandle(Handle<Image>, Vec2);
 pub struct Hydrated;
 
 //TODO Add rigidbody file
-pub fn load_images(mut commands: Commands, server: Res<AssetServer>) {
+pub fn _load_images(mut commands: Commands, server: Res<AssetServer>) {
     let image: Handle<Image> = server.load("tree.png");
     commands.spawn(RigidbodyHandle(image.clone(), vec2(64., -64.)));
 
@@ -224,7 +224,7 @@ pub fn get_collider(values: &[f64], width: u32, height: u32) -> Option<Collider>
 pub struct RigidbodyPlugin;
 impl Plugin for RigidbodyPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, load_images)
+        app //.add_systems(Startup, load_images)
             .add_systems(Update, add_rigidbodies.run_if(in_state(GameState::Game)))
             .add_systems(
                 FixedUpdate,
