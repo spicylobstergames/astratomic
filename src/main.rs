@@ -17,6 +17,7 @@ mod materials;
 mod menu;
 mod particles;
 mod player;
+mod player_inv;
 mod puffin_plugin;
 mod rigidbody;
 mod prelude {
@@ -24,7 +25,7 @@ mod prelude {
     pub use crate::{
         actors::*, animation::*, atom::*, camera::*, chunk::*, chunk_group::*, chunk_manager::*,
         consts::*, debug::*, geom_tools::*, manager_api::*, materials::*, menu::*, particles::*,
-        player::*, puffin_plugin::*, rigidbody::*,
+        player::*, player_inv::*, puffin_plugin::*, rigidbody::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -70,6 +71,7 @@ fn main() {
             MaterialsPlugin,
             CameraPlugin,
             RigidbodyPlugin,
+            PlayerInvPlugin,
         ))
         .add_plugins((
             RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.),
