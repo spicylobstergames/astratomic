@@ -64,10 +64,7 @@ pub fn update_particles(
     entities: Query<&GlobalTransform, Without<Particle>>,
     mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: ResMut<DirtyRects>,
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
-    let materials = materials.0.get(&materials.1 .0).unwrap();
-
     let compute_pool = ComputeTaskPool::get();
 
     compute_pool.scope(|deferred_scope| {
@@ -84,7 +81,7 @@ pub fn update_particles(
                     let mut change_atom = false;
                     if let Some(atom) = chunk_manager_deffered.read().unwrap().get_atom(&chunk_pos)
                     {
-                        if materials[atom.id].is_void() {
+                        if atom.is_void() {
                             change_atom = true;
                         }
                     }
@@ -149,12 +146,10 @@ pub fn update_particles(
                                     .get_atom(&prev_chunk_pos)
                                     .unwrap();
 
-                                if particle.state == PartState::Normal
-                                    && !materials[atom.id].is_void()
-                                {
+                                if particle.state == PartState::Normal && !atom.is_void() {
                                     //Hit something!
                                     //If our previous pos is free
-                                    if materials[prev_atom.id].is_void() {
+                                    if prev_atom.is_void() {
                                         particle_send
                                             .try_send(DeferredParticleUpdate {
                                                 remove: Some((
@@ -173,7 +168,7 @@ pub fn update_particles(
 
                                     break;
                                 } else if particle.state == PartState::Looking
-                                    && materials[prev_atom.id].is_void()
+                                    && prev_atom.is_void()
                                 {
                                     particle_send
                                         .try_send(DeferredParticleUpdate {

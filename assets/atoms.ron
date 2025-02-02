@@ -1,22 +1,22 @@
 ([
     //0 Void
-    Void,
+    (default_state: Void),
     //1 Dummy atom
-    Object,
+    (default_state: Object),
     //2 Sand
-    Powder ( inertial_resistance: 0.1),
+    ( inertial_resistance: 0.1, default_state: Powder),
     //3 Water
-    Liquid ( flow: 5, damage: 0.0 ),
+    ( flow: 5, damage: 0.0, default_state: Liquid),
     //4 Gravel
-    Powder ( inertial_resistance: 0.92),
+    ( inertial_resistance: 0.92, default_state: Powder),
     //5 Lava
-    Liquid ( flow: 1, damage: 15.0 ),
+    ( flow: 1, damage: 15.0, default_state: Liquid),
     //6 Grass
-    Solid,
+    (default_state: Solid),
     //7 Dirt
-    Solid,
+    (default_state: Solid),
     //8 Rock
-    Solid,
+    (default_state: Solid),
     //9 Acid
-    Liquid ( flow: 5, damage: 3.0 ),
+    ( flow: 5, damage: 3.0, default_state: Liquid),
 ])

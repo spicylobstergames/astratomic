@@ -25,7 +25,7 @@ impl Default for Chunk {
 }
 
 impl Chunk {
-    pub fn new(texture: Handle<Image>, index: IVec2) -> Chunk {
+    pub fn new(texture: Handle<Image>, index: IVec2, materials: &Materials) -> Chunk {
         let mut atoms = [Atom::default(); CHUNK_LEN];
 
         match index.y {
@@ -37,17 +37,17 @@ impl Chunk {
                         _ => 7,
                     };
 
-                    *atom = Atom::new(id);
+                    *atom = Atom::new(id, &materials);
                 }
             }
             2 => {
                 for atom in &mut atoms {
-                    *atom = Atom::new(4);
+                    *atom = Atom::new(4, &materials);
                 }
             }
             3..=i32::MAX => {
                 for atom in &mut atoms {
-                    *atom = Atom::new(8);
+                    *atom = Atom::new(8, &materials);
                 }
             }
         }
@@ -89,20 +89,16 @@ impl Chunk {
         self.update_image_positions(image, &positions)
     }
 
-    pub fn get_collider(&self, materials: &Materials) -> Option<Collider> {
-        rigidbody::get_collider(
-            &self.get_values(materials),
-            CHUNK_LENGHT as u32,
-            CHUNK_LENGHT as u32,
-        )
+    pub fn get_collider(&self) -> Option<Collider> {
+        rigidbody::get_collider(&self.get_values(), CHUNK_LENGHT as u32, CHUNK_LENGHT as u32)
     }
 
-    pub fn get_values(&self, materials: &Materials) -> Vec<f64> {
+    pub fn get_values(&self) -> Vec<f64> {
         let mut values = vec![];
 
         for row in self.atoms.chunks(CHUNK_LENGHT) {
             for atom in row {
-                if materials[atom].is_solid() {
+                if atom.is_solid() {
                     values.push(1.)
                 } else {
                     values.push(0.)

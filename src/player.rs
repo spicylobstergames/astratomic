@@ -184,7 +184,6 @@ pub fn update_player(
     input: (Res<Inputs>, EventReader<MouseWheel>),
     mut player: Query<(&mut Actor, &mut Player)>,
     chunk_manager: ResMut<ChunkManager>,
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
     time: Res<Time>,
     mut zoom: ResMut<Zoom>,
 ) {
@@ -194,13 +193,12 @@ pub fn update_player(
     }
 
     let (inputs, mut scroll_evr) = input;
-    let materials = materials.0.get(&materials.1 .0).unwrap();
 
     // Movement
     let x = inputs.right - inputs.left;
     actor.vel.x = x * RUN_SPEED;
 
-    let on_ground = on_ground(&chunk_manager, &actor, materials);
+    let on_ground = on_ground(&chunk_manager, &actor);
 
     // Refuel
     if on_ground {
@@ -548,9 +546,9 @@ pub fn tool_system(
             let chunk_pos = global_to_chunk(vec.as_ivec2());
             if let (Some(atom), tool_atom) = (
                 chunk_manager.get_mut_atom(chunk_pos),
-                Atom::new(player.atom_id),
+                Atom::new(player.atom_id, materials),
             ) {
-                if materials[atom.id].is_void() || materials[atom.id].is_object() {
+                if atom.is_void() || atom.is_object() {
                     let angle = fastrand::f32() * 0.5 - 0.25;
                     let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
                         .rotate(vec2(angle.cos(), angle.sin()));
@@ -582,7 +580,7 @@ pub fn tool_system(
                 }
 
                 if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                    if !materials[atom.id].is_void() && !materials[atom.id].is_object() {
+                    if !atom.is_void() && !atom.is_object() {
                         commands.spawn(Particle {
                             atom: *atom,
                             pos: chunk_pos.to_global().as_vec2(),

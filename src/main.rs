@@ -99,6 +99,7 @@ fn setup(mut commands: Commands, mut time: ResMut<Time<Fixed>>) {
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, States)]
 pub enum GameState {
     Menu,
+    Loading,
     Game,
 }
 
@@ -107,7 +108,7 @@ impl Default for GameState {
         let args: Vec<_> = env::args().collect();
 
         if args.contains(&"-g".to_string()) || args.contains(&"--game".to_string()) {
-            GameState::Game
+            GameState::Loading
         } else {
             GameState::Menu
         }
