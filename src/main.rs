@@ -17,6 +17,7 @@ mod materials;
 mod menu;
 mod particles;
 mod player;
+mod player_inv;
 mod puffin_plugin;
 mod rigidbody;
 mod prelude {
@@ -24,7 +25,7 @@ mod prelude {
     pub use crate::{
         actors::*, animation::*, atom::*, camera::*, chunk::*, chunk_group::*, chunk_manager::*,
         consts::*, debug::*, geom_tools::*, manager_api::*, materials::*, menu::*, particles::*,
-        player::*, puffin_plugin::*, rigidbody::*,
+        player::*, player_inv::*, puffin_plugin::*, rigidbody::*,
     };
     pub use bevy::input::mouse::MouseScrollUnit;
     pub use bevy::input::mouse::MouseWheel;
@@ -70,6 +71,7 @@ fn main() {
             MaterialsPlugin,
             CameraPlugin,
             RigidbodyPlugin,
+            PlayerInvPlugin,
         ))
         .add_plugins((
             RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(1.),
@@ -97,6 +99,7 @@ fn setup(mut commands: Commands, mut time: ResMut<Time<Fixed>>) {
 #[derive(Clone, Copy, Eq, PartialEq, Debug, Hash, States)]
 pub enum GameState {
     Menu,
+    Loading,
     Game,
 }
 
@@ -105,7 +108,7 @@ impl Default for GameState {
         let args: Vec<_> = env::args().collect();
 
         if args.contains(&"-g".to_string()) || args.contains(&"--game".to_string()) {
-            GameState::Game
+            GameState::Loading
         } else {
             GameState::Menu
         }

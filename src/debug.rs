@@ -10,14 +10,17 @@ fn brush(
     mut dirty_rects: ResMut<DirtyRects>,
     prev_mpos: Res<PreviousMousePos>,
     input: (Res<ButtonInput<MouseButton>>, Res<ButtonInput<KeyCode>>),
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
+    let materials = materials.0.get(&materials.1 .0).unwrap();
+
     let atom;
     if input.0.pressed(MouseButton::Middle) {
-        atom = Atom::new(2);
+        atom = Atom::new(2, materials);
     } else if input.1.pressed(KeyCode::ControlLeft) {
-        atom = Atom::new(3);
+        atom = Atom::new(3, materials);
     } else if input.1.pressed(KeyCode::ShiftLeft) {
-        atom = Atom::new(8);
+        atom = Atom::new(8, materials);
     } else {
         return;
     }

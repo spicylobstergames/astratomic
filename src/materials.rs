@@ -9,52 +9,18 @@ use serde::Deserialize;
 use thiserror::Error;
 
 #[derive(Default, Debug, Deserialize, PartialEq, Clone, Copy)]
-pub enum Material {
-    Solid,
-    Powder {
-        inertial_resistance: f32,
-    },
-    Liquid {
-        flow: u8,
-        damage: f32,
-    },
-    Gas,
-    Object,
-    #[default]
-    Void,
+pub struct Material {
+    #[serde(default)]
+    pub inertial_resistance: f32,
+    #[serde(default)]
+    pub flow: u8,
+    #[serde(default)]
+    pub damage: f32,
+    #[serde(default)]
+    pub default_state: AtomState,
 }
 
-impl Material {
-    pub fn is_liquid(&self) -> bool {
-        matches!(self, Material::Liquid { .. })
-    }
-
-    pub fn is_void(&self) -> bool {
-        matches!(self, Material::Void)
-    }
-
-    pub fn is_object(&self) -> bool {
-        matches!(self, Material::Object)
-    }
-
-    pub fn is_powder(&self) -> bool {
-        matches!(self, Material::Powder { .. })
-    }
-
-    pub fn is_solid(&self) -> bool {
-        matches!(self, Material::Solid)
-    }
-
-    pub fn damage(&self) -> Option<f32> {
-        if let Material::Liquid { damage, .. } = self {
-            Some(*damage)
-        } else {
-            None
-        }
-    }
-}
-
-#[derive(Asset, TypePath, Debug, Deserialize)]
+#[derive(Asset, TypePath, Debug, Deserialize, Default)]
 pub struct Materials(pub Vec<Material>);
 
 impl Materials {
@@ -123,11 +89,21 @@ impl AssetLoader for MaterialsLoader {
     }
 }
 
-pub fn materials_setup(
-    mut materials_handle: ResMut<MaterialsHandle>,
+pub fn materials_setup(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let handle = asset_server.load("atoms.ron");
+    commands.insert_resource(MaterialsHandle(handle));
+}
+
+pub fn materials_wait(
     asset_server: Res<AssetServer>,
+    materials: Res<MaterialsHandle>,
+    mut next_state: ResMut<NextState<GameState>>,
 ) {
-    materials_handle.0 = asset_server.load("atoms.ron");
+    if asset_server.is_loaded(&materials.0) {
+        next_state.set(GameState::Game);
+    } else {
+        println!("Loadingg")
+    }
 }
 
 pub struct MaterialsPlugin;
@@ -136,6 +112,7 @@ impl Plugin for MaterialsPlugin {
         app.init_asset::<Materials>()
             .init_resource::<MaterialsHandle>()
             .init_asset_loader::<MaterialsLoader>()
-            .add_systems(Startup, materials_setup);
+            .add_systems(OnEnter(GameState::Loading), materials_setup)
+            .add_systems(Update, materials_wait.run_if(in_state(GameState::Loading)));
     }
 }

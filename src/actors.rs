@@ -25,10 +25,10 @@ pub fn fill_actors(
             for y_off in 0..actor.height as i32 {
                 let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
                 if let Some(atom) = chunk_manager.get_mut_atom(pos) {
-                    if materials[atom.id].is_void() {
+                    if atom.is_void() {
                         *atom = Atom::object();
-                    } else if let Some(damage) = materials[atom.id].damage() {
-                        damages += damage / (actor.width * actor.height) as f32;
+                    } else if materials[atom.id].damage > 0. {
+                        damages += materials[atom.id].damage / (actor.width * actor.height) as f32;
                     }
                 }
                 update_dirty_rects_3x3(&mut dirty_rects.current, pos);
@@ -42,19 +42,13 @@ pub fn fill_actors(
 }
 
 //Called after simulation, before actor update
-pub fn unfill_actors(
-    mut chunk_manager: ResMut<ChunkManager>,
-    actors: Query<&Actor>,
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
-) {
-    let materials = materials.0.get(&materials.1 .0).unwrap();
-
+pub fn unfill_actors(mut chunk_manager: ResMut<ChunkManager>, actors: Query<&Actor>) {
     for actor in actors.iter() {
         for x_off in 0..actor.width as i32 {
             for y_off in 0..actor.height as i32 {
                 let pos = global_to_chunk(actor.pos + ivec2(x_off, y_off));
                 if let Some(atom) = chunk_manager.get_mut_atom(pos) {
-                    if materials[atom.id].is_object() {
+                    if atom.is_object() {
                         *atom = Atom::default();
                     }
                 }
@@ -63,12 +57,12 @@ pub fn unfill_actors(
     }
 }
 
-pub fn on_ground(chunk_manager: &ChunkManager, actor: &Actor, materials: &Materials) -> bool {
+pub fn on_ground(chunk_manager: &ChunkManager, actor: &Actor) -> bool {
     for x_off in 0..actor.width {
         let chunk_pos = global_to_chunk(actor.pos + ivec2(x_off as i32, actor.height as i32));
 
         if let Some(atom) = chunk_manager.get_atom(&chunk_pos) {
-            if materials[atom].is_powder() || materials[atom].is_solid() {
+            if atom.is_powder() || atom.is_solid() {
                 return true;
             }
         } else {
@@ -79,13 +73,7 @@ pub fn on_ground(chunk_manager: &ChunkManager, actor: &Actor, materials: &Materi
     false
 }
 
-pub fn update_actors(
-    mut chunk_manager: ResMut<ChunkManager>,
-    mut actors: Query<&mut Actor>,
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
-) {
-    let materials = materials.0.get(&materials.1 .0).unwrap();
-
+pub fn update_actors(mut chunk_manager: ResMut<ChunkManager>, mut actors: Query<&mut Actor>) {
     for mut actor in actors.iter_mut() {
         actor.colliding = None;
 
@@ -99,19 +87,14 @@ pub fn update_actors(
             };
 
             if move_hor {
-                let moved_x = move_x(
-                    &mut chunk_manager,
-                    &mut actor,
-                    (v.x - prev.x).signum(),
-                    materials,
-                );
-                if on_ground(&chunk_manager, &actor, materials) {
+                let moved_x = move_x(&mut chunk_manager, &mut actor, (v.x - prev.x).signum());
+                if on_ground(&chunk_manager, &actor) {
                     let starting_y = actor.pos.y;
                     if !moved_x {
                         //If we can't move to the left or right
                         //Check if we can get up a stair-like structure
                         for i in 1..=UP_WALK_HEIGHT {
-                            let moved_y = move_y(&mut chunk_manager, &mut actor, -1, materials);
+                            let moved_y = move_y(&mut chunk_manager, &mut actor, -1);
                             //Abort if we couldn't move up, or if we moved up but couldn't move sideways on the last step
                             if !moved_y
                                 || i == UP_WALK_HEIGHT
@@ -119,16 +102,9 @@ pub fn update_actors(
                                         &mut chunk_manager,
                                         &mut actor,
                                         (v.x - prev.x).signum(),
-                                        materials,
                                     )
                             {
-                                abort_stair(
-                                    &mut chunk_manager,
-                                    &mut actor,
-                                    starting_y,
-                                    1,
-                                    materials,
-                                );
+                                abort_stair(&mut chunk_manager, &mut actor, starting_y, 1);
                                 break;
                             }
                         }
@@ -136,12 +112,7 @@ pub fn update_actors(
                 }
             } else {
                 let prev_vel = actor.vel.length();
-                let moved_y = move_y(
-                    &mut chunk_manager,
-                    &mut actor,
-                    (v.y - prev.y).signum(),
-                    materials,
-                );
+                let moved_y = move_y(&mut chunk_manager, &mut actor, (v.y - prev.y).signum());
 
                 if !moved_y && (v.y - prev.y).signum() != 0 && actor.colliding.is_none() {
                     actor.colliding = Some(prev_vel);
@@ -153,24 +124,13 @@ pub fn update_actors(
     }
 }
 
-pub fn abort_stair(
-    chunk_manager: &mut ChunkManager,
-    actor: &mut Actor,
-    starting_y: i32,
-    dir: i32,
-    materials: &Materials,
-) {
+pub fn abort_stair(chunk_manager: &mut ChunkManager, actor: &mut Actor, starting_y: i32, dir: i32) {
     for _ in 0..(starting_y - actor.pos.y) {
-        move_y(chunk_manager, actor, dir, materials);
+        move_y(chunk_manager, actor, dir);
     }
 }
 
-pub fn move_x(
-    chunk_manager: &mut ChunkManager,
-    actor: &mut Actor,
-    dir: i32,
-    materials: &Materials,
-) -> bool {
+pub fn move_x(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> bool {
     //Check if we can move
     for y_off in 0..actor.height as i32 {
         let pos = actor.pos
@@ -185,7 +145,7 @@ pub fn move_x(
 
         // Check bounds and if it's free to move
         if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-            if materials[atom.id].is_powder() || materials[atom.id].is_solid() {
+            if atom.is_powder() || atom.is_solid() {
                 actor.vel = Vec2::ZERO;
                 return false;
             }
@@ -200,12 +160,7 @@ pub fn move_x(
     true
 }
 
-pub fn move_y(
-    chunk_manager: &mut ChunkManager,
-    actor: &mut Actor,
-    dir: i32,
-    materials: &Materials,
-) -> bool {
+pub fn move_y(chunk_manager: &mut ChunkManager, actor: &mut Actor, dir: i32) -> bool {
     //Check if we can move
     for x_off in 0..actor.width as i32 {
         let pos = actor.pos
@@ -220,7 +175,7 @@ pub fn move_y(
 
         // Check bounds and if it's free to move
         if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-            if materials[atom.id].is_powder() || materials[atom.id].is_solid() {
+            if atom.is_powder() || atom.is_solid() {
                 actor.vel = Vec2::ZERO;
                 return false;
             }
