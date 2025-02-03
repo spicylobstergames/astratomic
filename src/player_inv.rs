@@ -11,7 +11,7 @@ pub enum Item {
 pub struct Slot {
     item: Item,
     // If none it means item is not stackable
-    number: Option<u16>,
+    pub number: Option<u16>,
 }
 
 impl Slot {
@@ -32,7 +32,7 @@ impl Slot {
 
 #[derive(Default)]
 pub struct Hotbar {
-    slots: [Option<Slot>; 8],
+    pub slots: [Option<Slot>; 8],
     selected: usize,
 }
 
@@ -43,7 +43,7 @@ impl Hotbar {
 }
 #[derive(Component, Default)]
 pub struct Inventory {
-    hotbar: Hotbar,
+    pub hotbar: Hotbar,
     slots: [Option<Slot>; 24],
 }
 
@@ -55,6 +55,9 @@ impl Inventory {
         }
     }
 }
+
+#[derive(Component)]
+pub struct SlotUi(usize);
 
 pub fn inv_setup(
     mut commands: Commands,
@@ -84,11 +87,11 @@ pub fn inv_setup(
             for i in 0..8 {
                 let mut parent = parent.spawn((
                     Node {
-                        width: Val::Px(25.),
-                        height: Val::Px(25.),
-                        margin: UiRect::all(Val::Px(20.)),
+                        width: Val::Px(42.),
+                        height: Val::Px(42.),
+                        margin: UiRect::all(Val::Px(16.)),
                         align_items: AlignItems::Center,
-                        justify_content: JustifyContent::Center,
+                        //justify_content: JustifyContent::Center,
                         justify_self: JustifySelf::Center,
                         border: UiRect::all(Val::Percent(1.)),
                         ..default()
@@ -100,6 +103,7 @@ pub fn inv_setup(
                         offset: Val::Px(6.),
                         color: Color::WHITE,
                     },
+                    SlotUi(i),
                 ));
                 if let Some(slot) = slots[i] {
                     let image = match slot.item {
@@ -122,29 +126,70 @@ pub fn inv_setup(
                             image,
                             ..Default::default()
                         },
-                        Transform::from_scale(Vec3::new(3.2, 3.2, 0.)),
-                    ));
+                        Node {
+                            width: Val::Percent(100.),
 
-                    if let Some(number) = slot.number {
-                        let text_style = TextFont {
                             ..Default::default()
-                        };
-                        let text_color = TextColor(Color::srgb(0.9, 0.9, 0.9));
-
-                        parent.with_child((Text::new(format!("{number}")), text_style, text_color));
-                    }
+                        },
+                    ));
                 }
             }
         });
 }
 
-fn inv() {
+#[derive(Component)]
+pub struct NumberUi(pub Entity);
 
+pub fn spawn_numbers(
+    mut commands: Commands,
+    slots: Query<(&SlotUi, Entity)>,
+    inventory: Query<&Inventory>,
+) {
+    let inventory = inventory.single();
+
+    let text_style = TextFont {
+        font_size: 11.,
+        ..Default::default()
+    };
+    let text_color = TextColor(Color::srgb(0.9, 0.9, 0.9));
+
+    for (slot, ent) in slots.iter() {
+        if let Some(slot) = inventory.hotbar.slots[slot.0] {
+            if let Some(number) = slot.number {
+                commands.spawn((
+                    Text::new(format!("{number}")),
+                    text_style.clone(),
+                    text_color,
+                    Node::DEFAULT,
+                    Transform::from_xyz(0., 0., 10.),
+                    NumberUi(ent),
+                ));
+            }
+        }
+    }
 }
+
+pub fn update_numbers(
+    slots: Query<&GlobalTransform, (With<SlotUi>, Without<NumberUi>)>,
+    mut numbers: Query<(&mut GlobalTransform, &NumberUi), Without<SlotUi>>,
+) {
+    for (mut gtransform, number_ui) in numbers.iter_mut() {
+        let v = slots.get(number_ui.0).unwrap().clone().translation() + Vec3::new(0., 22., 10.);
+        *gtransform = GlobalTransform::from_xyz(v.x, v.y, v.z);
+    }
+}
+
+pub fn inv() {}
 
 pub struct PlayerInvPlugin;
 impl Plugin for PlayerInvPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(GameState::Game), inv_setup.after(manager_setup));
+        app.add_systems(
+            OnEnter(GameState::Game),
+            (
+                inv_setup.after(manager_setup),
+                spawn_numbers.after(inv_setup),
+            ),
+        ).add_systems(Update, update_numbers.run_if(in_state(GameState::Game)));
     }
 }
