@@ -51,8 +51,10 @@ impl ChunkManager {
         chunk_textures: &Entity,
         image_entities: &Query<(&Parent, Entity, &Sprite)>,
         file_chunks: &mut HashMap<IVec2, Chunk>,
-        move_dir: MoveDir,
+        dir_materials: (MoveDir, &Materials),
     ) {
+        let (move_dir, materials) = dir_materials;
+
         let (for_load, vec_load, dir, y) = match move_dir {
             MoveDir::X(dir) => {
                 self.pos.x += dir;
@@ -97,7 +99,7 @@ impl ChunkManager {
                 let chunk = if let Some(file_chunk) = file_chunks.get(&pos) {
                     file_chunk.clone()
                 } else {
-                    Chunk::new(Handle::default(), pos)
+                    Chunk::new(Handle::default(), pos, materials)
                 };
 
                 images_vec.push(add_chunk(commands, images, self, chunk, pos));
@@ -172,6 +174,7 @@ pub fn manager_setup(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut chunk_manager: ResMut<ChunkManager>,
+    materials: (Res<Assets<Materials>>, ResMut<MaterialsHandle>),
 ) {
     let (width, height) = (LOAD_WIDTH, LOAD_HEIGHT);
 
@@ -197,7 +200,8 @@ pub fn manager_setup(
         if let Some(file_chunk) = file_chunks.get(&index) {
             chunk = file_chunk.clone();
         } else {
-            chunk = Chunk::new(Handle::default(), index);
+            let materials = materials.0.get(&materials.1 .0).unwrap();
+            chunk = Chunk::new(Handle::default(), index, materials);
         }
 
         let ent = add_chunk(&mut commands, &mut images, &mut chunk_manager, chunk, index);
@@ -218,14 +222,9 @@ pub fn add_colliders(
     mut commands: Commands,
     chunk_manager: Res<ChunkManager>,
     chunks: Query<(Entity, &ChunkComponent), Without<Collider>>,
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
     has_collider: Res<HasCollider>,
 ) {
     puffin::profile_function!();
-
-    let Some(materials) = materials.0.get(&materials.1 .0) else {
-        return;
-    };
 
     if has_collider.0.is_empty() {
         return;
@@ -235,7 +234,7 @@ pub fn add_colliders(
         for rect in has_collider.0.iter() {
             if rect.contains(pos.0) {
                 if let Some(chunk) = chunk_manager.chunks.get(&pos.0) {
-                    let collider = chunk.get_collider(materials);
+                    let collider = chunk.get_collider();
 
                     if let Some(collider) = collider {
                         commands
@@ -437,15 +436,14 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
         let mut awake_self = false;
         let id;
         let speed;
+        let state;
         {
             let atom = &mut chunks.group[local_pos];
             id = atom.id;
             speed = atom.speed;
+            state = atom.state;
 
-            if atom.f_idle < FRAMES_SLEEP
-                && materials[id] != Material::Void
-                && materials[id] != Material::Solid
-            {
+            if atom.f_idle < FRAMES_SLEEP && !atom.is_void() && !atom.is_solid() {
                 atom.f_idle += 1;
                 awake_self = true;
             }
@@ -454,11 +452,11 @@ pub fn update_chunks(chunks: &mut UpdateChunksType, dt: u8, dirty_rect: &URect) 
         let (vector, mut awakened) = if speed.0 == 0 && speed.1 >= 0 {
             (
                 false,
-                match materials[id] {
-                    Material::Powder {
-                        inertial_resistance,
-                    } => update_powder(chunks, pos, dt, inertial_resistance),
-                    Material::Liquid { flow, .. } => update_liquid(chunks, pos, flow, dt),
+                match state {
+                    AtomState::Powder => {
+                        update_powder(chunks, pos, dt, materials[id].inertial_resistance)
+                    }
+                    AtomState::Liquid => update_liquid(chunks, pos, materials[id].flow, dt),
                     _ => HashSet::new(),
                 },
             )
@@ -551,7 +549,10 @@ pub fn update_manager_pos(
         ResMut<Assets<Image>>,
     ),
     mut task_executor: AsyncTaskRunner<(HashMap<IVec2, Chunk>, IVec2)>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
+    let materials = materials.0.get(&materials.1 .0).unwrap();
+
     let (mut saving_task, mut chunk_manager, mut images) = resources;
 
     let mut player_pos = player.single().pos;
@@ -598,7 +599,7 @@ pub fn update_manager_pos(
                             &chunk_textures,
                             &image_entities,
                             &mut file_chunks,
-                            MoveDir::X(diff.x.signum()),
+                            (MoveDir::X(diff.x.signum()), materials),
                         );
                     }
 
@@ -609,7 +610,7 @@ pub fn update_manager_pos(
                             &chunk_textures,
                             &image_entities,
                             &mut file_chunks,
-                            MoveDir::Y(diff.y.signum()),
+                            (MoveDir::Y(diff.y.signum()), materials),
                         );
                     }
 
