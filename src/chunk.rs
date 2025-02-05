@@ -37,17 +37,17 @@ impl Chunk {
                         _ => 7,
                     };
 
-                    *atom = Atom::new(id, &materials);
+                    *atom = Atom::new(id, materials);
                 }
             }
             2 => {
                 for atom in &mut atoms {
-                    *atom = Atom::new(4, &materials);
+                    *atom = Atom::new(4, materials);
                 }
             }
             3..=i32::MAX => {
                 for atom in &mut atoms {
-                    *atom = Atom::new(8, &materials);
+                    *atom = Atom::new(8, materials);
                 }
             }
         }

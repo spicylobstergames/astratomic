@@ -8,7 +8,6 @@ use crate::prelude::*;
 pub struct Player {
     fuel: f32,
     state: PlayerState,
-    atom_id: u8,
 }
 
 impl Default for Player {
@@ -16,7 +15,6 @@ impl Default for Player {
         Self {
             fuel: FUEL_MAX,
             state: PlayerState::default(),
-            atom_id: 2,
         }
     }
 }
@@ -186,6 +184,7 @@ pub fn update_player(
     chunk_manager: ResMut<ChunkManager>,
     time: Res<Time>,
     mut zoom: ResMut<Zoom>,
+    mut inventory: ResMut<Inventory>,
 ) {
     let (mut actor, mut player) = player.single_mut();
     if matches!(player.state, PlayerState::Dead) {
@@ -247,25 +246,22 @@ pub fn update_player(
         *up = new_up
     };
 
-    //Zoom
+    //Scroll
     for ev in scroll_evr.read() {
-        if ev.unit == MouseScrollUnit::Line {
+        if ev.unit == MouseScrollUnit::Line && inputs.ctrl {
             zoom.0 *= 0.9_f32.powi(ev.y as i32);
             zoom.0 = zoom.0.clamp(ZOOM_LOWER_BOUND, ZOOM_UPPER_BOUND);
+        } else if ev.unit == MouseScrollUnit::Line {
+            inventory.selected = ((inventory.selected as f32 + ev.y + 8.) % 8.) as usize;
         }
     }
 
     //Change shooting atoms
-    if inputs.numbers[0] {
-        player.atom_id = 2;
-    } else if inputs.numbers[1] {
-        player.atom_id = 3;
-    } else if inputs.numbers[2] {
-        player.atom_id = 4;
-    } else if inputs.numbers[3] {
-        player.atom_id = 5;
-    } else if inputs.numbers[4] {
-        player.atom_id = 9;
+    for i in 0..8 {
+        if inputs.numbers[i] {
+            inventory.selected = i;
+            break;
+        }
     }
 }
 
@@ -484,18 +480,26 @@ pub fn tool_system(
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
     querys: (Query<&Window>, Query<(&mut Sprite, &Player), Without<Tool>>),
-    resources: (ResMut<ChunkManager>, ResMut<DirtyRects>, Res<Inputs>),
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
+    resources: (
+        ResMut<ChunkManager>,
+        ResMut<DirtyRects>,
+        Res<Inputs>,
+        Res<Inventory>,
+        Res<Assets<Materials>>,
+        Res<MaterialsHandle>,
+    ),
+    mut ev_item: EventWriter<ItemEvent>,
 ) {
     let (mut tool_transform, tool_gtransform, mut tool_sprite) = tool.single_mut();
     let (camera, camera_gtransform) = camera.single_mut();
     let (window, mut player) = querys;
     let (mut textatlas_sprite, player) = player.single_mut();
-    let (mut chunk_manager, mut dirty_rects, inputs) = resources;
+    let (mut chunk_manager, mut dirty_rects, inputs, inventory, materials, materials_handle) =
+        resources;
     let Ok(window) = window.get_single() else {
         return;
     };
-    let materials = materials.0.get(&materials.1 .0).unwrap();
+    let materials = materials.get(&materials_handle.0).unwrap();
 
     let Some(cursor_position) = window.cursor_position() else {
         return;
@@ -544,20 +548,24 @@ pub fn tool_system(
             vec += tool_slope * 7. * angle.sin().max(0.);
 
             let chunk_pos = global_to_chunk(vec.as_ivec2());
-            if let (Some(atom), tool_atom) = (
+            if let (Some(atom), Some(slot)) = (
                 chunk_manager.get_mut_atom(chunk_pos),
-                Atom::new(player.atom_id, materials),
+                inventory.slots[inventory.selected],
             ) {
                 if atom.is_void() || atom.is_object() {
-                    let angle = fastrand::f32() * 0.5 - 0.25;
-                    let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
-                        .rotate(vec2(angle.cos(), angle.sin()));
-                    commands.spawn(Particle {
-                        atom: tool_atom,
-                        velocity: vel,
-                        pos: vec,
-                        ..Default::default()
-                    });
+                    if let Item::Atom(atom) = slot.item {
+                        let angle = fastrand::f32() * 0.5 - 0.25;
+                        let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
+                            .rotate(vec2(angle.cos(), angle.sin()));
+                        commands.spawn(Particle {
+                            atom: Atom::new(atom.id, materials),
+                            velocity: vel,
+                            pos: vec,
+                            ..Default::default()
+                        });
+
+                        ev_item.send(ItemEvent::RemoveSelected);
+                    }
                 }
             }
         }
@@ -580,7 +588,8 @@ pub fn tool_system(
                 }
 
                 if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                    if !atom.is_void() && !atom.is_object() {
+                    if !atom.is_void() && !atom.is_object() && inventory.can_add(Item::Atom(*atom))
+                    {
                         commands.spawn(Particle {
                             atom: *atom,
                             pos: chunk_pos.to_global().as_vec2(),
@@ -625,6 +634,8 @@ pub fn get_input(
     mouse_buttons: Res<ButtonInput<MouseButton>>,
     mut inputs: ResMut<Inputs>,
 ) {
+    //TODO Add controller support
+
     //Jump
     if keys.just_pressed(KeyCode::Space) {
         inputs.jump_just_pressed = true;
@@ -660,6 +671,22 @@ pub fn get_input(
         inputs.numbers[3] = true;
     } else if keys.just_pressed(KeyCode::Digit5) {
         inputs.numbers[4] = true;
+    } else if keys.just_pressed(KeyCode::Digit6) {
+        inputs.numbers[5] = true;
+    } else if keys.just_pressed(KeyCode::Digit7) {
+        inputs.numbers[6] = true;
+    } else if keys.just_pressed(KeyCode::Digit8) {
+        inputs.numbers[7] = true;
+    }
+
+    //Inventory open and close
+    if keys.just_released(KeyCode::KeyE) {
+        inputs.inventory_toggle = true;
+    }
+
+    //Check if we change selected or zoom
+    if keys.pressed(KeyCode::ControlLeft) {
+        inputs.ctrl = true;
     }
 }
 
@@ -678,7 +705,10 @@ pub struct Inputs {
     jump_pressed: bool,
     jump_just_pressed: bool,
 
-    numbers: [bool; 5],
+    numbers: [bool; 8],
+    ctrl: bool,
+
+    pub inventory_toggle: bool,
 }
 
 pub struct PlayerPlugin;
@@ -695,10 +725,10 @@ impl Plugin for PlayerPlugin {
                 tool_system
                     .before(chunk_manager_update)
                     .before(update_particles),
-                clear_input.after(update_player).after(tool_system),
             )
                 .run_if(in_state(GameState::Game)),
         )
+        .add_systems(PostUpdate, clear_input.run_if(in_state(GameState::Game)))
         .add_systems(PreUpdate, get_input.run_if(in_state(GameState::Game)))
         .init_resource::<SavingTask>()
         .init_resource::<Inputs>()

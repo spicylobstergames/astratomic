@@ -101,8 +101,6 @@ pub fn materials_wait(
 ) {
     if asset_server.is_loaded(&materials.0) {
         next_state.set(GameState::Game);
-    } else {
-        println!("Loadingg")
     }
 }
 

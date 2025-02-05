@@ -51,9 +51,10 @@ impl ChunkManager {
         chunk_textures: &Entity,
         image_entities: &Query<(&Parent, Entity, &Sprite)>,
         file_chunks: &mut HashMap<IVec2, Chunk>,
-        move_dir: MoveDir,
-        materials: &Materials,
+        dir_materials: (MoveDir, &Materials),
     ) {
+        let (move_dir, materials) = dir_materials;
+
         let (for_load, vec_load, dir, y) = match move_dir {
             MoveDir::X(dir) => {
                 self.pos.x += dir;
@@ -598,8 +599,7 @@ pub fn update_manager_pos(
                             &chunk_textures,
                             &image_entities,
                             &mut file_chunks,
-                            MoveDir::X(diff.x.signum()),
-                            materials,
+                            (MoveDir::X(diff.x.signum()), materials),
                         );
                     }
 
@@ -610,8 +610,7 @@ pub fn update_manager_pos(
                             &chunk_textures,
                             &image_entities,
                             &mut file_chunks,
-                            MoveDir::Y(diff.y.signum()),
-                            materials,
+                            (MoveDir::Y(diff.y.signum()), materials),
                         );
                     }
 

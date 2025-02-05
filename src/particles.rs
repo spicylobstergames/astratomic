@@ -64,6 +64,7 @@ pub fn update_particles(
     entities: Query<&GlobalTransform, Without<Particle>>,
     mut chunk_manager: ResMut<ChunkManager>,
     mut dirty_rects: ResMut<DirtyRects>,
+    mut ev_item: EventWriter<ItemEvent>,
 ) {
     let compute_pool = ComputeTaskPool::get();
 
@@ -77,7 +78,7 @@ pub fn update_particles(
         let chunk_manager_deffered = Arc::clone(&chunk_manager);
         deferred_scope.spawn(async move {
             while let Ok(update) = particles_recv.recv().await {
-                if let Some((chunk_pos, update_atom)) = update.remove {
+                if let Some(chunk_pos) = update.remove.0 {
                     let mut change_atom = false;
                     if let Some(atom) = chunk_manager_deffered.read().unwrap().get_atom(&chunk_pos)
                     {
@@ -88,13 +89,14 @@ pub fn update_particles(
 
                     if change_atom {
                         let atom = &mut chunk_manager_deffered.write().unwrap()[chunk_pos];
-                        *atom = update_atom;
+                        *atom = update.remove.1;
                         commands.entity(update.ent).despawn();
 
                         update_dirty_rects(&mut dirty_rects.render, chunk_pos);
                         update_dirty_rects_3x3(&mut dirty_rects.current, chunk_pos);
                     }
                 } else {
+                    ev_item.send(ItemEvent::Add(Item::Atom(update.remove.1)));
                     commands.entity(update.ent).despawn();
                     continue;
                 }
@@ -122,7 +124,10 @@ pub fn update_particles(
                     || !y_bound.contains(&(cur_pos.y as i32))
                 {
                     particle_send
-                        .try_send(DeferredParticleUpdate { remove: None, ent })
+                        .try_send(DeferredParticleUpdate {
+                            remove: (None, particle.atom),
+                            ent,
+                        })
                         .unwrap();
                 } else {
                     match particle.state {
@@ -152,10 +157,10 @@ pub fn update_particles(
                                     if prev_atom.is_void() {
                                         particle_send
                                             .try_send(DeferredParticleUpdate {
-                                                remove: Some((
-                                                    global_to_chunk(prev_pos),
+                                                remove: (
+                                                    Some(global_to_chunk(prev_pos)),
                                                     particle.atom,
-                                                )),
+                                                ),
                                                 ent,
                                             })
                                             .unwrap();
@@ -172,7 +177,7 @@ pub fn update_particles(
                                 {
                                     particle_send
                                         .try_send(DeferredParticleUpdate {
-                                            remove: Some((global_to_chunk(pos), particle.atom)),
+                                            remove: (Some(global_to_chunk(pos)), particle.atom),
                                             ent,
                                         })
                                         .unwrap();
@@ -207,7 +212,10 @@ pub fn update_particles(
                                 < 3.
                             {
                                 particle_send
-                                    .try_send(DeferredParticleUpdate { remove: None, ent })
+                                    .try_send(DeferredParticleUpdate {
+                                        remove: (None, particle.atom),
+                                        ent,
+                                    })
                                     .unwrap();
                             }
                         }
@@ -219,7 +227,7 @@ pub fn update_particles(
 
 pub struct DeferredParticleUpdate {
     pub ent: Entity,
-    pub remove: Option<(ChunkPos, Atom)>,
+    pub remove: (Option<ChunkPos>, Atom),
 }
 
 pub struct ParticlesPlugin;
