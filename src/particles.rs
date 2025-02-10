@@ -96,7 +96,7 @@ pub fn update_particles(
                         update_dirty_rects_3x3(&mut dirty_rects.current, chunk_pos);
                     }
                 } else {
-                    ev_item.send(ItemEvent::Add(Item::Atom(update.remove.1)));
+                    ev_item.send(ItemEvent::AddOne(Item::Atom(update.remove.1)));
                     commands.entity(update.ent).despawn();
                     continue;
                 }

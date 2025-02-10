@@ -144,6 +144,9 @@ impl Drop for Inventory {
 pub struct SlotUi(usize);
 
 #[derive(Component)]
+pub struct ImageSlotUi(usize, Entity);
+
+#[derive(Component)]
 pub struct InvUi;
 
 pub fn inv_setup(
@@ -206,36 +209,51 @@ pub fn inv_setup(
                         color: Color::WHITE,
                     },
                     SlotUi(i),
+                    Button,
                 ));
-                if i < 8 {
-                    if let Some(slot) = slots[i] {
-                        let image = match slot.item {
-                            Item::Atom(atom) => images.add(Image::new(
+                parent.with_child(());
+
+                if let Some(slot) = slots[i] {
+                    let image = match slot.item {
+                        Item::Atom(atom) => {
+                            let size: u32 = 8;
+                            let mut data = vec![];
+                            for _ in 0..(size.pow(2)) {
+                                let color = Atom::new(atom.id, materials).color.to_vec();
+                                for u in color {
+                                    data.push(u);
+                                }
+                            }
+
+                            images.add(Image::new(
                                 Extent3d {
-                                    height: 1,
-                                    width: 1,
+                                    height: size,
+                                    width: size,
                                     ..Default::default()
                                 },
                                 TextureDimension::D2,
-                                atom.color.into(),
+                                data,
                                 TextureFormat::Rgba8UnormSrgb,
                                 RenderAssetUsages::RENDER_WORLD,
-                            )),
-                            Item::SmartTool => asset_server.load("player/player_tool.png"),
-                        };
+                            ))
+                        }
+                        Item::SmartTool => asset_server.load("player/player_tool.png"),
+                    };
 
-                        parent.with_child((
-                            ImageNode {
-                                image,
-                                ..Default::default()
-                            },
-                            Node {
-                                width: Val::Percent(100.),
-                                ..Default::default()
-                            },
-                        ));
-                    }
-                } else {
+                    parent.with_child((
+                        ImageNode {
+                            image,
+                            ..Default::default()
+                        },
+                        Node {
+                            width: Val::Percent(100.),
+                            ..Default::default()
+                        },
+                        ImageSlotUi(i, parent.id()),
+                    ));
+                }
+
+                if i >= 8 {
                     parent.insert((InvUi, Visibility::Hidden));
                 }
                 slot_ents[i] = Some(parent.id());
@@ -250,7 +268,7 @@ pub struct NumberUi(pub Entity);
 
 pub fn spawn_numbers(
     mut commands: Commands,
-    slots: Query<(&SlotUi, Entity)>,
+    slots: Query<(&ImageSlotUi, Entity)>,
     inventory: Res<Inventory>,
 ) {
     let text_style = TextFont {
@@ -271,7 +289,7 @@ pub fn spawn_numbers(
                     NumberUi(ent),
                 ));
                 if index.0 >= 8 {
-                    ent.insert((InvUi, Visibility::Hidden));
+                    ent.insert(Visibility::Hidden);
                 }
             }
         }
@@ -280,16 +298,34 @@ pub fn spawn_numbers(
 
 pub fn update_numbers(
     mut commands: Commands,
-    slots: Query<(&SlotUi, &GlobalTransform), Without<NumberUi>>,
-    mut numbers: Query<(&mut GlobalTransform, &NumberUi, &mut Text, Entity), Without<SlotUi>>,
+    slots: Query<(&ImageSlotUi, &GlobalTransform), Without<NumberUi>>,
+    mut numbers: Query<
+        (
+            &mut GlobalTransform,
+            &NumberUi,
+            &mut Text,
+            Entity,
+            &mut Visibility,
+        ),
+        Without<ImageSlotUi>,
+    >,
     inventory: Res<Inventory>,
 ) {
-    for (mut gtransform, number_ui, mut text, ent) in numbers.iter_mut() {
-        let (slot, slot_gtransform) = slots.get(number_ui.0).unwrap();
-        if let Some(slot) = inventory.slots[slot.0] {
-            text.0 = slot.number.unwrap().to_string();
-            let v = slot_gtransform.clone().translation() + Vec3::new(0., 28., 500.);
-            *gtransform = GlobalTransform::from_xyz(v.x, v.y, v.z);
+    for (mut gtransform, number_ui, mut text, ent, mut visibility) in numbers.iter_mut() {
+        if let Ok((slot, slot_gtransform)) = slots.get(number_ui.0) {
+            if slot.0 >= 8 && !inventory.showing {
+                *visibility = Visibility::Hidden;
+            } else if slot.0 < 8 || inventory.showing {
+                *visibility = Visibility::Visible;
+            }
+
+            if let Some(slot) = inventory.slots[slot.0] {
+                text.0 = slot.number.unwrap().to_string();
+                let v = slot_gtransform.clone().translation() + Vec3::new(0., 28.5, 500.);
+                *gtransform = GlobalTransform::from_xyz(v.x, v.y, v.z);
+            } else {
+                commands.entity(ent).despawn_recursive();
+            }
         } else {
             commands.entity(ent).despawn_recursive();
         }
@@ -298,8 +334,10 @@ pub fn update_numbers(
 
 #[derive(Event)]
 pub enum ItemEvent {
-    Add(Item),
+    AddOne(Item),
     RemoveSelected,
+    //First is from, second is to
+    MoveToEmpty(usize, usize),
 }
 
 pub fn item_events(
@@ -308,61 +346,77 @@ pub fn item_events(
     mut inv: ResMut<Inventory>,
     mut images: ResMut<Assets<Image>>,
     asset_server: Res<AssetServer>,
+    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
+    let materials = materials.0.get(&materials.1 .0).unwrap();
+
     for ev in ev_items.read() {
         match ev {
-            ItemEvent::Add(item) => {
+            ItemEvent::AddOne(item) => {
                 if let Some(index) = inv.add(*item) {
-                    if let Some(ent) = inv.slot_ents[index] {
-                        let image = match item {
-                            Item::Atom(atom) => images.add(Image::new(
+                    let ent = inv.slot_ents[index].unwrap();
+                    let image = match item {
+                        Item::Atom(atom) => {
+                            let size: u32 = 4;
+                            let mut data = vec![];
+                            for _ in 0..(size.pow(2)) {
+                                let color = Atom::new(atom.id, materials).color.to_vec();
+                                for u in color {
+                                    data.push(u);
+                                }
+                            }
+
+                            images.add(Image::new(
                                 Extent3d {
-                                    height: 1,
-                                    width: 1,
+                                    height: size,
+                                    width: size,
                                     ..Default::default()
                                 },
                                 TextureDimension::D2,
-                                atom.color.into(),
+                                data,
                                 TextureFormat::Rgba8UnormSrgb,
                                 RenderAssetUsages::RENDER_WORLD,
-                            )),
-                            Item::SmartTool => asset_server.load("player/player_tool.png"),
-                        };
+                            ))
+                        }
+                        Item::SmartTool => asset_server.load("player/player_tool.png"),
+                    };
 
-                        commands.entity(ent).with_child((
+                    let image_ent = commands
+                        .spawn((
                             ImageNode {
                                 image,
                                 ..Default::default()
                             },
                             Node {
                                 width: Val::Percent(100.),
-
                                 ..Default::default()
                             },
-                        ));
+                            ImageSlotUi(index, ent),
+                        ))
+                        .id();
 
+                    commands.entity(ent).add_child(image_ent);
+
+                    let slot = inv.slots[index].unwrap();
+                    if let Some(number) = slot.number {
                         let text_style = TextFont {
                             font_size: 11.,
                             ..Default::default()
                         };
                         let text_color = TextColor(Color::srgb(0.9, 0.9, 0.9));
 
-                        if let Some(slot) = inv.slots[index] {
-                            if let Some(number) = slot.number {
-                                let mut ent = commands.spawn((
-                                    Text::new(format!("{number}")),
-                                    text_style.clone(),
-                                    text_color,
-                                    Node::DEFAULT,
-                                    Transform::from_xyz(0., 0., 10.),
-                                    NumberUi(ent),
-                                ));
-                                if !inv.showing && index >= 8 {
-                                    ent.insert((Visibility::Hidden, InvUi));
-                                } else if inv.showing && index >= 8 {
-                                    ent.insert((Visibility::Visible, InvUi));
-                                }
-                            }
+                        let mut ent = commands.spawn((
+                            Text::new(format!("{number}")),
+                            text_style.clone(),
+                            text_color,
+                            Node::DEFAULT,
+                            Transform::from_xyz(0., 0., 10.),
+                            NumberUi(image_ent),
+                        ));
+                        if !inv.showing && index >= 8 {
+                            ent.insert(Visibility::Hidden);
+                        } else if inv.showing || index < 8 {
+                            ent.insert(Visibility::Visible);
                         }
                     }
                 }
@@ -372,6 +426,13 @@ pub fn item_events(
                     if let Some(ent) = inv.slot_ents[index] {
                         commands.entity(ent).despawn_descendants();
                     }
+                }
+            }
+            ItemEvent::MoveToEmpty(from, to) => {
+                let slot = inv.slots[*from].unwrap();
+                inv.slots[*to] = Some(slot);
+                if from != to {
+                    inv.slots[*from] = None;
                 }
             }
         }
@@ -419,6 +480,78 @@ fn clear_selected(mut slots: Query<&mut Outline, With<SlotUi>>) {
     }
 }
 
+fn slot_button(
+    mut commands: Commands,
+    slots: Query<
+        (&Interaction, &Children, &SlotUi, Entity),
+        (Changed<Interaction>, (With<Button>, Without<FollowMouse>)),
+    >,
+    mut slot_images: Query<(&mut Node, &FollowMouse, Entity, &mut ImageSlotUi)>,
+    slot_images_nf: Query<&ImageSlotUi, Without<FollowMouse>>,
+    window: Query<&Window>,
+    mut ev_item: EventWriter<ItemEvent>,
+    inventory: Res<Inventory>,
+) {
+    let Some(cursor_position) = window.get_single().unwrap().cursor_position() else {
+        return;
+    };
+
+    for (mut node, _, _, _) in slot_images.iter_mut() {
+        node.left = Val::Px(cursor_position.x - 54. / 2.);
+        node.top = Val::Px(cursor_position.y - 54. / 2.);
+    }
+
+    if let Ok((mut node, _, ent, im_slot_ui)) = slot_images.get_single_mut() {
+        if !inventory.showing {
+            commands.entity(ent).remove::<FollowMouse>();
+            commands.entity(im_slot_ui.1).add_child(ent);
+            node.width = Val::Percent(100.);
+            node.height = Val::DEFAULT;
+            node.left = Val::ZERO;
+            node.top = Val::ZERO;
+            node.position_type = PositionType::Relative;
+        }
+    }
+
+    for (interaction, children, slot_ui, slot_ent) in slots.iter() {
+        if *interaction == Interaction::Pressed {
+            if let Ok((mut node, _, ent, mut im_slot_ui)) = slot_images.get_single_mut() {
+                if slot_ui.0 == im_slot_ui.0 || inventory.slots[slot_ui.0].is_none() {
+                    commands.entity(ent).remove::<FollowMouse>();
+                    commands.entity(slot_ent).add_child(ent);
+                    node.width = Val::Percent(100.);
+                    node.height = Val::DEFAULT;
+                    node.left = Val::ZERO;
+                    node.top = Val::ZERO;
+                    node.position_type = PositionType::Relative;
+
+                    ev_item.send(ItemEvent::MoveToEmpty(im_slot_ui.0, slot_ui.0));
+                    im_slot_ui.0 = slot_ui.0;
+                    im_slot_ui.1 = slot_ent;
+                }
+            } else if let Some(ent) = children.last() {
+                if inventory.showing && slot_images_nf.get(*ent).is_ok() {
+                    commands.entity(slot_ent).remove_children(&[*ent]);
+
+                    commands.entity(*ent).insert((
+                        FollowMouse,
+                        Node {
+                            width: Val::Px(43.),
+                            position_type: PositionType::Absolute,
+                            left: Val::Px(cursor_position.x - 54. / 2.),
+                            top: Val::Px(cursor_position.y - 54. / 2.),
+                            ..default()
+                        },
+                    ));
+                }
+            }
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct FollowMouse;
+
 pub struct PlayerInvPlugin;
 impl Plugin for PlayerInvPlugin {
     fn build(&self, app: &mut App) {
@@ -433,7 +566,13 @@ impl Plugin for PlayerInvPlugin {
         .init_resource::<Inventory>()
         .add_systems(
             Update,
-            (update_numbers, item_events, show_inventory).run_if(in_state(GameState::Game)),
+            (
+                update_numbers.after(item_events).after(show_inventory),
+                item_events.after(show_inventory),
+                show_inventory,
+                slot_button.before(update_numbers).before(item_events),
+            )
+                .run_if(in_state(GameState::Game)),
         )
         .add_systems(PreUpdate, clear_selected.run_if(in_state(GameState::Game)));
     }
