@@ -497,8 +497,8 @@ fn slot_button(
     };
 
     for (mut node, _, _, _) in slot_images.iter_mut() {
-        node.left = Val::Px(cursor_position.x - 54. / 2.);
-        node.top = Val::Px(cursor_position.y - 54. / 2.);
+        node.left = Val::Px(cursor_position.x - 50. / 2.);
+        node.top = Val::Px(cursor_position.y - 50. / 2.);
     }
 
     if let Ok((mut node, _, ent, im_slot_ui)) = slot_images.get_single_mut() {
@@ -538,8 +538,8 @@ fn slot_button(
                         Node {
                             width: Val::Px(43.),
                             position_type: PositionType::Absolute,
-                            left: Val::Px(cursor_position.x - 54. / 2.),
-                            top: Val::Px(cursor_position.y - 54. / 2.),
+                            left: Val::Px(cursor_position.x - 50. / 2.),
+                            top: Val::Px(cursor_position.y - 50. / 2.),
                             ..default()
                         },
                     ));

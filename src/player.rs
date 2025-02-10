@@ -476,7 +476,15 @@ pub fn dead(
 
 pub fn tool_system(
     mut commands: Commands,
-    mut tool: Query<(&mut Transform, &GlobalTransform, &mut Sprite), With<Tool>>,
+    mut tool: Query<
+        (
+            &mut Transform,
+            &GlobalTransform,
+            &mut Sprite,
+            &mut Visibility,
+        ),
+        With<Tool>,
+    >,
     mut camera: Query<(&Camera, &GlobalTransform), Without<Tool>>,
     tool_front_ent: Query<Entity, With<ToolFront>>,
     querys: (Query<&Window>, Query<(&mut Sprite, &Player), Without<Tool>>),
@@ -490,7 +498,7 @@ pub fn tool_system(
     ),
     mut ev_item: EventWriter<ItemEvent>,
 ) {
-    let (mut tool_transform, tool_gtransform, mut tool_sprite) = tool.single_mut();
+    let (mut tool_transform, tool_gtransform, mut tool_sprite, mut visibility) = tool.single_mut();
     let (camera, camera_gtransform) = camera.single_mut();
     let (window, mut player) = querys;
     let (mut textatlas_sprite, player) = player.single_mut();
@@ -513,6 +521,24 @@ pub fn tool_system(
     let Ok(world_position) = camera.viewport_to_world_2d(camera_gtransform, cursor_position) else {
         return;
     };
+
+    //Don't use tool if atom is solid or we don't have nothing on selected slot
+    if let Some(slot) = inventory.slots[inventory.selected] {
+        if let Item::Atom(atom) = slot.item {
+            if atom.is_solid() {
+                *visibility = Visibility::Hidden;
+                return;
+            }
+        }
+    }
+
+    if inventory.slots[inventory.selected].is_none() {
+        *visibility = Visibility::Hidden;
+        return;
+    } else {
+        *visibility = Visibility::Visible;
+    }
+
     //Rotate and move sprite
     let center_vec = tool_gtransform.compute_transform().translation.xy();
     let tool_vec = world_position - center_vec;
@@ -554,17 +580,19 @@ pub fn tool_system(
             ) {
                 if atom.is_void() || atom.is_object() {
                     if let Item::Atom(atom) = slot.item {
-                        let angle = fastrand::f32() * 0.5 - 0.25;
-                        let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
-                            .rotate(vec2(angle.cos(), angle.sin()));
-                        commands.spawn(Particle {
-                            atom: Atom::new(atom.id, materials),
-                            velocity: vel,
-                            pos: vec,
-                            ..Default::default()
-                        });
+                        if !atom.is_solid() {
+                            let angle = fastrand::f32() * 0.5 - 0.25;
+                            let vel = (tool_slope * 10. * (fastrand::f32() * 0.2 + 0.8))
+                                .rotate(vec2(angle.cos(), angle.sin()));
+                            commands.spawn(Particle {
+                                atom: Atom::new(atom.id, materials),
+                                velocity: vel,
+                                pos: vec,
+                                ..Default::default()
+                            });
 
-                        ev_item.send(ItemEvent::RemoveSelected);
+                            ev_item.send(ItemEvent::RemoveSelected);
+                        }
                     }
                 }
             }
