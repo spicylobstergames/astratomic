@@ -75,12 +75,9 @@ pub fn update_rigidibodies(
     mut commands: Commands,
     mut chunk_manager: ResMut<ChunkManager>,
     mut rigidbodies: Query<(&Transform, &mut Rigidbody, &Velocity, &ReadMassProperties)>,
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
     mut dirty_rects: ResMut<DirtyRects>,
 ) {
     puffin::profile_function!();
-
-    let materials = materials.0.get(&materials.1 .0).unwrap();
 
     for (transform, mut rigidbody, velocity, mass_prop) in &mut rigidbodies {
         let (width, height) = (rigidbody.width as usize, rigidbody.height as usize);
@@ -97,13 +94,13 @@ pub fn update_rigidibodies(
             let chunk_pos = global_to_chunk(pos.round().as_ivec2());
 
             let rotated_atom = rigidbody.atoms[y * width + x];
-            if materials[&rotated_atom].is_solid() {
+            if rotated_atom.is_solid() {
                 update_dirty_rects_3x3(&mut dirty_rects.current, chunk_pos);
                 //total += 1;
 
                 if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                    if !materials[atom.id].is_solid() && !materials[atom.id].is_object() {
-                        if materials[atom.id].is_liquid() || materials[atom.id].is_powder() {
+                    if !atom.is_solid() && !atom.is_object() {
+                        if atom.is_liquid() || atom.is_powder() {
                             let mut point = pos;
                             point.y *= -1.;
 
@@ -149,14 +146,11 @@ pub fn update_rigidibodies(
 pub fn unfill_rigidbodies(
     mut chunk_manager: ResMut<ChunkManager>,
     mut rigidbodies: Query<&mut Rigidbody>,
-    materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
-    let materials = materials.0.get(&materials.1 .0).unwrap();
-
     for mut rigidbody in &mut rigidbodies {
         while let Some(chunk_pos) = rigidbody.filled.pop() {
             if let Some(atom) = chunk_manager.get_mut_atom(chunk_pos) {
-                if materials[atom.id].is_object() {
+                if atom.is_object() {
                     *atom = Atom::default();
                 }
             }

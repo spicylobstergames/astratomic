@@ -107,7 +107,7 @@ fn button_system(
                 border_color.0 = Color::srgb(1., 0., 0.);
 
                 match *button_type {
-                    ButtonType::Start => next_state.set(GameState::Game),
+                    ButtonType::Start => next_state.set(GameState::Loading),
                     ButtonType::Quit => {
                         exit.send(AppExit::Success);
                     }

@@ -9,6 +9,7 @@ use crate::prelude::*;
 #[derive(Clone, Copy, Default, PartialEq, Debug, Serialize, Deserialize, Eq)]
 pub struct Atom {
     pub color: [u8; 4],
+    pub state: AtomState,
     pub id: u8,
 
     #[serde(skip)]
@@ -22,6 +23,17 @@ pub struct Atom {
     pub updated_at: u8,
 }
 
+#[derive(Clone, Copy, Serialize, Deserialize, Default, PartialEq, Eq, Debug)]
+pub enum AtomState {
+    Solid,
+    Object,
+    Powder,
+    Liquid,
+    Gas,
+    #[default]
+    Void,
+}
+
 impl Atom {
     pub fn object() -> Self {
         Atom {
@@ -31,9 +43,10 @@ impl Atom {
         }
     }
 
-    pub fn new(id: u8) -> Atom {
+    pub fn new(id: u8, materials: &Materials) -> Atom {
         let mut atom = Atom {
             id,
+            state: materials[id].default_state,
             ..Default::default()
         };
 
@@ -115,6 +128,26 @@ impl Atom {
         }
 
         atom
+    }
+
+    pub fn is_liquid(&self) -> bool {
+        matches!(self.state, AtomState::Liquid)
+    }
+
+    pub fn is_void(&self) -> bool {
+        matches!(self.state, AtomState::Void)
+    }
+
+    pub fn is_object(&self) -> bool {
+        matches!(self.state, AtomState::Object)
+    }
+
+    pub fn is_powder(&self) -> bool {
+        matches!(self.state, AtomState::Powder)
+    }
+
+    pub fn is_solid(&self) -> bool {
+        matches!(self.state, AtomState::Solid)
     }
 }
 
@@ -220,8 +253,8 @@ pub fn update_liquid(
 
         if let Some(side) = side {
             for _ in 0..flow {
-                let material = get_material(chunks, cur_pos);
-                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], material, dt) {
+                let atom = get_atom(chunks, cur_pos);
+                if !swapable(chunks, cur_pos + IVec2::new(side, 0), &[], atom, dt) {
                     break;
                 }
 
@@ -251,13 +284,12 @@ pub fn update_atom(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet
     // Move
     for pos in Line::new(cur_pos, vel) {
         awakened.insert(cur_pos);
-        let material = get_material(chunks, cur_pos);
-        if swapable(chunks, pos, &[], material, dt) {
+        let atom = get_atom(chunks, cur_pos);
+        if swapable(chunks, pos, &[], atom, dt) {
             swap(chunks, cur_pos, pos, dt);
             cur_pos = pos;
             awakened.insert(cur_pos);
-        } else if get_material(chunks, pos).is_liquid() && get_material(chunks, cur_pos).is_liquid()
-        {
+        } else if get_atom(chunks, pos).is_liquid() && get_atom(chunks, cur_pos).is_liquid() {
             awakened.insert(pos);
             set_vel(chunks, pos, vel * 4 / 5);
             set_vel(chunks, cur_pos, vel / 5);
@@ -269,7 +301,7 @@ pub fn update_atom(chunks: &mut UpdateChunksType, pos: IVec2, dt: u8) -> HashSet
                     cur_pos,
                     (Vec2::from_angle(PI).rotate(vel.as_vec2()) * 0.5).as_ivec2(),
                 );
-            } else if !swapable(chunks, cur_pos + IVec2::Y, &[], material, dt) {
+            } else if !swapable(chunks, cur_pos + IVec2::Y, &[], atom, dt) {
                 set_vel(chunks, cur_pos, IVec2::ZERO);
             }
             break;
