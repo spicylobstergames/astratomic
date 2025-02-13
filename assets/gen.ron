@@ -1,0 +1,16 @@
+(
+    //Scale
+    1000.0,
+
+    //Octaves
+    6.,
+
+    //Lacunarity
+    2.0,
+
+    //Persistence
+    0.8,
+
+    //Attenuation
+    2.0,
+)

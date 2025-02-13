@@ -1,4 +1,5 @@
 use bevy::render::{render_asset::RenderAssetUsages, render_resource::*};
+use noise::{Constant, NoiseFn, ScalePoint, Select};
 use std::collections::HashSet;
 
 use crate::{prelude::*, rigidbody};
@@ -24,31 +25,69 @@ impl Default for Chunk {
     }
 }
 
+struct YCoord;
+impl NoiseFn<f64, 2> for YCoord {
+    fn get(&self, point: [f64; 2]) -> f64 {
+        point[1]
+    }
+}
+
 impl Chunk {
-    pub fn new(texture: Handle<Image>, index: IVec2, materials: &Materials) -> Chunk {
+    pub fn new(
+        texture: Handle<Image>,
+        index: IVec2,
+        materials: &Materials,
+        generator: &Generator,
+    ) -> Chunk {
         let mut atoms = [Atom::default(); CHUNK_LEN];
 
-        match index.y {
-            i32::MIN..=0 => {}
-            1 => {
-                for (i, atom) in atoms.iter_mut().enumerate() {
-                    let id = match i {
-                        0..=511 => 6,
-                        _ => 7,
-                    };
+        let air_limit = -100.;
 
-                    *atom = Atom::new(id, materials);
-                }
-            }
-            2 => {
-                for atom in &mut atoms {
-                    *atom = Atom::new(4, materials);
-                }
-            }
-            3..=i32::MAX => {
-                for atom in &mut atoms {
-                    *atom = Atom::new(8, materials);
-                }
+        let (scale, cave) = (generator.1, generator.0.clone());
+
+        let ground = ScalePoint::new(cave.clone()).set_y_scale(0.1);
+        let air = Constant::new(-1.0);
+
+        let generator = Select::new(ground, air, YCoord)
+            .set_bounds(air_limit, 0.) // For y values within this range, use the flat surface.
+            .set_falloff(0.1); // Smooth transition near the boundaries.
+        let generator = Select::new(cave, generator, YCoord)
+            .set_bounds(air_limit, 1.) // For y values within this range, use the flat surface.
+            .set_falloff(0.6);
+
+        for x in 0..CHUNK_LENGHT {
+            for y in 0..CHUNK_LENGHT {
+                let pos = [
+                    (index.x as f64 * CHUNK_LENGHT as f64 + x as f64),
+                    (index.y as f64 * CHUNK_LENGHT as f64 + y as f64),
+                ];
+                let gen_pos = [pos[0] / scale, pos[1] / scale];
+
+                let noise = if false { -1. } else { generator.get(gen_pos) };
+
+                let i = y * CHUNK_LENGHT + x;
+                /*atoms[i].color = [
+                    ((noise as f32 + 1.) / 2. * 255.) as u8,
+                    ((noise as f32 + 1.) / 2. * 255.) as u8,
+                    ((noise as f32 + 1.) / 2. * 255.) as u8,
+                    255,
+                ];*/
+                let id = match (noise + 1.) / 2. {
+                    ..0.2 => continue,
+                    0.2..0.25 => 6,
+                    0.25..0.3 => 2,
+                    0.3..0.4 => 4,
+                    0.4.. => 8,
+                    _ => panic!("{noise}"),
+                };
+
+                atoms[i] = Atom::new(id, materials);
+                /*atoms[i].color = [
+                    ((noise as f32 + 1.) / 2. * 255.) as u8,
+                    ((noise as f32 + 1.) / 2. * 255.) as u8,
+                    ((noise as f32 + 1.) / 2. * 255.) as u8,
+                    255,
+                ];*/
             }
         }
 

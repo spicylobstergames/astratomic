@@ -357,7 +357,7 @@ pub fn item_events(
                     let ent = inv.slot_ents[index].unwrap();
                     let image = match item {
                         Item::Atom(atom) => {
-                            let size: u32 = 4;
+                            let size: u32 = 8;
                             let mut data = vec![];
                             for _ in 0..(size.pow(2)) {
                                 let color = Atom::new(atom.id, materials).color.to_vec();

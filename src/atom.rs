@@ -124,7 +124,7 @@ impl Atom {
                     255,
                 ];
             }
-            _ => panic!("Atom not found, invalid ID."),
+            _ => panic!("Atom not found, invalid ID. {id}"),
         }
 
         atom
