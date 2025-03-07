@@ -173,7 +173,7 @@ impl DirtyRects {
 pub struct ChunksParent;
 
 #[derive(Resource, Default)]
-pub struct Generator(pub RidgedMulti<SuperSimplex>, pub f64);
+pub struct Generator(pub RidgedMulti<SuperSimplex>, pub f64, pub u32);
 
 pub fn manager_setup(
     mut commands: Commands,
@@ -200,8 +200,9 @@ pub fn manager_setup(
 
     let bytes = std::fs::read("assets/gen.ron").unwrap();
     let gen_config = ron::de::from_bytes::<[f64; 5]>(&bytes).unwrap();
+    generator.2 = 42;
     generator.1 = gen_config[0];
-    generator.0 = RidgedMulti::<SuperSimplex>::new(0)
+    generator.0 = RidgedMulti::<SuperSimplex>::new(generator.2)
         .set_octaves(gen_config[1] as usize)
         .set_lacunarity(gen_config[2])
         .set_persistence(gen_config[3])

@@ -1,9 +1,9 @@
 (
     //Scale
-    1000.0,
+    512.0,
 
     //Octaves
-    6.,
+    8.,
 
     //Lacunarity
     2.0,

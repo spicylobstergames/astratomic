@@ -124,6 +124,15 @@ impl Atom {
                     255,
                 ];
             }
+            10 => {
+                //Compacted Dirt
+                atom.color = [
+                    (100 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (50 + rand::rng().random_range(-10_i16..10_i16)) as u8,
+                    (30 + rand::rng().random_range(-5_i16..5_i16)) as u8,
+                    255,
+                ];
+            }
             _ => panic!("Atom not found, invalid ID. {id}"),
         }
 

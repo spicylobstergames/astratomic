@@ -56,7 +56,7 @@ pub fn player_setup(
         let mut buffered = BufReader::new(file);
         pos = bincode::deserialize_from(&mut buffered).unwrap();
     } else {
-        pos = IVec2::default();
+        pos = IVec2::new(0, -260);
         let file = File::create("assets/world/player").unwrap();
         let mut buffered = BufWriter::new(file);
         bincode::serialize_into(&mut buffered, &pos).unwrap();
@@ -522,6 +522,18 @@ pub fn tool_system(
         return;
     };
 
+    //Rotate and move sprite
+    let center_vec = tool_gtransform.compute_transform().translation.xy();
+    let tool_vec = world_position - center_vec;
+    let angle = tool_vec.y.atan2(tool_vec.x);
+    tool_transform.rotation = Quat::from_rotation_z(angle);
+
+    let flip_bool = angle.abs() > std::f32::consts::FRAC_PI_2;
+    textatlas_sprite.flip_x = flip_bool;
+    tool_sprite.flip_y = flip_bool;
+    tool_transform.translation.x =
+        tool_transform.translation.x.abs() * (flip_bool as i8 * 2 - 1) as f32;
+
     //Don't use tool if atom is solid or we don't have nothing on selected slot
     if let Some(slot) = inventory.slots[inventory.selected] {
         if let Item::Atom(atom) = slot.item {
@@ -538,18 +550,6 @@ pub fn tool_system(
     } else {
         *visibility = Visibility::Visible;
     }
-
-    //Rotate and move sprite
-    let center_vec = tool_gtransform.compute_transform().translation.xy();
-    let tool_vec = world_position - center_vec;
-    let angle = tool_vec.y.atan2(tool_vec.x);
-    tool_transform.rotation = Quat::from_rotation_z(angle);
-
-    let flip_bool = angle.abs() > std::f32::consts::FRAC_PI_2;
-    textatlas_sprite.flip_x = flip_bool;
-    tool_sprite.flip_y = flip_bool;
-    tool_transform.translation.x =
-        tool_transform.translation.x.abs() * (flip_bool as i8 * 2 - 1) as f32;
 
     //Tool pulling and pushing atoms
     let mut center_vec_y_flipped = center_vec;
