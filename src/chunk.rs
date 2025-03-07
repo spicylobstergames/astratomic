@@ -58,10 +58,11 @@ impl Chunk {
         );
 
         let cave_start = 0.5;
+        let falloff = 0.3;
         let control = Add::new(ground.clone(), Constant::new(-cave_start));
         let generator = Select::new(cave, ground.clone(), control.clone())
-            .set_bounds(air_limit, cave_start) // For y values within this range, use the flat surface.
-            .set_falloff(0.3);
+            .set_bounds(air_limit, cave_start) // For y values within this range, use the ground noise.
+            .set_falloff(falloff);
 
         for x in 0..CHUNK_LENGHT {
             for y in 0..CHUNK_LENGHT {
@@ -69,18 +70,16 @@ impl Chunk {
                     (index.x as f64 * CHUNK_LENGHT as f64 + x as f64) / scale,
                     (index.y as f64 * CHUNK_LENGHT as f64 + y as f64) / scale,
                 ];
-
                 let noise = generator.get(pos);
-
                 let i = y * CHUNK_LENGHT + x;
+
                 /*atoms[i].color = [
                     ((noise as f32 + 1.) / 2. * 100.) as u8,
                     ((noise as f32 + 1.) / 2. * 100.) as u8,
                     ((noise as f32 + 1.) / 2. * 100.) as u8,
                     255,
                 ];*/
-
-                let id = if (air_limit..(cave_start - 0.3)).contains(&control.get(pos)) {
+                let id = if (air_limit..(cave_start - falloff)).contains(&control.get(pos)) {
                     // Ground layer
                     match (noise + 1.) / 2. {
                         ..0.2 => continue,
@@ -91,6 +90,7 @@ impl Chunk {
                         _ => panic!("{noise}"),
                     }
                 } else {
+                    // Cave layer
                     match (noise + 1.) / 2. {
                         ..0.2 => continue,
                         0.2.. => 8,

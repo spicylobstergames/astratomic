@@ -2,7 +2,7 @@
     //Scale
     512.0,
 
-    //Octaves
+    //Octaves (Rounds to integer)
     8.,
 
     //Lacunarity
@@ -13,4 +13,7 @@
 
     //Attenuation
     2.0,
+
+    //Seed (Rounds to integer)
+    8668.,
 )

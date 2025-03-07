@@ -199,14 +199,15 @@ pub fn manager_setup(
     }
 
     let bytes = std::fs::read("assets/gen.ron").unwrap();
-    let gen_config = ron::de::from_bytes::<[f64; 5]>(&bytes).unwrap();
-    generator.2 = 42;
-    generator.1 = gen_config[0];
+    let gen_config = ron::de::from_bytes::<[f64; 6]>(&bytes).unwrap();
+
     generator.0 = RidgedMulti::<SuperSimplex>::new(generator.2)
         .set_octaves(gen_config[1] as usize)
         .set_lacunarity(gen_config[2])
         .set_persistence(gen_config[3])
         .set_attenuation(gen_config[4]);
+    generator.1 = gen_config[0];
+    generator.2 = gen_config[5] as u32;
 
     for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + width)
         .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + height)

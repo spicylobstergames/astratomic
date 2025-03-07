@@ -29,7 +29,7 @@ pub const TOOL_DISTANCE: f32 = 32.;
 pub const TOOL_RANGE: f32 = 16.;
 
 pub const ZOOM_LOWER_BOUND: f32 = 0.15;
-pub const ZOOM_UPPER_BOUND: f32 = 10.;
+pub const ZOOM_UPPER_BOUND: f32 = 0.30;
 
 pub const PLAYER_TERM_VEL: u8 = 20;
 
@@ -41,8 +41,8 @@ pub const GRAVITY: u8 = 1;
 pub const ATOM_TERM_VEL: u8 = 20;
 pub const FRAMES_SLEEP: u8 = 1;
 //Has to be even
-pub const LOAD_WIDTH: i32 = 50;
-pub const LOAD_HEIGHT: i32 = 50;
+pub const LOAD_WIDTH: i32 = 32;
+pub const LOAD_HEIGHT: i32 = 18;
 
 pub const _CAMERA_SPEED: f32 = 10.;
 
