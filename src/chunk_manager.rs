@@ -9,6 +9,8 @@ use bevy::sprite::Anchor;
 use itertools::Itertools;
 use smallvec::SmallVec;
 
+use noise::{MultiFractal, RidgedMulti, SuperSimplex};
+
 use crate::prelude::*;
 
 /// Updates and do the chunks logic
@@ -51,9 +53,9 @@ impl ChunkManager {
         chunk_textures: &Entity,
         image_entities: &Query<(&Parent, Entity, &Sprite)>,
         file_chunks: &mut HashMap<IVec2, Chunk>,
-        dir_materials: (MoveDir, &Materials),
+        dir_materials: (MoveDir, &Materials, &Generator),
     ) {
-        let (move_dir, materials) = dir_materials;
+        let (move_dir, materials, generator) = dir_materials;
 
         let (for_load, vec_load, dir, y) = match move_dir {
             MoveDir::X(dir) => {
@@ -99,7 +101,7 @@ impl ChunkManager {
                 let chunk = if let Some(file_chunk) = file_chunks.get(&pos) {
                     file_chunk.clone()
                 } else {
-                    Chunk::new(Handle::default(), pos, materials)
+                    Chunk::new(Handle::default(), pos, materials, generator)
                 };
 
                 images_vec.push(add_chunk(commands, images, self, chunk, pos));
@@ -170,11 +172,15 @@ impl DirtyRects {
 #[derive(Component)]
 pub struct ChunksParent;
 
+#[derive(Resource, Default)]
+pub struct Generator(pub RidgedMulti<SuperSimplex>, pub f64, pub u32);
+
 pub fn manager_setup(
     mut commands: Commands,
     mut images: ResMut<Assets<Image>>,
     mut chunk_manager: ResMut<ChunkManager>,
     materials: (Res<Assets<Materials>>, ResMut<MaterialsHandle>),
+    mut generator: ResMut<Generator>,
 ) {
     let (width, height) = (LOAD_WIDTH, LOAD_HEIGHT);
 
@@ -192,6 +198,17 @@ pub fn manager_setup(
         bincode::serialize_into(&mut buffered, &file_chunks).unwrap();
     }
 
+    let bytes = std::fs::read("assets/gen.ron").unwrap();
+    let gen_config = ron::de::from_bytes::<[f64; 6]>(&bytes).unwrap();
+
+    generator.0 = RidgedMulti::<SuperSimplex>::new(generator.2)
+        .set_octaves(gen_config[1] as usize)
+        .set_lacunarity(gen_config[2])
+        .set_persistence(gen_config[3])
+        .set_attenuation(gen_config[4]);
+    generator.1 = gen_config[0];
+    generator.2 = gen_config[5] as u32;
+
     for (x, y) in (chunk_manager.pos.x..chunk_manager.pos.x + width)
         .cartesian_product(chunk_manager.pos.y..chunk_manager.pos.y + height)
     {
@@ -201,7 +218,7 @@ pub fn manager_setup(
             chunk = file_chunk.clone();
         } else {
             let materials = materials.0.get(&materials.1 .0).unwrap();
-            chunk = Chunk::new(Handle::default(), index, materials);
+            chunk = Chunk::new(Handle::default(), index, materials, &generator);
         }
 
         let ent = add_chunk(&mut commands, &mut images, &mut chunk_manager, chunk, index);
@@ -547,13 +564,14 @@ pub fn update_manager_pos(
         ResMut<SavingTask>,
         ResMut<ChunkManager>,
         ResMut<Assets<Image>>,
+        Res<Generator>,
     ),
     mut task_executor: AsyncTaskRunner<(HashMap<IVec2, Chunk>, IVec2)>,
     materials: (Res<Assets<Materials>>, Res<MaterialsHandle>),
 ) {
     let materials = materials.0.get(&materials.1 .0).unwrap();
 
-    let (mut saving_task, mut chunk_manager, mut images) = resources;
+    let (mut saving_task, mut chunk_manager, mut images, generator) = resources;
 
     let mut player_pos = player.single().pos;
     if player_pos.x < 0 {
@@ -599,7 +617,7 @@ pub fn update_manager_pos(
                             &chunk_textures,
                             &image_entities,
                             &mut file_chunks,
-                            (MoveDir::X(diff.x.signum()), materials),
+                            (MoveDir::X(diff.x.signum()), materials, &generator),
                         );
                     }
 
@@ -610,7 +628,7 @@ pub fn update_manager_pos(
                             &chunk_textures,
                             &image_entities,
                             &mut file_chunks,
-                            (MoveDir::Y(diff.y.signum()), materials),
+                            (MoveDir::Y(diff.y.signum()), materials, &generator),
                         );
                     }
 
@@ -736,7 +754,8 @@ impl Plugin for ChunkManagerPlugin {
             )
             .init_resource::<HasCollider>()
             .init_resource::<ChunkManager>()
-            .init_resource::<DirtyRects>();
+            .init_resource::<DirtyRects>()
+            .init_resource::<Generator>();
 
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app

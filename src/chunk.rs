@@ -1,4 +1,5 @@
 use bevy::render::{render_asset::RenderAssetUsages, render_resource::*};
+use noise::*;
 use std::collections::HashSet;
 
 use crate::{prelude::*, rigidbody};
@@ -24,31 +25,86 @@ impl Default for Chunk {
     }
 }
 
+#[derive(Clone, Copy)]
+struct YCoord;
+impl NoiseFn<f64, 2> for YCoord {
+    fn get(&self, point: [f64; 2]) -> f64 {
+        point[1]
+    }
+}
+
 impl Chunk {
-    pub fn new(texture: Handle<Image>, index: IVec2, materials: &Materials) -> Chunk {
+    pub fn new(
+        texture: Handle<Image>,
+        index: IVec2,
+        materials: &Materials,
+        generator: &Generator,
+    ) -> Chunk {
         let mut atoms = [Atom::default(); CHUNK_LEN];
 
-        match index.y {
-            i32::MIN..=0 => {}
-            1 => {
-                for (i, atom) in atoms.iter_mut().enumerate() {
-                    let id = match i {
-                        0..=511 => 6,
-                        _ => 7,
-                    };
+        let air_limit = -1000.;
 
-                    *atom = Atom::new(id, materials);
-                }
-            }
-            2 => {
-                for atom in &mut atoms {
-                    *atom = Atom::new(4, materials);
-                }
-            }
-            3..=i32::MAX => {
-                for atom in &mut atoms {
-                    *atom = Atom::new(8, materials);
-                }
+        let (scale, cave) = (generator.1, generator.0.clone());
+
+        let cave: Multiply<f64, RidgedMulti<SuperSimplex>, Constant, 2> =
+            Multiply::new(cave, Constant::new(0.7));
+
+        let ground_noise = BasicMulti::<SuperSimplex>::new(generator.2);
+        let ground = Add::new(
+            ScalePoint::new(ground_noise)
+                .set_y_scale(0.3)
+                .set_x_scale(0.3),
+            YCoord,
+        );
+
+        let cave_start = 0.5;
+        let falloff = 0.3;
+        let control = Add::new(ground.clone(), Constant::new(-cave_start));
+        let generator = Select::new(cave, ground.clone(), control.clone())
+            .set_bounds(air_limit, cave_start) // For y values within this range, use the ground noise.
+            .set_falloff(falloff);
+
+        for x in 0..CHUNK_LENGHT {
+            for y in 0..CHUNK_LENGHT {
+                let pos = [
+                    (index.x as f64 * CHUNK_LENGHT as f64 + x as f64) / scale,
+                    (index.y as f64 * CHUNK_LENGHT as f64 + y as f64) / scale,
+                ];
+                let noise = generator.get(pos);
+                let i = y * CHUNK_LENGHT + x;
+
+                /*atoms[i].color = [
+                    ((noise as f32 + 1.) / 2. * 100.) as u8,
+                    ((noise as f32 + 1.) / 2. * 100.) as u8,
+                    ((noise as f32 + 1.) / 2. * 100.) as u8,
+                    255,
+                ];*/
+                let id = if (air_limit..(cave_start - falloff)).contains(&control.get(pos)) {
+                    // Ground layer
+                    match (noise + 1.) / 2. {
+                        ..0.2 => continue,
+                        0.2..0.21 => 6,
+                        0.21..0.5 => 7,
+                        0.5..0.75 => 10,
+                        0.75.. => 4,
+                        _ => panic!("{noise}"),
+                    }
+                } else {
+                    // Cave layer
+                    match (noise + 1.) / 2. {
+                        ..0.2 => continue,
+                        0.2.. => 8,
+                        _ => panic!("{noise}"),
+                    }
+                };
+
+                atoms[i] = Atom::new(id, materials);
+                /*atoms[i].color = [
+                    ((noise as f32 + 1.) / 2. * 100.) as u8,
+                    ((noise as f32 + 1.) / 2. * 100.) as u8,
+                    ((noise as f32 + 1.) / 2. * 100.) as u8,
+                    255,
+                ];*/
             }
         }
 

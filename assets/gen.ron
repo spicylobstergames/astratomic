@@ -1,0 +1,19 @@
+(
+    //Scale
+    512.0,
+
+    //Octaves (Rounds to integer)
+    8.,
+
+    //Lacunarity
+    2.0,
+
+    //Persistence
+    0.8,
+
+    //Attenuation
+    2.0,
+
+    //Seed (Rounds to integer)
+    8668.,
+)

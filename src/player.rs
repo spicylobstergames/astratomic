@@ -56,7 +56,7 @@ pub fn player_setup(
         let mut buffered = BufReader::new(file);
         pos = bincode::deserialize_from(&mut buffered).unwrap();
     } else {
-        pos = IVec2::default();
+        pos = IVec2::new(0, -260);
         let file = File::create("assets/world/player").unwrap();
         let mut buffered = BufWriter::new(file);
         bincode::serialize_into(&mut buffered, &pos).unwrap();
@@ -550,6 +550,23 @@ pub fn tool_system(
     tool_sprite.flip_y = flip_bool;
     tool_transform.translation.x =
         tool_transform.translation.x.abs() * (flip_bool as i8 * 2 - 1) as f32;
+
+    //Don't use tool if atom is solid or we don't have nothing on selected slot
+    if let Some(slot) = inventory.slots[inventory.selected] {
+        if let Item::Atom(atom) = slot.item {
+            if atom.is_solid() {
+                *visibility = Visibility::Hidden;
+                return;
+            }
+        }
+    }
+
+    if inventory.slots[inventory.selected].is_none() {
+        *visibility = Visibility::Hidden;
+        return;
+    } else {
+        *visibility = Visibility::Visible;
+    }
 
     //Tool pulling and pushing atoms
     let mut center_vec_y_flipped = center_vec;

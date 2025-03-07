@@ -19,4 +19,6 @@
     (default_state: Solid),
     //9 Acid
     ( flow: 5, damage: 3.0, default_state: Liquid),
+    //10 Compacted dirt
+    (default_state: Solid),
 ])
