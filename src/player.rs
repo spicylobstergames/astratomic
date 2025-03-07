@@ -538,7 +538,7 @@ pub fn tool_system(
     } else {
         *visibility = Visibility::Visible;
     }
-  
+
     //Rotate and move sprite
     let center_vec = tool_gtransform.compute_transform().translation.xy();
     let tool_vec = world_position - center_vec;
