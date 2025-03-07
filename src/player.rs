@@ -522,6 +522,23 @@ pub fn tool_system(
         return;
     };
 
+    //Don't use tool if atom is solid or we don't have nothing on selected slot
+    if let Some(slot) = inventory.slots[inventory.selected] {
+        if let Item::Atom(atom) = slot.item {
+            if atom.is_solid() {
+                *visibility = Visibility::Hidden;
+                return;
+            }
+        }
+    }
+
+    if inventory.slots[inventory.selected].is_none() {
+        *visibility = Visibility::Hidden;
+        return;
+    } else {
+        *visibility = Visibility::Visible;
+    }
+  
     //Rotate and move sprite
     let center_vec = tool_gtransform.compute_transform().translation.xy();
     let tool_vec = world_position - center_vec;
